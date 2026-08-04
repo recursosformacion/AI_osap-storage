@@ -8,11 +8,18 @@ from infrastructure.config import Settings
 
 from api.dependencies import ResolveFileDep, get_settings
 from api.schemas import ResolutionRead
+from api.urls import build_resolution_url
 
 router = APIRouter(prefix="/api/v1/entries", tags=["entries"])
 
 
-@router.get("/resolve", response_model=ResolutionRead)
+@router.get(
+    "/resolve",
+    response_model=ResolutionRead,
+    summary="Resolver una obra",
+    description="Dada una relative_path o logical_id responde 'lo tengo / no lo tengo' "
+    "y devuelve la URL de descarga (CDN) si la obra está disponible.",
+)
 async def resolve(
     relative_path: str | None = Query(default=None),
     logical_id: str | None = Query(default=None),
@@ -20,7 +27,8 @@ async def resolve(
     settings: Settings = Depends(get_settings),
 ) -> ResolutionRead:
     resolution = await uc.execute(relative_path=relative_path, logical_id=logical_id)
-    url = None
-    if resolution.available and resolution.file_id is not None:
-        url = f"{settings.public_base_url.rstrip('/')}/api/v1/files/{resolution.file_id}/content"
-    return ResolutionRead(**asdict(resolution), url=url)
+    available, url = build_resolution_url(resolution, settings)
+    data = asdict(resolution)
+    data["available"] = available
+    data["url"] = url
+    return ResolutionRead(**data)

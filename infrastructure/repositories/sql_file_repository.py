@@ -33,6 +33,23 @@ class SqlFileRepository(FileRepository):
             await cur.execute("SELECT * FROM files WHERE id = %s", (file.id,))
             return _row_to_file(await cur.fetchone())
 
+    async def bulk_create(self, files: list[File]) -> list[File]:
+        if not files:
+            return files
+        placeholders = ", ".join(["(%s, %s, %s)"] * len(files))
+        params: list = []
+        for file in files:
+            params.extend([file.sha256, file.name, file.status.value])
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "INSERT INTO files (sha256, name, status) VALUES " + placeholders,
+                params,
+            )
+            first_id = cur.lastrowid
+            for i, file in enumerate(files):
+                file.id = first_id + i
+        return files
+
     async def get_by_id(self, file_id: int) -> File | None:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute("SELECT * FROM files WHERE id = %s", (file_id,))

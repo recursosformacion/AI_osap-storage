@@ -11,6 +11,7 @@ class ProviderType(StrEnum):
     S3 = "s3"
     GOOGLE_DRIVE = "google_drive"
     HTTP_REMOTE = "http_remote"
+    CLOUDFLARE_R2 = "cloudflare_r2"
 
 
 @dataclass

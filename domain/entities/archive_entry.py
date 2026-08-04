@@ -18,6 +18,8 @@ class ArchiveEntry:
     archive_id: int
     relative_path: str
     logical_id: str | None = None
+    composer: str | None = None
+    title: str | None = None
     file_id: int | None = None
     size: int | None = None
     offset: int | None = None

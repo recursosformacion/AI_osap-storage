@@ -24,6 +24,14 @@ class HttpRemoteBackend:
     async def delete(self, object_key: str) -> None:
         raise UnsupportedProvider("http_remote is a read-only mirror provider; delete is not supported")
 
+    async def exists(self, object_key: str) -> bool:
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=60) as client:
+                response = await client.head(f"{self._base_url}/{object_key}")
+                return response.status_code < 400
+        except httpx.HTTPError:
+            return False
+
     async def url_for(self, object_key: str) -> str | None:
         return f"{self._base_url}/{object_key}"
 

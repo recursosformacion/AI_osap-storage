@@ -9,7 +9,12 @@ from api.schemas import DownloadJobRead
 router = APIRouter(prefix="/api/v1/downloads", tags=["downloads"])
 
 
-@router.get("/{job_id}", response_model=DownloadJobRead)
+@router.get(
+    "/{job_id}",
+    response_model=DownloadJobRead,
+    summary="Estado de un job de descarga",
+    description="Estado de un trabajo de descarga desde una URL externa (V1).",
+)
 async def get_download_job(
     job_id: int,
     uc: GetDownloadJob = Depends(GetDownloadJobDep),

@@ -35,6 +35,15 @@ class InMemoryFileRepository(FileRepository):
         self._by_sha[file.sha256] = file
         return file
 
+    async def bulk_create(self, files: list[File]) -> list[File]:
+        for file in files:
+            self._seq += 1
+            file.id = self._seq
+            self._files[file.id] = file
+            if file.sha256:
+                self._by_sha[file.sha256] = file
+        return files
+
     async def get_by_id(self, file_id: int) -> File | None:
         return self._files.get(file_id)
 
@@ -95,6 +104,12 @@ class InMemoryLocationRepository(StorageLocationRepository):
         self._locations.append(location)
         return location
 
+    async def bulk_create(self, locations: list[StorageLocation]) -> None:
+        for location in locations:
+            self._seq += 1
+            location.id = self._seq
+            self._locations.append(location)
+
     async def get_by_id(self, location_id: int) -> StorageLocation | None:
         return next((loc for loc in self._locations if loc.id == location_id), None)
 
@@ -106,6 +121,12 @@ class InMemoryLocationRepository(StorageLocationRepository):
 
     async def list_by_file(self, file_id: int) -> list[StorageLocation]:
         return [loc for loc in self._locations if loc.file_id == file_id]
+
+    async def count(self) -> int:
+        return len(self._locations)
+
+    async def list_all(self, *, limit: int = 1000, offset: int = 0) -> list[StorageLocation]:
+        return self._locations[offset : offset + limit]
 
     async def delete_by_file(self, file_id: int) -> None:
         self._locations = [loc for loc in self._locations if loc.file_id != file_id]
@@ -171,6 +192,9 @@ class MemoryBackend:
 
     async def delete(self, object_key: str) -> None:
         self._objects.pop(object_key, None)
+
+    async def exists(self, object_key: str) -> bool:
+        return object_key in self._objects
 
     async def url_for(self, object_key: str) -> str | None:
         return None
@@ -245,6 +269,11 @@ class InMemoryArchiveEntryRepository(ArchiveEntryRepository):
             added += 1
         return added
 
+    async def bulk_update_file_ids(self, entries: list[ArchiveEntry]) -> None:
+        for entry in entries:
+            if entry.id in self._items:
+                self._items[entry.id].file_id = entry.file_id
+
     async def get_by_id(self, entry_id: int) -> ArchiveEntry | None:
         return self._items.get(entry_id)
 
@@ -254,8 +283,25 @@ class InMemoryArchiveEntryRepository(ArchiveEntryRepository):
     async def get_by_logical_id(self, logical_id: str) -> ArchiveEntry | None:
         return next((e for e in self._items.values() if e.logical_id == logical_id), None)
 
+    async def get_by_file_id(self, file_id: int) -> ArchiveEntry | None:
+        return next((e for e in self._items.values() if e.file_id == file_id), None)
+
     async def list_by_archive(self, archive_id: int) -> list[ArchiveEntry]:
         return [e for e in self._items.values() if e.archive_id == archive_id]
+
+    async def search(self, query: str, *, limit: int = 50, offset: int = 0) -> list[ArchiveEntry]:
+        q = query.lower()
+        matches = [
+            e
+            for e in self._items.values()
+            if (
+                (e.logical_id and q in e.logical_id.lower())
+                or (e.composer and q in e.composer.lower())
+                or (e.title and q in e.title.lower())
+                or q in e.relative_path.lower()
+            )
+        ]
+        return sorted(matches, key=lambda e: e.id or 0)[offset : offset + limit]
 
     async def list_relative_paths(self) -> list[str]:
         return [e.relative_path for e in self._items.values()]

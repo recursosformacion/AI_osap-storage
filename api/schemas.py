@@ -97,6 +97,8 @@ class ResolutionRead(Model):
     found: bool
     relative_path: str | None
     logical_id: str | None
+    composer: str | None = None
+    title: str | None = None
     archive_id: int | None
     archive_name: str | None
     status: str | None

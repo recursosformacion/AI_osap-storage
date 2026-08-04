@@ -2,8 +2,11 @@
 venv/
 .env
 config.yaml
+config.test.yaml
+config.production.yaml
 secrets/
 data/
+devdata/
 __pycache__/
 *.py[cod]
 *.egg-info/

@@ -10,10 +10,12 @@ from application.use_cases.import_pdmx import PdmxImportResult
 from application.use_cases.materialize_archive import MaterializeArchiveCommand
 from application.use_cases.materialize_file import MaterializeFileCommand
 from application.use_cases.register_existing_file import RegisterExistingFileCommand
+from application.use_cases.register_resources import RegisterMirrorResourcesCommand
 from domain.entities.import_source import ImportSource
 
 from infrastructure.config import Settings
 from infrastructure.container import Container, build_container
+from infrastructure.doctor import run_doctor
 from infrastructure.importers.pdmx_csv import read_pdmx_csv
 from infrastructure.verification import verify_mirror
 
@@ -35,6 +37,8 @@ def _cmd_import_pdmx(args: argparse.Namespace, container: Container):
         archive_url_col=args.archive_url_col,
         archive_url=args.archive_url,
         logical_id_col=args.logical_id_col,
+        composer_col=args.composer_col,
+        title_col=args.title_col,
     )
     source = ImportSource(provider="pdmx", version=args.version, csv_path=args.csv, notes=args.notes)
     return container.import_pdmx.import_rows(rows, source=source)
@@ -69,16 +73,61 @@ def _cmd_stats(args: argparse.Namespace, container: Container):
     return container.get_statistics.execute(refresh=args.refresh)
 
 
-def _cmd_verify_mirror(args: argparse.Namespace, container: Container):
+def _cmd_register_resources(args: argparse.Namespace, container: Container):
+    return container.register_resources.execute(
+        RegisterMirrorResourcesCommand(archive_id=args.archive_id, provider_id=args.provider)
+    )
+
+
+async def _cmd_verify_mirror(args: argparse.Namespace, container: Container):
     csv_path = args.csv or container.settings.pdmx_source_csv
     if not csv_path:
         raise ValueError("no se encontró el CSV: indica --csv o providers.pdmx.source.csv en config")
-    return verify_mirror(
-        container.archive_repo,
-        container.archive_entry_repo,
-        csv_path,
-        args.archive,
+    report = await verify_mirror(
+        container.archive_repo, container.archive_entry_repo, csv_path, args.archive
     )
+    for label, value in (
+        ("CSV", report.csv),
+        ("ArchiveEntry", report.archive_entries),
+        ("MusicXML", report.musicxml),
+        ("Missing", report.missing),
+        ("Extra", report.extra),
+    ):
+        print(f"{label:<14}{value}")
+    print("Mirror OK" if report.ok else "Mirror ERROR")
+    return None
+
+
+def _row(label: str, value: str) -> str:
+    return f"{label}{'.' * max(0, 17 - len(label))}{value}"
+
+
+async def _cmd_doctor(args: argparse.Namespace, container: Container):
+    csv_path = args.csv or container.settings.pdmx_source_csv
+    report = await run_doctor(container, csv_path, args.archive, check_links=args.links)
+
+    def status(ok: bool) -> str:
+        return "OK" if ok else "ERROR"
+
+    print(_row("Mirror", status(report.mirror_ok)))
+    print(_row("Database", status(report.database_ok)))
+    print(_row("Storage", status(report.storage_ok)))
+    print(_row("Providers", str(report.providers)))
+    print(_row("Archives", str(report.archives)))
+    print(_row("ArchiveEntries", str(report.archive_entries)))
+    print(_row("Files", str(report.files)))
+    print(_row("StorageLocations", str(report.storage_locations)))
+    if args.links:
+        print(_row("Links", f"{report.links_checked} comprobados, {report.links_missing} faltan"))
+        for sample in report.links_samples:
+            print("  falta:", sample)
+    print()
+    print("Everything is OK" if report.ok else "PROBLEMS FOUND")
+    if not report.mirror_ok:
+        print("Mirror:", report.mirror_detail)
+    if not report.storage_ok:
+        print("Storage:", report.storage_detail)
+    return None
 
 
 def _cmd_register(args: argparse.Namespace, container: Container):
@@ -117,6 +166,8 @@ def build_parser() -> argparse.ArgumentParser:
     pdmx.add_argument("--archive-url-col", default=None)
     pdmx.add_argument("--archive-url", default=None, help="URL del archive (constante)")
     pdmx.add_argument("--logical-id-col", default=None)
+    pdmx.add_argument("--composer-col", default=None, help="Columna del compositor")
+    pdmx.add_argument("--title-col", default=None, help="Columna del título")
     pdmx.add_argument("--version", default=None, help="Versión del dataset importado")
     pdmx.add_argument("--notes", default=None)
     pdmx.set_defaults(handler=_cmd_import_pdmx)
@@ -181,6 +232,24 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--archive", default="mxl.tar.gz", help="Nombre del archive (default mxl.tar.gz)")
     verify.set_defaults(handler=_cmd_verify_mirror)
 
+    doctor = sub.add_parser("doctor", help="Diagnóstico del sistema (git fsck)")
+    doctor.add_argument("--csv", default=None, help="Ruta al PDMX.csv (por defecto: config)")
+    doctor.add_argument("--archive", default="mxl.tar.gz", help="Nombre del archive (default mxl.tar.gz)")
+    doctor.add_argument(
+        "--links",
+        action="store_true",
+        help="Comprobar que cada StorageLocation existe físicamente en el repositorio",
+    )
+    doctor.set_defaults(handler=_cmd_doctor)
+
+    register_resources = sub.add_parser(
+        "register-resources",
+        help="Registrar File + StorageLocation de un archive (mirror como primer proveedor, sin copiar)",
+    )
+    register_resources.add_argument("archive_id", type=int)
+    register_resources.add_argument("--provider", type=int, default=None)
+    register_resources.set_defaults(handler=_cmd_register_resources)
+
     return parser
 
 
@@ -188,7 +257,8 @@ async def _run(args: argparse.Namespace, container: Container) -> None:
     await container.db.connect()
     try:
         result = await args.handler(args, container)
-        print(_dumps(result))
+        if result is not None:
+            print(_dumps(result))
     finally:
         await container.db.close()
 

@@ -11,6 +11,8 @@ class Resolution:
     found: bool
     relative_path: str | None = None
     logical_id: str | None = None
+    composer: str | None = None
+    title: str | None = None
     archive_id: int | None = None
     archive_name: str | None = None
     status: str | None = None
@@ -41,6 +43,8 @@ class ResolveFile:
             found=True,
             relative_path=entry.relative_path,
             logical_id=entry.logical_id,
+            composer=entry.composer,
+            title=entry.title,
             archive_id=entry.archive_id,
             archive_name=archive.name if archive else None,
             status=entry.status.value,

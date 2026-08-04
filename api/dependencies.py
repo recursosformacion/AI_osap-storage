@@ -28,6 +28,10 @@ def get_provider_repo(request: Request) -> StorageProviderRepository:
     return cast(Container, request.app.state.container).provider_repo
 
 
+def get_file_repo(request: Request):
+    return cast(Container, request.app.state.container).file_repo
+
+
 def _use_case(attr: str) -> Callable[..., T]:
     def resolver(request: Request) -> T:
         return cast(Container, request.app.state.container).__getattribute__(attr)
@@ -46,6 +50,7 @@ CreateProviderDep = _use_case("create_provider")
 GetProviderDep = _use_case("get_provider")
 ListProvidersDep = _use_case("list_providers")
 ResolveFileDep = _use_case("resolve_file")
+SearchEntriesDep = _use_case("search_entries")
 VerifyFileDep = _use_case("verify_file")
 DeleteFileDep = _use_case("delete_file")
 ListArchivesDep = _use_case("list_archives")

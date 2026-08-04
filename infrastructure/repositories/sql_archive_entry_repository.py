@@ -11,6 +11,8 @@ def _row_to_entry(row: dict) -> ArchiveEntry:
         id=row["id"],
         archive_id=row["archive_id"],
         logical_id=row["logical_id"],
+        composer=row["composer"],
+        title=row["title"],
         relative_path=row["relative_path"],
         file_id=row["file_id"],
         size=row["size"],
@@ -28,9 +30,16 @@ class SqlArchiveEntryRepository(ArchiveEntryRepository):
     async def create(self, entry: ArchiveEntry) -> ArchiveEntry:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "INSERT INTO archive_entries (archive_id, logical_id, relative_path, status) "
-                "VALUES (%s, %s, %s, %s)",
-                (entry.archive_id, entry.logical_id, entry.relative_path, entry.status.value),
+                "INSERT INTO archive_entries (archive_id, logical_id, composer, title, relative_path, status) "
+                "VALUES (%s, %s, %s, %s, %s, %s)",
+                (
+                    entry.archive_id,
+                    entry.logical_id,
+                    entry.composer,
+                    entry.title,
+                    entry.relative_path,
+                    entry.status.value,
+                ),
             )
             entry.id = cur.lastrowid
             await cur.execute("SELECT * FROM archive_entries WHERE id = %s", (entry.id,))
@@ -39,19 +48,47 @@ class SqlArchiveEntryRepository(ArchiveEntryRepository):
     async def bulk_create(self, entries: list[ArchiveEntry]) -> int:
         if not entries:
             return 0
-        placeholders = ", ".join(["(%s, %s, %s, %s)"] * len(entries))
+        placeholders = ", ".join(["(%s, %s, %s, %s, %s, %s)"] * len(entries))
         params: list = []
         for entry in entries:
             params.extend(
-                [entry.archive_id, entry.logical_id, entry.relative_path, entry.status.value]
+                [
+                    entry.archive_id,
+                    entry.logical_id,
+                    entry.composer,
+                    entry.title,
+                    entry.relative_path,
+                    entry.status.value,
+                ]
             )
+        # Upsert: en re-importación actualiza logical_id/composer/title sin duplicar.
         sql = (
-            "INSERT IGNORE INTO archive_entries (archive_id, logical_id, relative_path, status) "
-            f"VALUES {placeholders}"
+            "INSERT INTO archive_entries (archive_id, logical_id, composer, title, relative_path, status) "
+            f"VALUES {placeholders} "
+            "ON DUPLICATE KEY UPDATE logical_id = VALUES(logical_id), "
+            "composer = VALUES(composer), title = VALUES(title)"
         )
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(sql, params)
             return cur.rowcount
+
+    async def bulk_update_file_ids(self, entries: list[ArchiveEntry]) -> None:
+        for batch in [entries[i : i + 500] for i in range(0, len(entries), 500)]:
+            if not batch:
+                continue
+            cases = " ".join(["WHEN %s THEN %s"] * len(batch))
+            params: list = []
+            ids: list = []
+            for entry in batch:
+                params.extend([entry.id, entry.file_id])
+                ids.append(entry.id)
+            id_placeholders = ", ".join(["%s"] * len(ids))
+            sql = (
+                f"UPDATE archive_entries SET file_id = CASE id {cases} END "
+                f"WHERE id IN ({id_placeholders})"
+            )
+            async with self._db.connection() as conn, conn.cursor() as cur:
+                await cur.execute(sql, params + ids)
 
     async def get_by_id(self, entry_id: int) -> ArchiveEntry | None:
         async with self._db.connection() as conn, conn.cursor() as cur:
@@ -77,11 +114,32 @@ class SqlArchiveEntryRepository(ArchiveEntryRepository):
             row = await cur.fetchone()
             return _row_to_entry(row) if row else None
 
+    async def get_by_file_id(self, file_id: int) -> ArchiveEntry | None:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT * FROM archive_entries WHERE file_id = %s ORDER BY id LIMIT 1",
+                (file_id,),
+            )
+            row = await cur.fetchone()
+            return _row_to_entry(row) if row else None
+
     async def list_by_archive(self, archive_id: int) -> list[ArchiveEntry]:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
                 "SELECT * FROM archive_entries WHERE archive_id = %s ORDER BY id",
                 (archive_id,),
+            )
+            return [_row_to_entry(row) for row in await cur.fetchall()]
+
+    async def search(self, query: str, *, limit: int = 50, offset: int = 0) -> list[ArchiveEntry]:
+        pattern = f"%{query}%"
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT * FROM archive_entries "
+                "WHERE logical_id LIKE %s OR relative_path LIKE %s "
+                "OR composer LIKE %s OR title LIKE %s "
+                "ORDER BY id LIMIT %s OFFSET %s",
+                (pattern, pattern, pattern, pattern, limit, offset),
             )
             return [_row_to_entry(row) for row in await cur.fetchall()]
 

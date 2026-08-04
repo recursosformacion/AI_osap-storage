@@ -29,6 +29,9 @@ class LocalDiskBackend:
     async def delete(self, object_key: str) -> None:
         (self._root / object_key).unlink(missing_ok=True)
 
+    async def exists(self, object_key: str) -> bool:
+        return (self._root / object_key).is_file()
+
     async def url_for(self, object_key: str) -> str | None:
         if self._public_base_url:
             return f"{self._public_base_url.rstrip('/')}/{object_key}"

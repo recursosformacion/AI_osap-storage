@@ -32,6 +32,22 @@ class SqlStorageLocationRepository(StorageLocationRepository):
             await cur.execute("SELECT * FROM storage_locations WHERE id = %s", (location.id,))
             return _row_to_location(await cur.fetchone())
 
+    async def bulk_create(self, locations: list[StorageLocation]) -> None:
+        if not locations:
+            return
+        placeholders = ", ".join(["(%s, %s, %s, %s)"] * len(locations))
+        params: list = []
+        for location in locations:
+            params.extend(
+                [location.file_id, location.provider_id, location.object_key, location.status.value]
+            )
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "INSERT INTO storage_locations (file_id, provider_id, object_key, status) VALUES "
+                + placeholders,
+                params,
+            )
+
     async def get_by_id(self, location_id: int) -> StorageLocation | None:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute("SELECT * FROM storage_locations WHERE id = %s", (location_id,))
@@ -52,6 +68,19 @@ class SqlStorageLocationRepository(StorageLocationRepository):
             await cur.execute(
                 "SELECT * FROM storage_locations WHERE file_id = %s ORDER BY id",
                 (file_id,),
+            )
+            return [_row_to_location(row) for row in await cur.fetchall()]
+
+    async def count(self) -> int:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute("SELECT COUNT(*) AS total FROM storage_locations")
+            return int((await cur.fetchone())["total"])
+
+    async def list_all(self, *, limit: int = 1000, offset: int = 0) -> list[StorageLocation]:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT * FROM storage_locations ORDER BY id LIMIT %s OFFSET %s",
+                (limit, offset),
             )
             return [_row_to_location(row) for row in await cur.fetchall()]
 

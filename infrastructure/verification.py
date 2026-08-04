@@ -39,11 +39,17 @@ async def verify_mirror(
     root = Path(archive.local_path)
     db_paths = set(await entries.list_relative_paths())
 
+    # Recorre solo los directorios de nivel superior que referencia el índice
+    # (p. ej. "mxl"), no todo el mirror (evita pdf/data/mid/metadata).
+    top_dirs = {p.split("/")[1] for p in db_paths if p.startswith("./") and len(p.split("/")) > 2}
     disk_paths: set[str] = set()
-    for path in root.rglob("*"):
-        if path.is_file() and path.suffix.lower() == ".mxl":
-            rel = path.relative_to(root).as_posix()
-            disk_paths.add("./" + rel)
+    for top in top_dirs:
+        base = root / top
+        if not base.is_dir():
+            continue
+        for path in base.rglob("*"):
+            if path.is_file() and path.suffix.lower() == ".mxl":
+                disk_paths.add("./" + path.relative_to(root).as_posix())
 
     csv_count = _count_csv(csv_path, archive_name)
     missing = len(db_paths - disk_paths)

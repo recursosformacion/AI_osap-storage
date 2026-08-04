@@ -8,17 +8,25 @@ from domain.ports.storage import StorageBackendRegistry
 from infrastructure.config import Settings
 
 
-def _backend_config(settings: Settings) -> tuple[ProviderType, dict]:
-    if settings.storage_backend == "local":
-        return ProviderType.LOCAL_DISK, {"root": settings.storage_local_root}
-    if settings.storage_backend == "google_drive":
-        return ProviderType.GOOGLE_DRIVE, {
-            "credentials": settings.google_drive_credentials,
-            "folder_id": settings.google_drive_folder_id,
+def _repository_config(settings: Settings) -> tuple[ProviderType, dict]:
+    """Traduce repository.provider a (ProviderType, config del proveedor)."""
+    if settings.repository_provider == "local":
+        return ProviderType.LOCAL_DISK, {"root": settings.repository_local_root}
+    if settings.repository_provider == "cloudflare_r2":
+        if not settings.r2_bucket:
+            raise UnsupportedProvider("repository.cloudflare_r2.bucket es obligatorio")
+        if not settings.r2_access_key or not settings.r2_secret_key:
+            raise UnsupportedProvider("cloudflare_r2 requiere access_key y secret_key")
+        return ProviderType.CLOUDFLARE_R2, {
+            "bucket": settings.r2_bucket,
+            "endpoint": settings.r2_endpoint,
+            "account_id": settings.r2_account_id,
+            "access_key": settings.r2_access_key,
+            "secret_key": settings.r2_secret_key,
+            "public_url": settings.r2_public_url,
+            "path_prefix": settings.r2_path_prefix,
         }
-    if settings.storage_backend == "s3":
-        return ProviderType.S3, {}
-    raise UnsupportedProvider(f"unknown storage.backend: {settings.storage_backend}")
+    raise UnsupportedProvider(f"repository.provider desconocido: {settings.repository_provider}")
 
 
 async def ensure_default_provider(
@@ -26,13 +34,13 @@ async def ensure_default_provider(
     registry: StorageBackendRegistry,
     settings: Settings,
 ) -> None:
-    """Crea el proveedor por defecto al arrancar según storage.backend, si no existe ninguno."""
-    if not settings.bootstrap_default_provider:
+    """Crea el proveedor por defecto al arrancar según repository.provider, si no existe ninguno."""
+    if not settings.bootstrap_create_default_provider:
         return
     existing = await providers.list(enabled_only=True)
     if existing:
         return
-    provider_type, config = _backend_config(settings)
-    provider = StorageProvider(name=settings.storage_backend, provider_type=provider_type, config=config)
+    provider_type, config = _repository_config(settings)
+    provider = StorageProvider(name=settings.repository_provider, provider_type=provider_type, config=config)
     registry.backend_for(provider)
     await providers.create(provider)

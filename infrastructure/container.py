@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from application.services.file_publisher import FilePublisher
+from application.services.mirror_resources import MirrorResourceRegistrar
 from application.services.tar_downloader import TarDownloader
 from application.use_cases.archives import CountMissingEntries, GetArchive, ListArchives
 from application.use_cases.delete_file import DeleteFile
@@ -16,7 +17,9 @@ from application.use_cases.materialize_file import MaterializeFile
 from application.use_cases.providers import CreateProvider, GetProvider, ListProviders
 from application.use_cases.register_existing_file import RegisterExistingFile
 from application.use_cases.register_file import RegisterFile
+from application.use_cases.register_resources import RegisterMirrorResources
 from application.use_cases.resolve_file import ResolveFile
+from application.use_cases.search_entries import SearchEntries
 from application.use_cases.start_download import StartDownload
 from application.use_cases.statistics import GetStatistics, RefreshStatistics
 from application.use_cases.stream_file import StreamFile
@@ -42,6 +45,7 @@ from infrastructure.config import Settings
 from infrastructure.db.connection import Database
 from infrastructure.downloaders.httpx_downloader import HttpxDownloader
 from infrastructure.hashing.hashlib_hasher import HashlibHasher
+from infrastructure.providers.cloudflare_r2 import CloudflareR2Backend
 from infrastructure.providers.google_drive import GoogleDriveBackend
 from infrastructure.providers.http_remote import HttpRemoteBackend
 from infrastructure.providers.local_disk import LocalDiskBackend
@@ -87,9 +91,11 @@ class Container:
     publisher: FilePublisher
     import_pdmx: PdmxImporter
     resolve_file: ResolveFile
+    search_entries: SearchEntries
     materialize_archive: MaterializeArchive
     materialize_file: MaterializeFile
     register_existing_file: RegisterExistingFile
+    register_resources: RegisterMirrorResources
     verify_file: VerifyFile
     delete_file: DeleteFile
     list_archives: ListArchives
@@ -120,6 +126,7 @@ def build_container(settings: Settings) -> Container:
     registry.register(ProviderType.S3, S3Backend)
     registry.register(ProviderType.HTTP_REMOTE, HttpRemoteBackend)
     registry.register(ProviderType.GOOGLE_DRIVE, GoogleDriveBackend)
+    registry.register(ProviderType.CLOUDFLARE_R2, CloudflareR2Backend)
 
     registration = FileRegistrationService(file_repo)
     integrity = IntegrityService(hasher)
@@ -141,15 +148,16 @@ def build_container(settings: Settings) -> Container:
     )
     get_download_job = GetDownloadJob(job_repo)
     get_download_url = GetDownloadUrl(file_repo, location_repo, provider_repo, availability, registry)
-    stream_file = StreamFile(get_download_url, registry)
+    stream_file = StreamFile(get_download_url, registry, archive_entry_repo)
     create_provider = CreateProvider(provider_repo, registry)
     get_provider = GetProvider(provider_repo)
     list_providers = ListProviders(provider_repo)
 
     publisher = FilePublisher(file_repo, location_repo, provider_repo, registry)
-    tar_downloader = TarDownloader(downloader, settings.mirror_cache)
+    tar_downloader = TarDownloader(downloader, None)
     import_pdmx = PdmxImporter(archive_repo, archive_entry_repo, sources=import_source_repo)
     resolve_file = ResolveFile(archive_entry_repo, archive_repo)
+    search_entries = SearchEntries(archive_entry_repo, archive_repo)
     materialize_archive = MaterializeArchive(
         archives=archive_repo,
         entries=archive_entry_repo,
@@ -171,6 +179,8 @@ def build_container(settings: Settings) -> Container:
         tar_downloader=tar_downloader,
     )
     register_existing_file = RegisterExistingFile(hasher, registration, publisher)
+    registrar = MirrorResourceRegistrar(file_repo, location_repo, archive_entry_repo)
+    register_resources = RegisterMirrorResources(archive_repo, archive_entry_repo, provider_repo, registrar)
     verify_file = VerifyFile(file_repo, location_repo, provider_repo, registry, hasher, settings.temp_dir)
     delete_file = DeleteFile(file_repo, location_repo, provider_repo, registry)
     list_archives = ListArchives(archive_repo)
@@ -205,9 +215,11 @@ def build_container(settings: Settings) -> Container:
         publisher=publisher,
         import_pdmx=import_pdmx,
         resolve_file=resolve_file,
+        search_entries=search_entries,
         materialize_archive=materialize_archive,
         materialize_file=materialize_file,
         register_existing_file=register_existing_file,
+        register_resources=register_resources,
         verify_file=verify_file,
         delete_file=delete_file,
         list_archives=list_archives,

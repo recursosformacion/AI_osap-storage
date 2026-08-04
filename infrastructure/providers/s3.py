@@ -43,6 +43,15 @@ class S3Backend:
             Key=object_key,
         )
 
+    async def exists(self, object_key: str) -> bool:
+        try:
+            await asyncio.to_thread(
+                self._client.head_object, Bucket=self._bucket, Key=object_key
+            )
+            return True
+        except Exception:
+            return False
+
     async def url_for(self, object_key: str) -> str | None:
         return await asyncio.to_thread(
             self._client.generate_presigned_url,

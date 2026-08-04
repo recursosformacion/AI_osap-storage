@@ -15,6 +15,7 @@ dependencies = [
     "aiomysql>=0.2.0",
     "httpx>=0.27",
     "PyYAML>=6.0",
+    "prometheus-client>=0.20",
 ]
 
 [project.optional-dependencies]
@@ -46,4 +47,7 @@ src = ["domain", "application", "infrastructure", "api", "tests"]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.ruff.lint.per-file-ignores]
-"api/routes/*.py" = ["B008"]
+"api/routes/*.py" = ["B008", "E501"]
+"api/routes/root.py" = ["E501"]
+"api/metrics.py" = ["B008"]
+"api/web/*.py" = ["E501"]

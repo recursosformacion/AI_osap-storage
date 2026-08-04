@@ -24,24 +24,8 @@ def _load_yaml_config(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    storage = data.get("storage") or {}
-    local = storage.get("local") or {}
-    gdrive = storage.get("google_drive") or {}
-    mirror = data.get("mirror") or {}
-    pdmx = ((data.get("providers") or {}).get("pdmx") or {}).get("source") or {}
 
     cfg: dict[str, Any] = {}
-    for key, value in {
-        "storage_backend": storage.get("backend"),
-        "storage_local_root": local.get("root"),
-        "google_drive_credentials": gdrive.get("credentials"),
-        "google_drive_folder_id": gdrive.get("folder_id"),
-        "mirror_cache": mirror.get("cache"),
-        "pdmx_source_csv": pdmx.get("csv"),
-        "pdmx_source_zenodo_base_url": (pdmx.get("zenodo") or {}).get("base_url"),
-    }.items():
-        if value is not None:
-            cfg[key] = value
 
     db = data.get("db") or {}
     for key in ("host", "port", "user", "password", "name", "pool_size"):
@@ -57,48 +41,85 @@ def _load_yaml_config(path: Path) -> dict[str, Any]:
     if "public_base_url" in http:
         cfg["public_base_url"] = http["public_base_url"]
 
+    if "temp_dir" in data:
+        cfg["temp_dir"] = data["temp_dir"]
+
+    repository = data.get("repository") or {}
+    if "provider" in repository:
+        cfg["repository_provider"] = repository["provider"]
+    local = repository.get("local") or {}
+    if "root" in local:
+        cfg["repository_local_root"] = local["root"]
+    r2 = repository.get("cloudflare_r2") or {}
+    for key, field in {
+        "bucket": "r2_bucket",
+        "endpoint": "r2_endpoint",
+        "account_id": "r2_account_id",
+        "access_key": "r2_access_key",
+        "secret_key": "r2_secret_key",
+        "public_url": "r2_public_url",
+        "path_prefix": "r2_path_prefix",
+        "serve_directly": "r2_serve_directly",
+    }.items():
+        if key in r2:
+            cfg[field] = r2[key]
+
+    bootstrap = data.get("bootstrap") or {}
+    if "create_default_provider" in bootstrap:
+        cfg["bootstrap_create_default_provider"] = bootstrap["create_default_provider"]
+
+    pdmx = ((data.get("providers") or {}).get("pdmx") or {}).get("source") or {}
+    if "csv" in pdmx:
+        cfg["pdmx_source_csv"] = pdmx["csv"]
+    if (pdmx.get("zenodo") or {}).get("base_url"):
+        cfg["pdmx_source_zenodo_base_url"] = pdmx["zenodo"]["base_url"]
+
     return cfg
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=PROJECT_ROOT / ".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+    """Esquema de configuración. Sin valores por defecto: TODO viene de config.yaml.
+
+    El fichero activo se elige con OSAP_CONFIG (por defecto config.yaml en la raíz).
+    Este módulo solo define el esquema; ningún valor de configuración vive en código.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
 
     # Base de datos
-    db_host: str = "127.0.0.1"
-    db_port: int = 3306
-    db_user: str = "osap"
-    db_password: str = "osap"
-    db_name: str = "osap_storage"
-    db_pool_size: int = 10
+    db_host: str
+    db_port: int
+    db_user: str
+    db_password: str
+    db_name: str
+    db_pool_size: int
 
     # HTTP
-    http_host: str = "0.0.0.0"
-    http_port: int = 8000
-    public_base_url: str = "http://localhost:8000"
+    http_host: str
+    http_port: int
+    public_base_url: str
 
     # Directorio temporal para descargas/materialización en curso
-    temp_dir: str = "data/tmp"
+    temp_dir: str
 
-    # Backend de almacenamiento activo (local | google_drive | s3)
-    storage_backend: str = "local"
-    storage_local_root: str = "data/files"
-    google_drive_credentials: str | None = None
-    google_drive_folder_id: str | None = None
-
-    # Caché de mirrors (TARs descargados durante la ingesta offline)
-    mirror_cache: str = "data/cache"
-    keep_tar_after_materialize: bool = True
+    # Repositorio oficial (no "backend"): local | cloudflare_r2
+    repository_provider: str
+    repository_local_root: str = ""
+    r2_bucket: str = ""
+    r2_endpoint: str = ""
+    r2_account_id: str = ""
+    r2_access_key: str = ""
+    r2_secret_key: str = ""
+    r2_public_url: str | None = None
+    r2_path_prefix: str = ""
+    r2_serve_directly: bool = False
 
     # Fuente PDMX (ingesta offline)
     pdmx_source_csv: str | None = None
     pdmx_source_zenodo_base_url: str | None = None
 
-    # Crear el proveedor por defecto según storage_backend al arrancar
-    bootstrap_default_provider: bool = True
+    # Crear el proveedor por defecto según repository.provider al arrancar
+    bootstrap_create_default_provider: bool
 
     @classmethod
     def settings_customise_sources(
@@ -110,11 +131,10 @@ class Settings(BaseSettings):
         file_secret_settings,
     ) -> tuple:
         config_path = Path(os.environ.get("OSAP_CONFIG", PROJECT_ROOT / "config.yaml"))
-        # Prioridad: init > entorno > .env > config.yaml > secretos
+        # Prioridad: init > variables de entorno > config.yaml > secretos
         return (
             init_settings,
             env_settings,
-            dotenv_settings,
             YamlConfigSource(config_path),
             file_secret_settings,
         )

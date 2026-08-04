@@ -1,7 +1,16 @@
+# ============================================================
 # Fichero de configuración único de osap-storage.
-# Se carga desde config.yaml (o la ruta indicada por OSAP_CONFIG).
-# Las variables de entorno y .env tienen prioridad sobre este fichero.
+#
+# Copia este ejemplo a `config.yaml` (o a la ruta indicada por
+# OSAP_CONFIG). `config.yaml` está en .gitignore: NO subirlo
+# (contiene credenciales). No hay valores en el código.
+#
+# Dominios:
+#   storage.openmusicrepository.com -> osap-storage (este proyecto)
+#   cdn.openmusicrepository.com     -> Cloudflare R2 (ficheros)
+# ============================================================
 
+# Base de datos (MariaDB/MySQL)
 db:
   host: 127.0.0.1
   port: 3306
@@ -10,26 +19,34 @@ db:
   name: osap_storage
   pool_size: 10
 
+# Servidor HTTP / URL pública de la API
 http:
   host: 0.0.0.0
   port: 8000
-  public_base_url: http://localhost:8000
+  public_base_url: https://storage.openmusicrepository.com
 
-# Backend de almacenamiento activo.
-#   local -> Filesystem  (implementado)
-#   google_drive -> Google Drive  (futuro)
-#   s3 -> Amazon S3 / MinIO  (futuro)
-storage:
-  backend: local
+# Directorio temporal
+temp_dir: /tmp
+
+# Repositorio oficial de OpenMusicRepository (no "backend").
+#   provider: local          -> desarrollo (disco de la máquina)
+#   provider: cloudflare_r2  -> producción (Cloudflare R2)
+bootstrap:
+  create_default_provider: true
+
+repository:
+  provider: local
   local:
     root: data/files
-  google_drive:
-    credentials: secrets/google.json
-    folder_id: xxxxxxxxx
-
-# Caché local de mirrors (TARs) durante la ingesta offline.
-mirror:
-  cache: data/cache
+  cloudflare_r2:
+    bucket: pdmx
+    endpoint: https://ACCOUNT.r2.cloudflarestorage.com
+    account_id: ACCOUNT
+    access_key: CAMBIAR
+    secret_key: CAMBIAR
+    public_url: https://cdn.openmusicrepository.com
+    path_prefix: pdmx
+    serve_directly: true
 
 # Proveedores de ingesta (offline). PDMX es una fuente de ingestión,
 # nunca se consulta en el tiempo de respuesta de un usuario.

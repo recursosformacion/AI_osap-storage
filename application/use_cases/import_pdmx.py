@@ -17,6 +17,8 @@ class PdmxRow:
     archive_name: str
     archive_url: str | None = None
     logical_id: str | None = None
+    composer: str | None = None
+    title: str | None = None
 
 
 @dataclass(frozen=True)
@@ -74,6 +76,8 @@ class PdmxImporter:
                     archive_id=archive_id,
                     relative_path=row.relative_path,
                     logical_id=row.logical_id,
+                    composer=row.composer,
+                    title=row.title,
                     status=ArchiveEntryStatus.MISSING,
                 )
             )

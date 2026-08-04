@@ -9,6 +9,8 @@ RELATIVE_PATH_COLS = ["relative_path", "relativepath", "path", "file", "file_pat
 ARCHIVE_NAME_COLS = ["archive", "archive_name", "tar", "name"]
 ARCHIVE_URL_COLS = ["url", "archive_url", "source_url", "tar_url"]
 LOGICAL_ID_COLS = ["logical_id", "key", "catalog_id", "id"]
+COMPOSER_COLS = ["composer", "composer_name"]
+TITLE_COLS = ["title", "song_name", "name"]
 
 
 def _detect(header: list[str], candidates: list[str]) -> str | None:
@@ -37,6 +39,8 @@ def read_pdmx_csv(
     archive_url_col: str | None = None,
     archive_url: str | None = None,
     logical_id_col: str | None = None,
+    composer_col: str | None = None,
+    title_col: str | None = None,
 ) -> Iterator[PdmxRow]:
     """Lee un CSV de índice PDMX.
 
@@ -59,6 +63,8 @@ def read_pdmx_csv(
             )
         archive_url_col = archive_url_col or _detect(header, ARCHIVE_URL_COLS)
         logical_id = logical_id_col or _detect(header, LOGICAL_ID_COLS)
+        composer = composer_col or _detect(header, COMPOSER_COLS)
+        title = title_col or _detect(header, TITLE_COLS)
 
         for record in reader:
             rel = _clean(record.get(relative_path))
@@ -75,4 +81,6 @@ def read_pdmx_csv(
                 archive_name=name,
                 archive_url=row_url,
                 logical_id=_clean(record.get(logical_id)) if logical_id else None,
+                composer=_clean(record.get(composer)) if composer else None,
+                title=_clean(record.get(title)) if title else None,
             )

@@ -10,10 +10,24 @@ from infrastructure.container import Container, build_container
 from infrastructure.db.migrate import migrate
 
 from api import errors
-from api.routes import archives, downloads, entries, files, health, providers, statistics
+from api.logging_config import setup_logging
+from api.metrics import MetricsMiddleware
+from api.metrics import router as metrics_router
+from api.routes import (
+    archives,
+    downloads,
+    entries,
+    files,
+    health,
+    pages,
+    providers,
+    search,
+    statistics,
+)
 
 
 def create_app() -> FastAPI:
+    setup_logging()
     settings = Settings()
     container: Container = build_container(settings)
 
@@ -25,9 +39,21 @@ def create_app() -> FastAPI:
         yield
         await container.db.close()
 
-    app = FastAPI(title="osap-storage", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(
+        title="Open Music Repository",
+        description=(
+            "Repositorio oficial de partituras públicas: índice de obras, resolución "
+            "('lo tengo' -> URL), búsqueda, verificación del mirror y estadísticas. "
+            "Respuesta a una consulta: ¿Existe? -> Sí -> URL de descarga (CDN)."
+        ),
+        version="1.0.0",
+        lifespan=lifespan,
+    )
     app.state.container = container
     errors.register_exception_handlers(app)
+    app.add_middleware(MetricsMiddleware)
+    app.include_router(pages.router)
+    app.include_router(search.router)
     app.include_router(health.router)
     app.include_router(providers.router)
     app.include_router(files.router)
@@ -35,6 +61,7 @@ def create_app() -> FastAPI:
     app.include_router(entries.router)
     app.include_router(archives.router)
     app.include_router(statistics.router)
+    app.include_router(metrics_router)
     return app
 
 

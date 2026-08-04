@@ -27,39 +27,77 @@ El servicio nunca abre un TAR ni descarga datasets: solo consulta el repositorio
 - **`Archive`** — un contenedor abstracto de un proveedor externo (`tar`, `zip`, `directory`...).
   No conoce PDMX: sirve para cualquier dataset futuro.
 - **`ArchiveEntry`** — un fichero contenido dentro del `Archive`.
-- **`File`** — un fichero que **ya pertenece a OSAP** (materializado).
-- **`StorageLocation`** — dónde está almacenada una copia del `File`.
+- **`File`** — un **recurso conocido** por el sistema, no necesariamente un fichero físico propio.
+  El `sha256` es opcional (NULL en el mirror; no se calcula).
+- **`StorageLocation`** — dónde está accesible un `File`. En el mirror apunta directamente a la
+  ruta dentro del mirror (`object_key` = relative_path), **sin copiar ni hashear nada**.
 - **`ImportSource`** — procedencia de cada índice importado (PDMX v1/v2, OpenScore, IMSLP dump...).
 
-Nunca se crean `File` "vacíos": un `File` solo existe tras materializar (SHA256 calculado).
-La descarga bajo demanda de TAR durante una petición HTTP queda **descartada**.
+El mirror **es el primer proveedor de almacenamiento** de osap-storage. La importación crea el
+índice (`Archive` + `ArchiveEntry`) y el registro de recursos crea el `File` + `StorageLocation`
+correspondiente apuntando al mirror. Más adelante un mismo `File` podrá tener más
+`StorageLocation`s (S3, CDN, Drive...), pero el mirror siempre será la primera ubicación física.
 
 ## Ingestión (offline)
 
-Flujo: Proveedor (PDMX) → Importar índice → `Archive` → `ArchiveEntry` → Materializar →
-extraer TODOS los MusicXML → SHA256 → `File` → `StorageLocation` → publicar en backend.
+El contrato es simple:
 
-### `osap-storage import pdmx <csv> [--version] [--notes] [--archive-name <tar>] [--archive-url <url>]`
+```
+IMPORT
+  ↓
+descarga mirror
+  ↓
+extrae mirror
+  ↓
+importa índice (PDMX.csv)
+  ↓
+SERVICIO LISTO
+```
+
+No hay fase de "materialización masiva": mientras el almacenamiento es únicamente el mirror
+de PDMX, los `ArchiveEntry` se sirven **directamente desde el mirror extraído**. El proceso de
+registro + SHA256 + `File`/`StorageLocation` solo tiene sentido en una V2 con MusicXML subidos
+por usuarios (contenido propio, no mirror oficial).
+
+### `osap-storage import pdmx <csv> ...`
 
 Construye el índice **sin descargar nada**: registra `Archive`s (deduplicados por nombre)
 y `ArchiveEntry`s (estado `missing`). Idempotente (`INSERT IGNORE`).
 Registra además un `ImportSource` con la procedencia del CSV (`--version` / `--notes`).
 
-Auto-detecta columnas del CSV (`relative_path`, `archive`, `url`, `key`) o se pueden
-indicar con `--relative-path-col`, `--archive-name-col`, `--archive-url-col`, `--logical-id-col`.
-En PDMX real el archive no viene en una columna: se fija con `--archive-name` (p. ej. `mxl.tar.gz`)
-y `--archive-url`, y la ruta de cada MusicXML con `--relative-path-col mxl`.
-Valores vacíos o `NA`/`nan` se ignoran.
+### `osap-storage doctor [--csv ...] [--archive mxl.tar.gz] [--links]`
+
+Diagnóstico del sistema (equivalente a `git fsck`): comprueba la conexión a la BD, el backend
+de almacenamiento y la consistencia del mirror, y muestra los contadores (Providers, Archives,
+ArchiveEntries, Files, StorageLocations). Termina con `Everything is OK` si todo está correcto.
+
+Con `--links` comprueba además que **cada `StorageLocation` existe físicamente** en su proveedor
+(enlace índice → fichero) y lista las rutas faltantes.
+
+### `osap-storage register-resources <archive_id> [--provider N]`
+
+Registra el `File` + `StorageLocation` de cada `ArchiveEntry` del mirror: `StorageLocation.object_key`
+= relative_path y el proveedor es el mirror (primer proveedor). No copia nada ni calcula SHA256.
+Idempotente (ignora entradas que ya tienen `file_id`).
+
+### `osap-storage verify-mirror [--csv ...] [--archive mxl.tar.gz]`
+
+Comprueba la consistencia del mirror: compara el número de registros del CSV, los `ArchiveEntry`
+del índice y los ficheros `.mxl` reales en disco, y reporta `missing` / `extra`. Termina con
+`Mirror OK` si todo coincide. Es la herramienta de referencia para saber "exactamente qué tienes".
 
 ### `osap-storage materialize <archive_id> [--provider N] [--local-path ...] [--download] [--no-keep-tar]`
 
 Descomprime un TAR completo, y por cada entrada: extrae → calcula SHA256 → registra `File`
 (dedupe por SHA256) → publica en el backend → crea `StorageLocation` → marca `ready`.
 
-- `--download`: si el TAR no está en `mirror.cache`, lo descarga desde `archive.url` a la caché
-  (proceso offline; reutiliza el TAR si ya está en caché).
-- `--no-keep-tar`: elimina el TAR de la caché tras materializar (solo si se descargó en esta ejecución).
+- `--download`: si el TAR no está disponible, lo descarga desde `archive.url` a `temp_dir`
+  (proceso offline; reutiliza el TAR si ya está).
+- `--no-keep-tar`: elimina el TAR tras materializar (solo si se descargó en esta ejecución).
 - `--local-path`: usa un TAR ya disponible en disco sin descargarlo.
+
+Nota: este flujo es una herramienta offline opcional de ingesta de datasets en TAR. El mirror
+de PDMX ya construido no lo necesita: sus `StorageLocation` apuntan directamente al repositorio.
 
 Al terminar el `Archive` pasa a `materialized` (o `failed` si hubo errores).
 
@@ -81,6 +119,10 @@ MusicXML disponibles, pendientes, bytes ocupados, errores.
 
 Responde "¿lo tengo?": devuelve `found`, `archive_name`, `status`, `available`, `file_id`.
 `available=true` solo si la entrada está `ready` y tiene `file_id`.
+
+**Con `repository.cloudflare_r2.serve_directly: true`**: si la entrada existe en el índice, devuelve
+`available=true` y una URL directa al CDN (`https://cdn.openmusicrepository.com/pdmx/mxl/...`),
+sin necesidad de materializar ni servir el fichero desde el propio servidor.
 
 ### API
 
@@ -113,23 +155,37 @@ El servidor solo ofrece: "¿Lo tengo?" → URL. No hay lógica de TAR durante un
 
 ## Configuración
 
-Fichero único `config.yaml` (o `OSAP_CONFIG`). Las variables de entorno y `.env`
-tienen prioridad. Referencia:
+Fichero único y externo `config.yaml` (ruta por defecto en la raíz, o `OSAP_CONFIG`).
+`config.py` solo define el esquema: **sin valores en código**. `config.yaml` está en
+`.gitignore` (contiene credenciales). Plantillas en el repo: `config.example.yaml`
+(generica) y `config.production.example.yaml` (producción). Producción (91.134.255.134)
+tiene su propio `config.yaml` y solo se modifica al cerrar una versión. Referencia:
 
 ```yaml
 db:
-  host/path/...            # Conexión a MariaDB/MySQL
+  host, port, user, password, name, pool_size   # Conexión a MariaDB/MySQL
 
 http:
   host, port, public_base_url
 
-storage:
-  backend: local           # local | google_drive | s3
-  local: { root: data/files }
-  google_drive: { credentials: secrets/google.json, folder_id: xxxxx }
+temp_dir: /tmp
 
-mirror:
-  cache: data/cache        # TARs descargados durante la ingesta offline
+bootstrap:
+  create_default_provider: true
+
+repository:
+  provider: local          # desarrollo (Filesystem) | cloudflare_r2 (producción)
+  local:
+    root: data/files
+  cloudflare_r2:
+    bucket: pdmx
+    endpoint: https://ACCOUNT.r2.cloudflarestorage.com
+    account_id: ACCOUNT
+    access_key: ...
+    secret_key: ...
+    public_url: https://cdn.openmusicrepository.com
+    path_prefix: pdmx
+    serve_directly: true
 
 providers:
   pdmx:
@@ -138,26 +194,45 @@ providers:
       zenodo: { base_url: https://zenodo.org/records/XXXX }
 ```
 
-El backend activo se elige con `storage.backend`; el proveedor por defecto se crea al arrancar
-si no existe ninguno (`bootstrap.py`). En V1 el backend **implementado** es `local` (Filesystem);
-`google_drive` y `s3` quedan definidos por interfaz pero pendientes.
+El repositorio activo se elige con `repository.provider`; el proveedor por defecto se crea al
+arrancar si no existe ninguno (`bootstrap.py`). En producción el repositorio es **Cloudflare R2**
+(con `serve_directly`, el resolver devuelve URLs directas al CDN).
 
-## Estado por fases
+## Versiones
 
-**Implementado (V1):**
+**V1 — CERRADA** (2026-08). Desplegada en producción (`storage.openmusicrepository.com`).
+
 - Modelo de datos (archives/entries + files/locations + import_sources + statistics).
 - Importador de índice PDMX offline (registra `ImportSource`).
-- Materializador offline de TARs completos y materializador por fichero (`materialize-file`).
-- Resolver de disponibilidad ("lo tengo / no lo tengo") + URL.
-- Backend Filesystem + registro de backends por configuración.
-- Operaciones locales: registrar existente, verificar, borrar.
-- Estadísticas del repositorio (CLI `stats` + endpoint).
+- Repositorio oficial en Cloudflare R2 con CDN público (254,035 MusicXML + PDF/MIDI).
+- Resolver ("lo tengo / no lo tengo") + URL de descarga.
+- Buscador web (compositor/título), landing, `/about`, `/api`, estadísticas.
+- Monitorización: `/health`, `/metrics` (Prometheus), logging JSON.
+- `verify-mirror` y `doctor` (incluido `--links`).
 - CLI y API sobre los mismos casos de uso.
 
-**Futuro (fuera de V1):**
-- Google Drive y S3 como backends de publicación.
-- Interfaz web de OSAP (cliente de la API: templates/routers/static).
-- No está previsto: descarga bajo demanda de TAR en el tiempo de respuesta, caché inteligente, sincronización automática.
+**V2 — en planificación** (ver `docs/v2.md`): API Key, rate limiting, usuarios/auth (Google), panel de
+administración, i18n (6 idiomas), metadatos completos.
+
+**Fuera de V1:** Google Drive/S3 como proveedores, descarga bajo demanda de TAR, caché inteligente,
+sincronización automática.
+
+## Liberación a producción
+
+- **`config.yaml`** — configuración de **desarrollo** (esta máquina).
+- **`config.production.yaml`** — configuración de **producción** (gitignored). Al cerrar
+  una versión se despliega en 91.134.255.134 como `config.yaml`.
+- **`release.ps1`** — script PowerShell de liberación: tests+lint → sube el código
+  (tar+ssh) → despliega `config.production.yaml` como `config.yaml` → migraciones →
+  reinicia el servicio → verifica `/health`.
+
+```powershell
+.\release.ps1            # liberación completa
+.\release.ps1 -SkipTests # sin tests/lint
+.\release.ps1 -SkipMigrations
+```
+
+Producción solo se modifica al cerrar una versión; nunca durante el desarrollo.
 
 ## Criterios de mantenimiento
 

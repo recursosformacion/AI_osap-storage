@@ -14,7 +14,13 @@ from api.schemas import ProviderCreate, ProviderRead
 router = APIRouter(prefix="/api/v1/providers", tags=["providers"])
 
 
-@router.post("", response_model=ProviderRead, status_code=201)
+@router.post(
+    "",
+    response_model=ProviderRead,
+    status_code=201,
+    summary="Crear proveedor",
+    description="Crea un proveedor de almacenamiento (local, cloudflare_r2...).",
+)
 async def create_provider(
     payload: ProviderCreate,
     uc: CreateProvider = Depends(CreateProviderDep),
@@ -30,7 +36,12 @@ async def create_provider(
     return ProviderRead.model_validate(provider)
 
 
-@router.get("", response_model=list[ProviderRead])
+@router.get(
+    "",
+    response_model=list[ProviderRead],
+    summary="Listar proveedores",
+    description="Lista los proveedores de almacenamiento registrados.",
+)
 async def list_providers(
     enabled_only: bool = Query(False),
     uc: ListProviders = Depends(ListProvidersDep),
@@ -39,7 +50,12 @@ async def list_providers(
     return [ProviderRead.model_validate(p) for p in providers]
 
 
-@router.get("/{provider_id}", response_model=ProviderRead)
+@router.get(
+    "/{provider_id}",
+    response_model=ProviderRead,
+    summary="Detalle de un proveedor",
+    description="Devuelve un proveedor de almacenamiento por su id.",
+)
 async def get_provider(
     provider_id: int,
     uc: GetProvider = Depends(GetProviderDep),

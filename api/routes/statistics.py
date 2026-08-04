@@ -9,7 +9,13 @@ from api.schemas import StatisticsRead
 router = APIRouter(prefix="/api/v1/statistics", tags=["statistics"])
 
 
-@router.get("", response_model=StatisticsRead)
+@router.get(
+    "",
+    response_model=StatisticsRead,
+    summary="Estadísticas del repositorio",
+    description="Contadores del mirror (archives, entries, files, bytes...). "
+    "Con ?refresh=true recalcula la instantánea.",
+)
 async def statistics(
     refresh: bool = Query(False),
     uc: GetStatistics = Depends(GetStatisticsDep),

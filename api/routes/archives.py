@@ -9,7 +9,12 @@ from api.schemas import ArchiveRead
 router = APIRouter(prefix="/api/v1/archives", tags=["archives"])
 
 
-@router.get("", response_model=list[ArchiveRead])
+@router.get(
+    "",
+    response_model=list[ArchiveRead],
+    summary="Listar archives",
+    description="Archives contenedores del mirror (p. ej. mxl.tar.gz).",
+)
 async def list_archives(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
@@ -19,7 +24,12 @@ async def list_archives(
     return [ArchiveRead.model_validate(a) for a in archives]
 
 
-@router.get("/{archive_id}", response_model=ArchiveRead)
+@router.get(
+    "/{archive_id}",
+    response_model=ArchiveRead,
+    summary="Detalle de un archive",
+    description="Devuelve el archive con su estado, formato y ruta local.",
+)
 async def get_archive(
     archive_id: int,
     uc: GetArchive = Depends(GetArchiveDep),

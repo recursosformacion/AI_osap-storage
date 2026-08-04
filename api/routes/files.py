@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from urllib.parse import quote
 
 from application.use_cases.delete_file import DeleteFile
@@ -94,7 +95,13 @@ def _empty_file_read(file) -> FileRead:
     )
 
 
-@router.post("", response_model=FileRead, status_code=201)
+@router.post(
+    "",
+    response_model=FileRead,
+    status_code=201,
+    summary="Registrar un fichero",
+    description="Registra un fichero conocido por el sistema (sha256 + nombre).",
+)
 async def register_file(
     payload: FileCreate,
     uc: RegisterFile = Depends(RegisterFileDep),
@@ -103,7 +110,12 @@ async def register_file(
     return _empty_file_read(file)
 
 
-@router.get("", response_model=list[FileRead])
+@router.get(
+    "",
+    response_model=list[FileRead],
+    summary="Listar ficheros",
+    description="Lista los ficheros registrados con su disponibilidad.",
+)
 async def list_files(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
@@ -113,7 +125,12 @@ async def list_files(
     return [_file_read(detail) for detail in details]
 
 
-@router.get("/{file_id}", response_model=FileRead)
+@router.get(
+    "/{file_id}",
+    response_model=FileRead,
+    summary="Detalle de un fichero",
+    description="Devuelve el fichero con sus StorageLocations y disponibilidad.",
+)
 async def get_file(
     file_id: int,
     uc: GetFile = Depends(GetFileDep),
@@ -121,7 +138,13 @@ async def get_file(
     return _file_read(await uc.execute(file_id))
 
 
-@router.post("/{file_id}/downloads", response_model=DownloadJobRead, status_code=202)
+@router.post(
+    "/{file_id}/downloads",
+    response_model=DownloadJobRead,
+    status_code=202,
+    summary="Iniciar descarga",
+    description="Crea un job de descarga desde una URL externa y lo ejecuta en segundo plano (V1).",
+)
 async def start_download(
     file_id: int,
     payload: DownloadStart,
@@ -137,7 +160,12 @@ async def start_download(
     return DownloadJobRead.model_validate(job)
 
 
-@router.get("/{file_id}/url", response_model=DownloadUrlRead)
+@router.get(
+    "/{file_id}/url",
+    response_model=DownloadUrlRead,
+    summary="URL de descarga",
+    description="Devuelve la URL de descarga del fichero (URL nativa del proveedor o URL propia).",
+)
 async def download_url(
     file_id: int,
     provider_id: int | None = Query(default=None),
@@ -152,15 +180,22 @@ async def download_url(
     return DownloadUrlRead(url=url, provider_id=target.provider.id)
 
 
-@router.get("/{file_id}/content")
+@router.get(
+    "/{file_id}/content",
+    summary="Descargar contenido",
+    description="Transmite el contenido del fichero (streaming) desde su proveedor.",
+)
 async def stream_file(
     file_id: int,
     provider_id: int | None = Query(default=None),
     uc: StreamFile = Depends(StreamFileDep),
 ) -> StreamingResponse:
     stream = await uc.execute(file_id, provider_id)
+    ascii_name = re.sub(r"[^\x20-\x7e]", "_", stream.friendly_name)
     headers = {
-        "Content-Disposition": f'attachment; filename="{quote(stream.file.name)}"'
+        "Content-Disposition": (
+            f'attachment; filename="{ascii_name}"; filename*=UTF-8\'\'{quote(stream.friendly_name)}'
+        )
     }
     if stream.file.size_bytes is not None:
         headers["Content-Length"] = str(stream.file.size_bytes)
@@ -171,7 +206,12 @@ async def stream_file(
     )
 
 
-@router.post("/{file_id}/verify", response_model=VerifyResultRead)
+@router.post(
+    "/{file_id}/verify",
+    response_model=VerifyResultRead,
+    summary="Verificar integridad",
+    description="Recalcula el SHA256 de cada copia almacenada y lo compara con el esperado.",
+)
 async def verify_file(
     file_id: int,
     uc: VerifyFile = Depends(VerifyFileDep),
@@ -179,7 +219,12 @@ async def verify_file(
     return VerifyResultRead.model_validate(await uc.execute(file_id))
 
 
-@router.delete("/{file_id}", status_code=204)
+@router.delete(
+    "/{file_id}",
+    status_code=204,
+    summary="Borrar un fichero",
+    description="Elimina el fichero y sus copias físicas.",
+)
 async def delete_file(
     file_id: int,
     uc: DeleteFile = Depends(DeleteFileDep),
