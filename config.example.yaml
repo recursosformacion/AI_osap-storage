@@ -1,0 +1,41 @@
+# Fichero de configuración único de osap-storage.
+# Se carga desde config.yaml (o la ruta indicada por OSAP_CONFIG).
+# Las variables de entorno y .env tienen prioridad sobre este fichero.
+
+db:
+  host: 127.0.0.1
+  port: 3306
+  user: osap
+  password: osap
+  name: osap_storage
+  pool_size: 10
+
+http:
+  host: 0.0.0.0
+  port: 8000
+  public_base_url: http://localhost:8000
+
+# Backend de almacenamiento activo.
+#   local -> Filesystem  (implementado)
+#   google_drive -> Google Drive  (futuro)
+#   s3 -> Amazon S3 / MinIO  (futuro)
+storage:
+  backend: local
+  local:
+    root: data/files
+  google_drive:
+    credentials: secrets/google.json
+    folder_id: xxxxxxxxx
+
+# Caché local de mirrors (TARs) durante la ingesta offline.
+mirror:
+  cache: data/cache
+
+# Proveedores de ingesta (offline). PDMX es una fuente de ingestión,
+# nunca se consulta en el tiempo de respuesta de un usuario.
+providers:
+  pdmx:
+    source:
+      csv: data/pdmx/pdmx.csv
+      zenodo:
+        base_url: https://zenodo.org/records/XXXX

@@ -1,0 +1,36 @@
+ALTER TABLE archives
+    ADD COLUMN provider_id BIGINT UNSIGNED NULL AFTER id,
+    ADD COLUMN format VARCHAR(30) NOT NULL DEFAULT 'tar' AFTER url;
+
+CREATE INDEX idx_archives_provider ON archives (provider_id);
+
+ALTER TABLE archives
+    ADD CONSTRAINT fk_archives_provider FOREIGN KEY (provider_id) REFERENCES storage_providers (id);
+
+CREATE TABLE IF NOT EXISTS import_sources (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    provider VARCHAR(100) NOT NULL,
+    version VARCHAR(100) NULL,
+    csv_path VARCHAR(1024) NULL,
+    notes TEXT NULL,
+    imported_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    KEY idx_import_sources_provider (provider)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS statistics (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    archives BIGINT NOT NULL DEFAULT 0,
+    entries BIGINT NOT NULL DEFAULT 0,
+    files BIGINT NOT NULL DEFAULT 0,
+    downloaded_tar BIGINT NOT NULL DEFAULT 0,
+    materialized BIGINT NOT NULL DEFAULT 0,
+    pending BIGINT NOT NULL DEFAULT 0,
+    bytes BIGINT NOT NULL DEFAULT 0,
+    computed_at DATETIME(6) NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
