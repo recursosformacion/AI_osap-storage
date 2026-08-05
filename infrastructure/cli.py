@@ -79,6 +79,10 @@ def _cmd_register_resources(args: argparse.Namespace, container: Container):
     )
 
 
+def _cmd_register_works(args: argparse.Namespace, container: Container):
+    return container.build_works.execute()
+
+
 async def _cmd_verify_mirror(args: argparse.Namespace, container: Container):
     csv_path = args.csv or container.settings.pdmx_source_csv
     if not csv_path:
@@ -249,6 +253,12 @@ def build_parser() -> argparse.ArgumentParser:
     register_resources.add_argument("archive_id", type=int)
     register_resources.add_argument("--provider", type=int, default=None)
     register_resources.set_defaults(handler=_cmd_register_resources)
+
+    register_works = sub.add_parser(
+        "register-works",
+        help="Construir las Works a partir de los recursos (por hash PDMX)",
+    )
+    register_works.set_defaults(handler=_cmd_register_works)
 
     return parser
 

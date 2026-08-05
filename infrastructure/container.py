@@ -6,6 +6,7 @@ from application.services.file_publisher import FilePublisher
 from application.services.mirror_resources import MirrorResourceRegistrar
 from application.services.tar_downloader import TarDownloader
 from application.use_cases.archives import CountMissingEntries, GetArchive, ListArchives
+from application.use_cases.build_works import BuildWorks
 from application.use_cases.delete_file import DeleteFile
 from application.use_cases.get_download_job import GetDownloadJob
 from application.use_cases.get_download_url import GetDownloadUrl
@@ -24,6 +25,7 @@ from application.use_cases.start_download import StartDownload
 from application.use_cases.statistics import GetStatistics, RefreshStatistics
 from application.use_cases.stream_file import StreamFile
 from application.use_cases.verify_file import VerifyFile
+from application.use_cases.works import GetWork, SearchWorks
 from domain.entities.storage_provider import ProviderType
 from domain.ports.archive_repositories import ArchiveEntryRepository, ArchiveRepository
 from domain.ports.download import FileDownloader
@@ -36,6 +38,7 @@ from domain.ports.repositories import (
 )
 from domain.ports.storage import StorageBackendRegistry
 from domain.ports.tasks import TaskScheduler
+from domain.ports.work_repository import WorkRepository
 from domain.services.availability import AvailabilityService
 from domain.services.file_registration import FileRegistrationService
 from domain.services.integrity import IntegrityService
@@ -61,6 +64,7 @@ from infrastructure.repositories.sql_job_repository import SqlDownloadJobReposit
 from infrastructure.repositories.sql_location_repository import SqlStorageLocationRepository
 from infrastructure.repositories.sql_provider_repository import SqlStorageProviderRepository
 from infrastructure.repositories.sql_statistics_repository import SqlStatisticsRepository
+from infrastructure.repositories.sql_work_repository import SqlWorkRepository
 from infrastructure.tasks.asyncio_scheduler import AsyncioTaskScheduler
 
 
@@ -74,6 +78,7 @@ class Container:
     job_repo: DownloadJobRepository
     archive_repo: ArchiveRepository
     archive_entry_repo: ArchiveEntryRepository
+    work_repo: WorkRepository
     downloader: FileDownloader
     hasher: FileHasher
     scheduler: TaskScheduler
@@ -103,6 +108,9 @@ class Container:
     count_missing_entries: CountMissingEntries
     refresh_statistics: RefreshStatistics
     get_statistics: GetStatistics
+    build_works: BuildWorks
+    search_works: SearchWorks
+    get_work: GetWork
 
 
 def build_container(settings: Settings) -> Container:
@@ -116,6 +124,7 @@ def build_container(settings: Settings) -> Container:
     archive_entry_repo = SqlArchiveEntryRepository(db)
     import_source_repo = SqlImportSourceRepository(db)
     statistics_repo = SqlStatisticsRepository(db)
+    work_repo = SqlWorkRepository(db)
 
     hasher = HashlibHasher()
     downloader = HttpxDownloader()
@@ -188,6 +197,9 @@ def build_container(settings: Settings) -> Container:
     count_missing_entries = CountMissingEntries(archive_entry_repo)
     refresh_statistics = RefreshStatistics(archive_repo, archive_entry_repo, file_repo, statistics_repo)
     get_statistics = GetStatistics(refresh_statistics, statistics_repo)
+    build_works = BuildWorks(archive_entry_repo, work_repo)
+    search_works = SearchWorks(work_repo)
+    get_work = GetWork(work_repo, archive_entry_repo)
 
     return Container(
         settings=settings,
@@ -198,6 +210,7 @@ def build_container(settings: Settings) -> Container:
         job_repo=job_repo,
         archive_repo=archive_repo,
         archive_entry_repo=archive_entry_repo,
+        work_repo=work_repo,
         downloader=downloader,
         hasher=hasher,
         scheduler=scheduler,
@@ -227,4 +240,7 @@ def build_container(settings: Settings) -> Container:
         count_missing_entries=count_missing_entries,
         refresh_statistics=refresh_statistics,
         get_statistics=get_statistics,
+        build_works=build_works,
+        search_works=search_works,
+        get_work=get_work,
     )

@@ -13,6 +13,7 @@ def _row_to_entry(row: dict) -> ArchiveEntry:
         logical_id=row["logical_id"],
         composer=row["composer"],
         title=row["title"],
+        work_id=row["work_id"],
         relative_path=row["relative_path"],
         file_id=row["file_id"],
         size=row["size"],
@@ -130,6 +131,40 @@ class SqlArchiveEntryRepository(ArchiveEntryRepository):
                 (archive_id,),
             )
             return [_row_to_entry(row) for row in await cur.fetchall()]
+
+    async def list_by_work(self, work_id: int) -> list[ArchiveEntry]:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT * FROM archive_entries WHERE work_id = %s ORDER BY id",
+                (work_id,),
+            )
+            return [_row_to_entry(row) for row in await cur.fetchall()]
+
+    async def list_all(self, *, limit: int = 1000, offset: int = 0) -> list[ArchiveEntry]:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT * FROM archive_entries ORDER BY id LIMIT %s OFFSET %s",
+                (limit, offset),
+            )
+            return [_row_to_entry(row) for row in await cur.fetchall()]
+
+    async def bulk_update_work_ids(self, entries: list[ArchiveEntry]) -> None:
+        for batch in [entries[i : i + 500] for i in range(0, len(entries), 500)]:
+            if not batch:
+                continue
+            cases = " ".join(["WHEN %s THEN %s"] * len(batch))
+            params: list = []
+            ids: list = []
+            for entry in batch:
+                params.extend([entry.id, entry.work_id])
+                ids.append(entry.id)
+            id_placeholders = ", ".join(["%s"] * len(ids))
+            sql = (
+                f"UPDATE archive_entries SET work_id = CASE id {cases} END "
+                f"WHERE id IN ({id_placeholders})"
+            )
+            async with self._db.connection() as conn, conn.cursor() as cur:
+                await cur.execute(sql, params + ids)
 
     async def search(self, query: str, *, limit: int = 50, offset: int = 0) -> list[ArchiveEntry]:
         pattern = f"%{query}%"

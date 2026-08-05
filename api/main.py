@@ -23,6 +23,7 @@ from api.routes import (
     providers,
     search,
     statistics,
+    works,
 )
 
 
@@ -46,7 +47,7 @@ def create_app() -> FastAPI:
             "('lo tengo' -> URL), búsqueda, verificación del mirror y estadísticas. "
             "Respuesta a una consulta: ¿Existe? -> Sí -> URL de descarga (CDN)."
         ),
-        version="1.0.0",
+        version="1.1.0",
         lifespan=lifespan,
     )
     app.state.container = container
@@ -61,6 +62,7 @@ def create_app() -> FastAPI:
     app.include_router(entries.router)
     app.include_router(archives.router)
     app.include_router(statistics.router)
+    app.include_router(works.router)
     app.include_router(metrics_router)
     return app
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from application.use_cases.search_entries import SearchEntries
 from application.use_cases.statistics import GetStatistics
+from application.use_cases.works import GetWork, SearchWorks
 from domain.ports.repositories import FileRepository
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import HTMLResponse
@@ -9,12 +10,14 @@ from infrastructure.config import Settings
 
 from api.dependencies import (
     GetStatisticsDep,
+    GetWorkDep,
     SearchEntriesDep,
+    SearchWorksDep,
     get_file_repo,
     get_settings,
 )
 from api.web import about as about_view
-from api.web import api_doc, landing, search, statistics
+from api.web import api_doc, landing, search, statistics, works
 
 router = APIRouter(tags=["pages"])
 
@@ -79,3 +82,32 @@ async def search_page(
 async def statistics_page(uc: GetStatistics = Depends(GetStatisticsDep)) -> HTMLResponse:
     stats = await uc.execute()
     return HTMLResponse(statistics.statistics_page(stats))
+
+
+@router.get(
+    "/works",
+    response_class=HTMLResponse,
+    summary="Buscador de obras",
+    description="Página HTML que busca obras y muestra sus representaciones.",
+)
+async def works_page(
+    q: str = Query(default=""),
+    uc: SearchWorks = Depends(SearchWorksDep),
+) -> HTMLResponse:
+    works_list = await uc.execute(q, limit=50)
+    return HTMLResponse(works.works_page(q, works_list))
+
+
+@router.get(
+    "/works/{work_id}",
+    response_class=HTMLResponse,
+    summary="Detalle de una obra",
+    description="Página HTML de una obra con sus representaciones y URLs de descarga.",
+)
+async def work_detail(
+    work_id: int,
+    uc: GetWork = Depends(GetWorkDep),
+    settings: Settings = Depends(get_settings),
+) -> HTMLResponse:
+    detail = await uc.execute(work_id)
+    return HTMLResponse(works.work_detail_page(detail, settings))

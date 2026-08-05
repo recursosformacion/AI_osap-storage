@@ -1,0 +1,19 @@
+from __future__ import annotations
+
+from typing import Protocol
+
+from domain.entities.work import Work
+
+
+class WorkRepository(Protocol):
+    async def create(self, work: Work) -> Work: ...
+
+    async def get_by_id(self, work_id: int) -> Work | None: ...
+
+    async def get_by_work_key(self, work_key: str) -> Work | None: ...
+
+    async def search(self, query: str, *, limit: int = 50, offset: int = 0) -> list[Work]: ...
+
+    async def list(self, *, limit: int = 100, offset: int = 0) -> list[Work]: ...
+
+    async def count(self) -> int: ...

@@ -10,6 +10,7 @@ from domain.entities.import_source import ImportSource
 from domain.entities.statistics import Statistics
 from domain.entities.storage_location import StorageLocation
 from domain.entities.storage_provider import StorageProvider
+from domain.entities.work import Work
 from domain.exceptions import DownloadFailed
 from domain.ports.archive_repositories import ArchiveEntryRepository, ArchiveRepository
 from domain.ports.import_source_repository import ImportSourceRepository
@@ -20,6 +21,7 @@ from domain.ports.repositories import (
     StorageProviderRepository,
 )
 from domain.ports.statistics_repository import StatisticsRepository
+from domain.ports.work_repository import WorkRepository
 
 
 class InMemoryFileRepository(FileRepository):
@@ -289,6 +291,18 @@ class InMemoryArchiveEntryRepository(ArchiveEntryRepository):
     async def list_by_archive(self, archive_id: int) -> list[ArchiveEntry]:
         return [e for e in self._items.values() if e.archive_id == archive_id]
 
+    async def list_by_work(self, work_id: int) -> list[ArchiveEntry]:
+        return [e for e in self._items.values() if e.work_id == work_id]
+
+    async def list_all(self, *, limit: int = 1000, offset: int = 0) -> list[ArchiveEntry]:
+        items = sorted(self._items.values(), key=lambda e: e.id or 0)
+        return items[offset : offset + limit]
+
+    async def bulk_update_work_ids(self, entries: list[ArchiveEntry]) -> None:
+        for entry in entries:
+            if entry.id in self._items:
+                self._items[entry.id].work_id = entry.work_id
+
     async def search(self, query: str, *, limit: int = 50, offset: int = 0) -> list[ArchiveEntry]:
         q = query.lower()
         matches = [
@@ -373,3 +387,37 @@ class InMemoryStatisticsRepository(StatisticsRepository):
         stats.id = self._seq
         self._latest = stats
         return stats
+
+
+class InMemoryWorkRepository(WorkRepository):
+    def __init__(self) -> None:
+        self._items: dict[int, Work] = {}
+        self._seq = 0
+
+    async def create(self, work: Work) -> Work:
+        self._seq += 1
+        work.id = self._seq
+        self._items[work.id] = work
+        return work
+
+    async def get_by_id(self, work_id: int) -> Work | None:
+        return self._items.get(work_id)
+
+    async def get_by_work_key(self, work_key: str) -> Work | None:
+        return next((w for w in self._items.values() if w.work_key == work_key), None)
+
+    async def search(self, query: str, *, limit: int = 50, offset: int = 0) -> list[Work]:
+        q = query.lower()
+        matches = [
+            w
+            for w in self._items.values()
+            if (w.composer and q in w.composer.lower()) or (w.title and q in w.title.lower())
+        ]
+        return sorted(matches, key=lambda w: w.id or 0)[offset : offset + limit]
+
+    async def list(self, *, limit: int = 100, offset: int = 0) -> list[Work]:
+        items = sorted(self._items.values(), key=lambda w: w.id or 0)
+        return items[offset : offset + limit]
+
+    async def count(self) -> int:
+        return len(self._items)

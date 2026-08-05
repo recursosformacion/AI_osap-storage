@@ -211,6 +211,15 @@ arrancar si no existe ninguno (`bootstrap.py`). En producción el repositorio es
 - `verify-mirror` y `doctor` (incluido `--links`).
 - CLI y API sobre los mismos casos de uso.
 
+**V1.1 — CERRADA** (2026-08). Modelo Work / Resource / StorageLocation.
+
+- Tabla `works` + `work_id` en `archive_entries` (Resource).
+- `BuildWorks` (por hash PDMX) — 254,035 obras creadas.
+- API `GET /api/v1/works` (búsqueda) y `GET /api/v1/works/{id}` (obra + representaciones).
+- Páginas `/works` y `/works/{id}`.
+- Responsabilidad clara: osap-storage sirve recursos individuales; **OSAP unifica** (también con
+  otros repositorios).
+
 **V2 — en planificación** (ver `docs/v2.md`): API Key, rate limiting, usuarios/auth (Google), panel de
 administración, i18n (6 idiomas), metadatos completos.
 

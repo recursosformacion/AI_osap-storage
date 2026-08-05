@@ -132,3 +132,33 @@ class StatisticsRead(Model):
     computed_at: datetime | None
     created_at: datetime | None
     updated_at: datetime | None
+
+
+class WorkRead(Model):
+    id: int
+    composer: str | None = None
+    title: str | None = None
+    genre: str | None = None
+    opus: str | None = None
+    catalogue: str | None = None
+    musical_key: str | None = None
+    year: int | None = None
+    instrumentation: str | None = None
+    language: str | None = None
+    tags: str | None = None
+    work_key: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class ResourceRead(Model):
+    relative_path: str
+    format: str | None = None
+    file_id: int | None = None
+    available: bool = False
+    url: str | None = None
+
+
+class WorkDetailRead(Model):
+    work: WorkRead
+    resources: list[ResourceRead]

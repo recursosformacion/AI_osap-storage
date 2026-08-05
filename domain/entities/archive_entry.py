@@ -20,6 +20,7 @@ class ArchiveEntry:
     logical_id: str | None = None
     composer: str | None = None
     title: str | None = None
+    work_id: int | None = None
     file_id: int | None = None
     size: int | None = None
     offset: int | None = None
