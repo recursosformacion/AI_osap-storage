@@ -61,10 +61,24 @@ Este documento define el contrato públicamente estable para integraciones entre
 
 ## Work enriquecida — Metadata Enrichment (v1.3)
 
-**Filosofía:** el proveedor devuelve **entidades musicales enriquecidas** (`Work`). OSAP construye la
-**Work Resolution** a partir de esas entidades. El proveedor **no conoce** conceptos de la capa
-superior (Work Resolution, Workspace, Knowledge Hub, UX de OpenMusicRepository), por lo que cualquier
-proveedor puede implementar este contrato de forma independiente.
+**Filosofía:** el proveedor devuelve **entidades musicales enriquecidas** (`Work`). OSAP-API construye
+la **Work Resolution** a partir de esas entidades.
+
+> **El proveedor nunca devuelve una Work Resolution.** Devuelve entidades `Work` enriquecidas.
+> La construcción de Matching Works, Work Resolution, Relationships y Knowledge Hub corresponde
+> **exclusivamente a OSAP-API**.
+
+### Separación de responsabilidades
+
+| Componente | Responsable de |
+|---|---|
+| osap-storage (proveedor) | Conocer dónde están físicamente los ficheros (R2, CDN, disco, IPFS...), **generar las URLs/tokens de descarga** y exponer las representaciones. |
+| osap-api | Resolver obras, fusionar proveedores, construir la Work Resolution y exponer una API unificada. **No sabe dónde vive un fichero** ni cómo generar URLs. |
+| Frontend | Nunca conocer hashes ni rutas físicas; solo consume `representation_id`. |
+
+**Quién genera las URLs: osap-storage** (el propietario del repositorio). osap-api únicamente copia
+esos campos en su `RepresentationInfo`; no construye URLs a partir de `relative_path` (no conoce el
+CDN, la estructura de directorios, R2 ni los hashes).
 
 ### Niveles de información
 
@@ -77,7 +91,7 @@ proveedor puede implementar este contrato de forma independiente.
 `genres` (lista), `tags` (lista), `instruments` (lista), `parts_names` (lista).
 
 **Nivel 3 — representación (por recurso, no por obra):** `format`, `license`, `voices`,
-`compressed`, `validated`, `mime_type`, `relative_path`, `source_url`, `hash`.
+`compressed`, `validated`, `mime_type`.
 
 ### Origen de la metadata
 - El índice inicial procede del **CSV** de la fuente.
@@ -85,11 +99,17 @@ proveedor puede implementar este contrato de forma independiente.
 - El **JSON original se conserva** como documento fuente (no se guarda entero en la BD); en la base
   solo se extraen los campos necesarios.
 
-### Respuestas según `include=`
+### Flujo
 
-Se usa `include=` (estilo JSON:API). **No** se usa `view=`.
+```
+GET /api/search                          → Works ligeras (solo para localizar)
+GET /api/resource/{id}                   → Work + Metadata + Statistics + Representations (según include=)
+GET /api/representations/{id}/download   → stream
+```
 
-**1) Búsqueda ligera** — `GET /api/search` (sin cambiar el contrato anterior):
+### Búsqueda (siempre ligera)
+`GET /api/search` devuelve **únicamente** lo mínimo para localizar (sin metadata, statistics ni
+representations):
 ```json
 {
   "works": [
@@ -98,66 +118,88 @@ Se usa `include=` (estilo JSON:API). **No** se usa `view=`.
 }
 ```
 
-**2) Búsqueda enriquecida** — `GET /api/search?include=metadata,representations,statistics`:
-una única llamada enriquecida (evita el patrón N+1). `Work` es la entidad principal, limpia, con
-`metadata`, `statistics` y `representations` como objetos propios.
+### Recurso (endpoint rico)
+`GET /api/resource/{id}` devuelve **toda** la información enriquecida, según `include=`:
+- `GET /api/resource/264`
+- `GET /api/resource/264?include=metadata`
+- `GET /api/resource/264?include=representations`
+- `GET /api/resource/264?include=metadata,representations,statistics`
+
+Ejemplo (con `include=metadata,representations`):
 ```json
 {
-  "works": [
+  "work": {
+    "id": 264,
+    "title": "Contredanse in F, K. 15h",
+    "composer": "W.A. Mozart",
+    "catalogue": "K. 15h",
+    "metadata": {
+      "subtitle": null,
+      "song_name": "The London Sketchbook 15a - 15ss",
+      "opus": null,
+      "musical_key": "F major",
+      "duration": "00:53",
+      "measures": 25,
+      "pages": 2,
+      "parts": 1,
+      "license": "cc-zero",
+      "public_domain": true,
+      "description": "...",
+      "thumbnails": "{...}",
+      "genres": ["classical"],
+      "tags": ["contredanse", "chamber"],
+      "instruments": ["piano"],
+      "parts_names": ["Piano"]
+    },
+    "statistics": { "favorites": 1, "downloads": 0, "views": 300, "rating": 0 }
+  },
+  "representations": [
     {
-      "work": {
-        "id": 264,
-        "title": "Contredanse in F, K. 15h",
-        "composer": "W.A. Mozart",
-        "catalogue": "K. 15h",
-        "metadata": {
-          "subtitle": null,
-          "song_name": "The London Sketchbook 15a - 15ss",
-          "opus": null,
-          "musical_key": "F major",
-          "duration": "00:53",
-          "measures": 25,
-          "pages": 2,
-          "parts": 1,
-          "license": "cc-zero",
-          "public_domain": true,
-          "description": "...",
-          "thumbnails": "{...}",
-          "genres": ["classical"],
-          "tags": ["contredanse", "chamber"],
-          "instruments": ["piano"],
-          "parts_names": ["Piano"]
-        },
-        "statistics": {
-          "favorites": 1,
-          "downloads": 0,
-          "views": 300,
-          "rating": 0
-        }
-      },
-      "representations": [
-        { "id": "rep_100654_mxl", "format": "MusicXML", "available": true, "license": "cc-zero", "mime_type": "application/vnd.recordare.musicxml+xml" },
-        { "id": "rep_100654_pdf", "format": "PDF", "available": true, "license": "cc-zero", "mime_type": "application/pdf" },
-        { "id": "rep_100654_mid", "format": "MIDI", "available": true, "license": "cc-zero", "mime_type": "audio/midi" }
-      ]
+      "id": "rep_100654_pdf",
+      "format": "PDF",
+      "available": true,
+      "license": "cc-zero",
+      "mime_type": "application/pdf",
+      "links": { "download": "https://cdn.../pdf/....pdf", "view": "...", "thumbnail": "..." }
     }
   ]
 }
 ```
 
-**Descarga de una representación** — el cliente nunca conoce el hash del CDN:
+### Representaciones
+El DTO de representación **no** incluye `relative_path`, `source_url` ni `url` (el cliente no
+necesita conocer rutas ni hashes). Solo describe la representación y ofrece enlaces
+(estilo HAL / JSON:API):
+```json
+{
+  "id": "rep_100654_pdf",
+  "format": "PDF",
+  "available": true,
+  "license": "cc-zero",
+  "mime_type": "application/pdf",
+  "links": { "download": "...", "view": "...", "thumbnail": "..." }
+}
 ```
-GET /representations/{id}/download
-```
-La representación se identifica con un **`id`** estable (`representation_id`); la URL real la
-resuelve el proveedor.
+La URL la genera **osap-storage**. Si se quiere ocultar por completo el CDN, `links.download` puede
+ser una ruta relativa (`/api/representations/{id}/download`) que resuelve el propio proveedor.
 
-### Por qué `include=`
-Evita el patrón N+1:
+### Estadísticas
+`favorites`, `downloads`, `views`, `rating` son **opcionales** (cada proveedor tiene métricas
+distintas; un proveedor puede no tener ninguna).
+
+### Por qué `include=` en `/resource/{id}`
+Evita el patrón N+1 al obtener una ficha completa en una única llamada, sin que el buscador
+transportee información pesada:
 ```
-Antes:  search → 100 resultados → 100 llamadas (resource+metadata+representations+statistics)
-Ahora:  search?include=metadata,representations,statistics → 100 resultados enriquecidos → 0 llamadas extra
+Antes:  resource → metadata → representations → statistics (4 llamadas)
+Ahora:  resource/{id}?include=metadata,representations,statistics → 1 llamada
 ```
+
+**OSAP-API**, a partir de los datos de este contrato:
+```
+Search → Matching Works → Work Resolution → Relationships → Knowledge Hub
+```
+
 
 
 ## Códigos de Error (HTTP)
