@@ -10,8 +10,9 @@ Este documento define el contrato públicamente estable para integraciones entre
 | Método | Path | Descripción |
 |--------|------|-------------|
 | `POST` | `/api/license` | Establece términos de licencia |
-| `GET`  | `/api/search` | Busca recursos disponibles |
-| `GET`  | `/api/resource/{id}` | Obtiene detalles específicos |
+| `GET`  | `/api/search` | Busca recursos (Works ligeras) |
+| `GET`  | `/api/resource/{id}` | Obtiene una Work completa (según `include=`) |
+| `GET`  | `/api/representations/{id}/download` | Descarga una representación (stream) |
 | `GET`  | `/api/version` | Retorna versión del contracto |
 
 ## Parámetros Comunes
@@ -64,9 +65,11 @@ Este documento define el contrato públicamente estable para integraciones entre
 **Filosofía:** el proveedor devuelve **entidades musicales enriquecidas** (`Work`). OSAP-API construye
 la **Work Resolution** a partir de esas entidades.
 
-> **El proveedor nunca devuelve una Work Resolution.** Devuelve entidades `Work` enriquecidas.
-> La construcción de Matching Works, Work Resolution, Relationships y Knowledge Hub corresponde
-> **exclusivamente a OSAP-API**.
+> **Nota clave (arquitectónica):** El proveedor **nunca** devuelve una Work Resolution. Devuelve
+> entidades `Work` enriquecidas. La construcción de Matching Works, Work Resolution, Relationships
+> y Knowledge Hub corresponde **exclusivamente a OSAP-API**.
+>
+> Esta separación evita que, en el futuro, se intente mover lógica de resolución a Storage.
 
 ### Separación de responsabilidades
 
@@ -125,34 +128,39 @@ representations):
 - `GET /api/resource/264?include=representations`
 - `GET /api/resource/264?include=metadata,representations,statistics`
 
-Ejemplo (con `include=metadata,representations`):
+Formato de `include` (lista separada por comas):
+```
+include = metadata[,representations][,statistics]
+```
+
+**Comportamiento por defecto:** si no se especifica `include`, el proveedor devuelve **únicamente**
+el objeto `work`.
+
+Ejemplo (con `include=metadata,representations`): `work`, `metadata`, `statistics` y
+`representations` son **objetos de nivel superior** (independientes; `work` no crece
+indefinidamente):
 ```json
 {
-  "work": {
-    "id": 264,
-    "title": "Contredanse in F, K. 15h",
-    "composer": "W.A. Mozart",
-    "catalogue": "K. 15h",
-    "metadata": {
-      "subtitle": null,
-      "song_name": "The London Sketchbook 15a - 15ss",
-      "opus": null,
-      "musical_key": "F major",
-      "duration": "00:53",
-      "measures": 25,
-      "pages": 2,
-      "parts": 1,
-      "license": "cc-zero",
-      "public_domain": true,
-      "description": "...",
-      "thumbnails": "{...}",
-      "genres": ["classical"],
-      "tags": ["contredanse", "chamber"],
-      "instruments": ["piano"],
-      "parts_names": ["Piano"]
-    },
-    "statistics": { "favorites": 1, "downloads": 0, "views": 300, "rating": 0 }
+  "work": { "id": 264, "title": "Contredanse in F, K. 15h", "composer": "W.A. Mozart", "catalogue": "K. 15h" },
+  "metadata": {
+    "subtitle": null,
+    "song_name": "The London Sketchbook 15a - 15ss",
+    "opus": null,
+    "musical_key": "F major",
+    "duration": "00:53",
+    "measures": 25,
+    "pages": 2,
+    "parts": 1,
+    "license": "cc-zero",
+    "public_domain": true,
+    "description": "...",
+    "thumbnails": "{...}",
+    "genres": ["classical"],
+    "tags": ["contredanse", "chamber"],
+    "instruments": ["piano"],
+    "parts_names": ["Piano"]
   },
+  "statistics": { "favorites": 1, "downloads": 0, "views": 300, "rating": 0 },
   "representations": [
     {
       "id": "rep_100654_pdf",
@@ -166,10 +174,13 @@ Ejemplo (con `include=metadata,representations`):
 }
 ```
 
+Nota: `confidence` pertenece a **Search** (evaluación de candidatos); en `resource/{id}` no tiene
+sentido (ya no se evalúan candidatos), por lo que no aparece en este endpoint.
+
 ### Representaciones
-El DTO de representación **no** incluye `relative_path`, `source_url` ni `url` (el cliente no
-necesita conocer rutas ni hashes). Solo describe la representación y ofrece enlaces
-(estilo HAL / JSON:API):
+El DTO de representación **no expone rutas físicas** (`relative_path`, `source_url`, `hash`), sino
+**únicamente enlaces públicos** (`links`) generados por el proveedor. El cliente no necesita conocer
+rutas ni hashes. Estilo HAL / JSON:API:
 ```json
 {
   "id": "rep_100654_pdf",
