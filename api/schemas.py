@@ -138,6 +138,9 @@ class WorkRead(Model):
     id: int
     composer: str | None = None
     title: str | None = None
+    subtitle: str | None = None
+    artist: str | None = None
+    song_name: str | None = None
     genre: str | None = None
     opus: str | None = None
     catalogue: str | None = None
@@ -146,7 +149,19 @@ class WorkRead(Model):
     instrumentation: str | None = None
     language: str | None = None
     tags: str | None = None
+    duration: str | None = None
+    measures: int | None = None
+    pages: int | None = None
+    parts: int | None = None
+    complexity: int | None = None
+    license: str | None = None
+    public_domain: bool = False
+    description: str | None = None
+    thumbnails: str | None = None
     work_key: str | None = None
+    genres: list[str] = []
+    instruments: list[str] = []
+    parts_names: list[str] = []
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -162,3 +177,30 @@ class ResourceRead(Model):
 class WorkDetailRead(Model):
     work: WorkRead
     resources: list[ResourceRead]
+
+
+class ProviderWorkCore(Model):
+    id: int
+    title: str | None = None
+    composer: str | None = None
+    catalogue: str | None = None
+
+
+class ProviderSearchItem(ProviderWorkCore):
+    confidence: float = 1.0
+
+
+class ProviderRepresentationRead(Model):
+    id: str
+    format: str | None = None
+    available: bool = False
+    license: str | None = None
+    mime_type: str | None = None
+    links: dict[str, str | None]
+
+
+class ProviderResourceRead(Model):
+    work: ProviderWorkCore
+    metadata: dict | None = None
+    statistics: dict | None = None
+    representations: list[ProviderRepresentationRead] | None = None

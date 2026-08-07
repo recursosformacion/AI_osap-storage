@@ -20,6 +20,7 @@ from api.routes import (
     files,
     health,
     pages,
+    provider,
     providers,
     search,
     statistics,
@@ -63,6 +64,7 @@ def create_app() -> FastAPI:
     app.include_router(archives.router)
     app.include_router(statistics.router)
     app.include_router(works.router)
+    app.include_router(provider.router)
     app.include_router(metrics_router)
     return app
 
