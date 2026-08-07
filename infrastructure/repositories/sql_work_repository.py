@@ -12,6 +12,9 @@ def _row_to_work(row: dict) -> Work:
         work_key=row["work_key"],
         composer=row["composer"],
         title=row["title"],
+        subtitle=row["subtitle"],
+        artist=row["artist"],
+        song_name=row["song_name"],
         genre=row["genre"],
         opus=row["opus"],
         catalogue=row["catalogue"],
@@ -20,6 +23,15 @@ def _row_to_work(row: dict) -> Work:
         instrumentation=row["instrumentation"],
         language=row["language"],
         tags=row["tags"],
+        duration=row["duration"],
+        measures=row["measures"],
+        pages=row["pages"],
+        parts=row["parts"],
+        complexity=row["complexity"],
+        license=row["license"],
+        public_domain=bool(row["public_domain"]),
+        description=row["description"],
+        thumbnails=row["thumbnails"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
@@ -32,12 +44,25 @@ class SqlWorkRepository(WorkRepository):
     async def create(self, work: Work) -> Work:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "INSERT INTO works (work_key, composer, title, genre, opus, catalogue, musical_key, "
-                "year, instrumentation, language, tags) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                "INSERT INTO works (work_key, composer, title) VALUES (%s, %s, %s)",
+                (work.work_key, work.composer, work.title),
+            )
+            work.id = cur.lastrowid
+            return work
+
+    async def update(self, work: Work) -> None:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "UPDATE works SET composer=%s, title=%s, subtitle=%s, artist=%s, song_name=%s, "
+                "genre=%s, opus=%s, catalogue=%s, musical_key=%s, year=%s, instrumentation=%s, "
+                "language=%s, tags=%s, duration=%s, measures=%s, pages=%s, parts=%s, complexity=%s, "
+                "license=%s, public_domain=%s, description=%s, thumbnails=%s WHERE id=%s",
                 (
-                    work.work_key,
                     work.composer,
                     work.title,
+                    work.subtitle,
+                    work.artist,
+                    work.song_name,
                     work.genre,
                     work.opus,
                     work.catalogue,
@@ -46,10 +71,18 @@ class SqlWorkRepository(WorkRepository):
                     work.instrumentation,
                     work.language,
                     work.tags,
+                    work.duration,
+                    work.measures,
+                    work.pages,
+                    work.parts,
+                    work.complexity,
+                    work.license,
+                    int(work.public_domain),
+                    work.description,
+                    work.thumbnails,
+                    work.id,
                 ),
             )
-            work.id = cur.lastrowid
-            return work
 
     async def get_by_id(self, work_id: int) -> Work | None:
         async with self._db.connection() as conn, conn.cursor() as cur:
@@ -74,6 +107,9 @@ class SqlWorkRepository(WorkRepository):
             return [_row_to_work(row) for row in await cur.fetchall()]
 
     async def list(self, *, limit: int = 100, offset: int = 0) -> list[Work]:
+        return await self.list_all(limit=limit, offset=offset)
+
+    async def list_all(self, *, limit: int = 1000, offset: int = 0) -> list[Work]:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
                 "SELECT * FROM works ORDER BY id LIMIT %s OFFSET %s",
@@ -85,3 +121,49 @@ class SqlWorkRepository(WorkRepository):
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute("SELECT COUNT(*) AS total FROM works")
             return int((await cur.fetchone())["total"])
+
+    async def _replace(self, table: str, column: str, work_id: int, values: list[str]) -> None:
+        unique = list(dict.fromkeys(v.strip() for v in values if v and v.strip()))
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(f"DELETE FROM {table} WHERE work_id = %s", (work_id,))
+            if unique:
+                placeholders = ", ".join(["(%s, %s)"] * len(unique))
+                params: list = []
+                for value in unique:
+                    params.extend([work_id, value])
+                await cur.execute(
+                    f"INSERT INTO {table} (work_id, {column}) VALUES {placeholders}",
+                    params,
+                )
+
+    async def replace_tags(self, work_id: int, tags: list[str]) -> None:
+        await self._replace("work_tags", "tag", work_id, tags)
+
+    async def replace_genres(self, work_id: int, genres: list[str]) -> None:
+        await self._replace("work_genres", "genre", work_id, genres)
+
+    async def replace_instruments(self, work_id: int, instruments: list[str]) -> None:
+        await self._replace("work_instruments", "instrument", work_id, instruments)
+
+    async def replace_parts(self, work_id: int, parts: list[str]) -> None:
+        await self._replace("work_parts", "part_name", work_id, parts)
+
+    async def _get_list(self, table: str, column: str, work_id: int) -> list[str]:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                f"SELECT {column} FROM {table} WHERE work_id = %s ORDER BY id",
+                (work_id,),
+            )
+            return [row[column] for row in await cur.fetchall()]
+
+    async def get_tags(self, work_id: int) -> list[str]:
+        return await self._get_list("work_tags", "tag", work_id)
+
+    async def get_genres(self, work_id: int) -> list[str]:
+        return await self._get_list("work_genres", "genre", work_id)
+
+    async def get_instruments(self, work_id: int) -> list[str]:
+        return await self._get_list("work_instruments", "instrument", work_id)
+
+    async def get_parts(self, work_id: int) -> list[str]:
+        return await self._get_list("work_parts", "part_name", work_id)
