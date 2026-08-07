@@ -12,7 +12,7 @@ Este documento define el contrato públicamente estable para integraciones entre
 | `POST` | `/api/license` | Establece términos de licencia |
 | `GET`  | `/api/search` | Busca recursos (Works ligeras) |
 | `GET`  | `/api/resource/{id}` | Obtiene una Work completa (según `include=`) |
-| `GET`  | `/api/representations/{id}/download` | Descarga una representación (stream) |
+| `GET`  | `/api/resource/{id}/representations/{representationId}/download` | Descarga una representación (stream) |
 | `GET`  | `/api/version` | Retorna versión del contracto |
 
 ## Parámetros Comunes
@@ -107,7 +107,7 @@ CDN, la estructura de directorios, R2 ni los hashes).
 ```
 GET /api/search                          → Works ligeras (solo para localizar)
 GET /api/resource/{id}                   → Work + Metadata + Statistics + Representations (según include=)
-GET /api/representations/{id}/download   → stream
+GET /api/resource/{id}/representations/{representationId}/download → stream
 ```
 
 ### Búsqueda (siempre ligera)
@@ -130,8 +130,9 @@ representations):
 
 Formato de `include` (lista separada por comas):
 ```
-include = metadata[,representations][,statistics]
+include = metadata[,representations][,statistics] | all
 ```
+- `all` es un alias de `metadata,statistics,representations` (para clientes sencillos).
 
 **Comportamiento por defecto:** si no se especifica `include`, el proveedor devuelve **únicamente**
 el objeto `work`.
@@ -192,7 +193,12 @@ rutas ni hashes. Estilo HAL / JSON:API:
 }
 ```
 La URL la genera **osap-storage**. Si se quiere ocultar por completo el CDN, `links.download` puede
-ser una ruta relativa (`/api/representations/{id}/download`) que resuelve el propio proveedor.
+ser una ruta relativa (`/api/resource/{id}/representations/{representationId}/download`) que
+resuelve el propio proveedor.
+
+El endpoint de descarga es **anidado** bajo el recurso (`/api/resource/{id}/representations/{rid}/download`)
+porque la representación pertenece a una obra: evita ids globales, facilita la caché y simplifica los
+permisos. Alternativa válida: `/api/resource/{id}/download/{representationId}`.
 
 ### Estadísticas
 `favorites`, `downloads`, `views`, `rating` son **opcionales** (cada proveedor tiene métricas
