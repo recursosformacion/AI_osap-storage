@@ -127,7 +127,7 @@ async def resource(
     if "metadata" in wanted:
         body["metadata"] = _metadata(detail)
     if "statistics" in wanted:
-        body["statistics"] = {}
+        body["statistics"] = {"favorites": None, "downloads": None, "views": None, "rating": None}
     if "representations" in wanted:
         body["representations"] = _representations(detail)
     return body

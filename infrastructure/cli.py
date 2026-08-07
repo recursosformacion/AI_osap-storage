@@ -83,6 +83,53 @@ def _cmd_register_works(args: argparse.Namespace, container: Container):
     return container.build_works.execute()
 
 
+async def _cmd_enrich_metadata(args: argparse.Namespace, container: Container):
+    from infrastructure.enrichment.metadata import build_enrichment, extract_metadata, load_csv_index
+    from infrastructure.enrichment.metadata_source import LocalMetadataReader, R2MetadataReader
+
+    csv_path = args.csv or container.settings.pdmx_source_csv
+    if not csv_path:
+        raise ValueError("no CSV: indica --csv o providers.pdmx.source.csv")
+
+    reader = (
+        R2MetadataReader(container.settings)
+        if args.source == "r2"
+        else LocalMetadataReader(args.metadata_dir)
+    )
+
+    csv_index = load_csv_index(csv_path)
+    processed = updated = errors = 0
+    error_list: list[dict] = []
+    offset = 0
+    limit = 1000
+    while True:
+        works = await container.work_repo.list_all(limit=limit, offset=offset)
+        if not works:
+            break
+        for w in works:
+            processed += 1
+            csv_meta = csv_index.get(w.work_key)
+            json_meta = None
+            if csv_meta and csv_meta.get("metadata_path"):
+                try:
+                    data = reader.read(csv_meta["metadata_path"])
+                    json_meta = extract_metadata(data)
+                except Exception as exc:
+                    error_list.append({"work_key": w.work_key, "error": f"json: {exc}"})
+                    errors += 1
+                    continue
+            if csv_meta is None and json_meta is None:
+                continue
+            try:
+                await container.enrich_work.execute(w, build_enrichment(csv_meta, json_meta))
+                updated += 1
+            except Exception as exc:
+                error_list.append({"work_key": w.work_key, "error": str(exc)})
+                errors += 1
+        offset += limit
+    return {"processed": processed, "updated": updated, "errors": errors, "error_list": error_list[:30]}
+
+
 async def _cmd_verify_mirror(args: argparse.Namespace, container: Container):
     csv_path = args.csv or container.settings.pdmx_source_csv
     if not csv_path:
@@ -259,6 +306,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Construir las Works a partir de los recursos (por hash PDMX)",
     )
     register_works.set_defaults(handler=_cmd_register_works)
+
+    enrich = sub.add_parser(
+        "enrich-metadata",
+        help="Enriquecer las Works con metadata de PDMX (CSV + JSON MuseScore)",
+    )
+    enrich.add_argument("--csv", default=None, help="Ruta al PDMX.csv (por defecto: config)")
+    enrich.add_argument("--metadata-dir", default=r"G:\osap-storage",
+                        help="Raíz del mirror con metadata/ (fuente local)")
+    enrich.add_argument("--source", choices=["local", "r2"], default="local",
+                        help="De dónde leer los JSON (local=G:, r2=Cloudflare R2)")
+    enrich.set_defaults(handler=_cmd_enrich_metadata)
 
     return parser
 
