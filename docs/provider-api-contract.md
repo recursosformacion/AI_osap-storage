@@ -61,11 +61,12 @@ Este documento define el contrato públicamente estable para integraciones entre
 
 ## Work enriquecida — Metadata Enrichment (v1.3)
 
-El proveedor (p. ej. OMR / osap-storage) puede devolver obras enriquecidas con metadata musical.
-La entidad `Work` deja de ser un mero `{id, title, composer, catalogue}` y pasa a ser una **ficha de
-conocimiento**.
+**Filosofía:** el proveedor devuelve **entidades musicales enriquecidas** (`Work`). OSAP construye la
+**Work Resolution** a partir de esas entidades. El proveedor **no conoce** conceptos de la capa
+superior (Work Resolution, Workspace, Knowledge Hub, UX de OpenMusicRepository), por lo que cualquier
+proveedor puede implementar este contrato de forma independiente.
 
-### Campos de `Work` (nivel 1 y 2)
+### Niveles de información
 
 **Nivel 1 — índice (lo mínimo para buscar):**
 `id`, `composer`, `title`, `catalogue`, `aliases`.
@@ -84,68 +85,80 @@ conocimiento**.
 - El **JSON original se conserva** como documento fuente (no se guarda entero en la BD); en la base
   solo se extraen los campos necesarios.
 
-### Dos niveles de respuesta
+### Respuestas según `include=`
 
-**1) Búsqueda ligera** (`GET /api/search`) — para búsquedas rápidas:
+Se usa `include=` (estilo JSON:API). **No** se usa `view=`.
+
+**1) Búsqueda ligera** — `GET /api/search` (sin cambiar el contrato anterior):
 ```json
 {
-  "id": 264,
-  "title": "Contredanse in F, K. 15h",
-  "composer": "W.A. Mozart",
-  "catalogue": "K. 15h",
-  "confidence": 0.98
+  "works": [
+    { "id": 264, "title": "Contredanse in F, K. 15h", "composer": "W.A. Mozart", "catalogue": "K. 15h", "confidence": 0.98 }
+  ]
 }
 ```
 
-**2) Resolución enriquecida** (`GET /api/search?view=resolution` o `?include=metadata`) — construye
-directamente la Work Resolution (Knowledge Hub), sin llamadas posteriores (evita el patrón N+1):
+**2) Búsqueda enriquecida** — `GET /api/search?include=metadata,representations,statistics`:
+una única llamada enriquecida (evita el patrón N+1). `Work` es la entidad principal, limpia, con
+`metadata`, `statistics` y `representations` como objetos propios.
 ```json
 {
-  "id": 264,
-  "work": {
-    "title": "Contredanse in F, K. 15h",
-    "composer": "W.A. Mozart",
-    "subtitle": null,
-    "song_name": "The London Sketchbook 15a - 15ss",
-    "opus": null,
-    "catalogue": "K. 15h",
-    "musical_key": "F major",
-    "duration": "00:53",
-    "measures": 25,
-    "pages": 2,
-    "parts": 1,
-    "complexity": 0,
-    "license": "cc-zero",
-    "public_domain": true,
-    "description": "...",
-    "thumbnails": "{...}"
-  },
-  "metadata": {
-    "genres": ["classical"],
-    "tags": ["contredanse", "chamber"],
-    "instruments": ["piano"],
-    "parts_names": ["Piano"]
-  },
-  "representations": [
+  "works": [
     {
-      "format": "MusicXML",
-      "relative_path": "./mxl/1/30/QmbL2...mxl",
-      "available": true,
-      "url": "https://cdn.openmusicrepository.com/storage2017/mxl/1/30/QmbL2...mxl"
-    },
-    { "format": "PDF", "available": true, "url": "https://..." },
-    { "format": "MIDI", "available": true, "url": "https://..." }
-  ],
-  "statistics": {
-    "favorites": 1,
-    "views": 300
-  },
-  "provider": "omr-v3"
+      "work": {
+        "id": 264,
+        "title": "Contredanse in F, K. 15h",
+        "composer": "W.A. Mozart",
+        "catalogue": "K. 15h",
+        "metadata": {
+          "subtitle": null,
+          "song_name": "The London Sketchbook 15a - 15ss",
+          "opus": null,
+          "musical_key": "F major",
+          "duration": "00:53",
+          "measures": 25,
+          "pages": 2,
+          "parts": 1,
+          "license": "cc-zero",
+          "public_domain": true,
+          "description": "...",
+          "thumbnails": "{...}",
+          "genres": ["classical"],
+          "tags": ["contredanse", "chamber"],
+          "instruments": ["piano"],
+          "parts_names": ["Piano"]
+        },
+        "statistics": {
+          "favorites": 1,
+          "downloads": 0,
+          "views": 300,
+          "rating": 0
+        }
+      },
+      "representations": [
+        { "id": "rep_100654_mxl", "format": "MusicXML", "available": true, "license": "cc-zero", "mime_type": "application/vnd.recordare.musicxml+xml" },
+        { "id": "rep_100654_pdf", "format": "PDF", "available": true, "license": "cc-zero", "mime_type": "application/pdf" },
+        { "id": "rep_100654_mid", "format": "MIDI", "available": true, "license": "cc-zero", "mime_type": "audio/midi" }
+      ]
+    }
+  ]
 }
 ```
 
-La API devuelve el **WorkResolutionDTO** completo en una única llamada; el cliente (OSAP) no debe
-reconstruirlo ni hacer decenas de peticiones adicionales.
+**Descarga de una representación** — el cliente nunca conoce el hash del CDN:
+```
+GET /representations/{id}/download
+```
+La representación se identifica con un **`id`** estable (`representation_id`); la URL real la
+resuelve el proveedor.
+
+### Por qué `include=`
+Evita el patrón N+1:
+```
+Antes:  search → 100 resultados → 100 llamadas (resource+metadata+representations+statistics)
+Ahora:  search?include=metadata,representations,statistics → 100 resultados enriquecidos → 0 llamadas extra
+```
+
 
 ## Códigos de Error (HTTP)
 | Código | Error        | Descripción                              |
