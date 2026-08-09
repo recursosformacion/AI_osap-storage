@@ -65,7 +65,7 @@ def work_detail_page(detail: WorkDetail, settings: Settings) -> str:
     body = f"""
 <p><a href="/works">← Search works</a></p>
 <h1>{w.title or w.work_key or 'Untitled'}</h1>
-<h2>Representations</h2>
+<h2>Resources</h2>
 <table>
  <thead><tr><th>Format</th><th>Path</th><th></th></tr></thead>
  <tbody>{resources}</tbody>

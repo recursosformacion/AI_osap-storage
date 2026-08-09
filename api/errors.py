@@ -4,10 +4,13 @@ import logging
 
 from domain.exceptions import (
     DomainError,
+    DuplicateComposerAlias,
+    DuplicateVote,
     EntityNotFound,
     FileNotAvailable,
     IntegrityVerificationError,
     InvalidFileData,
+    InvalidMerge,
     InvalidSha256,
     UnsupportedProvider,
 )
@@ -24,8 +27,17 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(InvalidSha256)
     @app.exception_handler(InvalidFileData)
+    @app.exception_handler(InvalidMerge)
     async def _bad_request(_: Request, exc: DomainError) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+    @app.exception_handler(DuplicateComposerAlias)
+    async def _conflict_alias(_: Request, exc: DuplicateComposerAlias) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(DuplicateVote)
+    async def _conflict_vote(_: Request, exc: DuplicateVote) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
 
     @app.exception_handler(IntegrityVerificationError)
     async def _integrity(_: Request, exc: IntegrityVerificationError) -> JSONResponse:

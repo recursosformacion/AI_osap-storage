@@ -7,7 +7,14 @@ from application.services.mirror_resources import MirrorResourceRegistrar
 from application.services.tar_downloader import TarDownloader
 from application.use_cases.archives import CountMissingEntries, GetArchive, ListArchives
 from application.use_cases.build_works import BuildWorks
+from application.use_cases.composer_admin import (
+    GetComposerDetail,
+    GetComposerWorks,
+    ListComposers,
+    MergeComposers,
+)
 from application.use_cases.delete_file import DeleteFile
+from application.use_cases.enrich_metadata import EnrichWork
 from application.use_cases.get_download_job import GetDownloadJob
 from application.use_cases.get_download_url import GetDownloadUrl
 from application.use_cases.get_file import GetFile
@@ -25,9 +32,16 @@ from application.use_cases.start_download import StartDownload
 from application.use_cases.statistics import GetStatistics, RefreshStatistics
 from application.use_cases.stream_file import StreamFile
 from application.use_cases.verify_file import VerifyFile
-from application.use_cases.works import GetWork, SearchWorks
+from application.use_cases.voting import (
+    GetComposerStatistics,
+    GetWorkStatistics,
+    RecordVote,
+    RefreshVotingStatistics,
+)
+from application.use_cases.works import GetWork, SearchWorks, SearchWorksFull
 from domain.entities.storage_provider import ProviderType
 from domain.ports.archive_repositories import ArchiveEntryRepository, ArchiveRepository
+from domain.ports.composer_repository import ComposerRepository
 from domain.ports.download import FileDownloader
 from domain.ports.hashing import FileHasher
 from domain.ports.repositories import (
@@ -38,8 +52,10 @@ from domain.ports.repositories import (
 )
 from domain.ports.storage import StorageBackendRegistry
 from domain.ports.tasks import TaskScheduler
+from domain.ports.voting_repository import VotingRepository
 from domain.ports.work_repository import WorkRepository
 from domain.services.availability import AvailabilityService
+from domain.services.composer_resolver import ComposerResolver
 from domain.services.file_registration import FileRegistrationService
 from domain.services.integrity import IntegrityService
 
@@ -58,12 +74,14 @@ from infrastructure.providers.registry import (
 from infrastructure.providers.s3 import S3Backend
 from infrastructure.repositories.sql_archive_entry_repository import SqlArchiveEntryRepository
 from infrastructure.repositories.sql_archive_repository import SqlArchiveRepository
+from infrastructure.repositories.sql_composer_repository import SqlComposerRepository
 from infrastructure.repositories.sql_file_repository import SqlFileRepository
 from infrastructure.repositories.sql_import_source_repository import SqlImportSourceRepository
 from infrastructure.repositories.sql_job_repository import SqlDownloadJobRepository
 from infrastructure.repositories.sql_location_repository import SqlStorageLocationRepository
 from infrastructure.repositories.sql_provider_repository import SqlStorageProviderRepository
 from infrastructure.repositories.sql_statistics_repository import SqlStatisticsRepository
+from infrastructure.repositories.sql_voting_repository import SqlVotingRepository
 from infrastructure.repositories.sql_work_repository import SqlWorkRepository
 from infrastructure.tasks.asyncio_scheduler import AsyncioTaskScheduler
 
@@ -79,6 +97,17 @@ class Container:
     archive_repo: ArchiveRepository
     archive_entry_repo: ArchiveEntryRepository
     work_repo: WorkRepository
+    composer_repo: ComposerRepository
+    composer_resolver: ComposerResolver
+    voting_repo: VotingRepository
+    list_composers: ListComposers
+    get_composer_detail: GetComposerDetail
+    get_composer_works: GetComposerWorks
+    merge_composers: MergeComposers
+    record_vote: RecordVote
+    get_work_statistics: GetWorkStatistics
+    get_composer_statistics: GetComposerStatistics
+    refresh_voting_statistics: RefreshVotingStatistics
     downloader: FileDownloader
     hasher: FileHasher
     scheduler: TaskScheduler
@@ -110,7 +139,9 @@ class Container:
     get_statistics: GetStatistics
     build_works: BuildWorks
     search_works: SearchWorks
+    search_works_full: SearchWorksFull
     get_work: GetWork
+    enrich_work: EnrichWork
 
 
 def build_container(settings: Settings) -> Container:
@@ -125,7 +156,9 @@ def build_container(settings: Settings) -> Container:
     import_source_repo = SqlImportSourceRepository(db)
     statistics_repo = SqlStatisticsRepository(db)
     work_repo = SqlWorkRepository(db)
-
+    composer_repo = SqlComposerRepository(db)
+    composer_resolver = ComposerResolver(composer_repo)
+    voting_repo = SqlVotingRepository(db)
     hasher = HashlibHasher()
     downloader = HttpxDownloader()
     scheduler = AsyncioTaskScheduler()
@@ -197,9 +230,19 @@ def build_container(settings: Settings) -> Container:
     count_missing_entries = CountMissingEntries(archive_entry_repo)
     refresh_statistics = RefreshStatistics(archive_repo, archive_entry_repo, file_repo, statistics_repo)
     get_statistics = GetStatistics(refresh_statistics, statistics_repo)
-    build_works = BuildWorks(archive_entry_repo, work_repo)
-    search_works = SearchWorks(work_repo)
-    get_work = GetWork(work_repo, archive_entry_repo)
+    build_works = BuildWorks(archive_entry_repo, work_repo, composer_resolver)
+    search_works = SearchWorks(work_repo, composer_resolver)
+    search_works_full = SearchWorksFull(work_repo, archive_entry_repo, composer_resolver)
+    get_work = GetWork(work_repo, archive_entry_repo, composer_resolver)
+    enrich_work = EnrichWork(work_repo, composer_resolver)
+    list_composers = ListComposers(composer_repo)
+    get_composer_detail = GetComposerDetail(composer_repo)
+    get_composer_works = GetComposerWorks(composer_repo)
+    merge_composers = MergeComposers(composer_repo)
+    record_vote = RecordVote(voting_repo, work_repo)
+    get_work_statistics = GetWorkStatistics(voting_repo, work_repo)
+    get_composer_statistics = GetComposerStatistics(voting_repo, composer_repo)
+    refresh_voting_statistics = RefreshVotingStatistics(voting_repo)
 
     return Container(
         settings=settings,
@@ -211,6 +254,17 @@ def build_container(settings: Settings) -> Container:
         archive_repo=archive_repo,
         archive_entry_repo=archive_entry_repo,
         work_repo=work_repo,
+        composer_repo=composer_repo,
+        composer_resolver=composer_resolver,
+        voting_repo=voting_repo,
+        list_composers=list_composers,
+        get_composer_detail=get_composer_detail,
+        get_composer_works=get_composer_works,
+        merge_composers=merge_composers,
+        record_vote=record_vote,
+        get_work_statistics=get_work_statistics,
+        get_composer_statistics=get_composer_statistics,
+        refresh_voting_statistics=refresh_voting_statistics,
         downloader=downloader,
         hasher=hasher,
         scheduler=scheduler,
@@ -242,5 +296,7 @@ def build_container(settings: Settings) -> Container:
         get_statistics=get_statistics,
         build_works=build_works,
         search_works=search_works,
+        search_works_full=search_works_full,
         get_work=get_work,
+        enrich_work=enrich_work,
     )

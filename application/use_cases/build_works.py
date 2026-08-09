@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from domain.entities.work import Work
 from domain.ports.archive_repositories import ArchiveEntryRepository
 from domain.ports.work_repository import WorkRepository
+from domain.services.composer_resolver import ComposerResolver
 
 
 def work_key_of(relative_path: str) -> str:
@@ -33,16 +34,27 @@ class BuildWorks:
         self,
         entries: ArchiveEntryRepository,
         works: WorkRepository,
+        resolver: ComposerResolver | None = None,
     ) -> None:
         self._entries = entries
         self._works = works
+        self._resolver = resolver
 
     async def execute(self) -> BuildWorksResult:
         cache: dict[str, int] = {}
+        composer_cache: dict[str, str | None] = {}
         works_created = 0
         linked = 0
         limit = 1000
         offset = 0
+
+        async def composer_id_of(name: str | None) -> str | None:
+            if name is None:
+                return None
+            if name not in composer_cache:
+                resolved = await self._resolver.resolve(name) if self._resolver else None
+                composer_cache[name] = resolved[0] if resolved else None
+            return composer_cache[name]
 
         while True:
             batch = await self._entries.list_all(limit=limit, offset=offset)
@@ -56,9 +68,15 @@ class BuildWorks:
                     work = await self._works.get_by_work_key(key)
                     if work is None:
                         work = await self._works.create(
-                            Work(work_key=key, composer=entry.composer, title=entry.title)
+                            Work(
+                                work_key=key,
+                                composer=entry.composer,
+                                composer_id=await composer_id_of(entry.composer),
+                                title=entry.title,
+                            )
                         )
                         works_created += 1
+                    assert work.id is not None
                     cache[key] = work.id
                     work_id = work.id
                 entry.work_id = work_id

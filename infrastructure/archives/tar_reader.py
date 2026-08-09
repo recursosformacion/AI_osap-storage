@@ -19,6 +19,8 @@ class TarArchiveReader(ArchiveReader):
 
         def _do() -> None:
             source = self._tar.extractfile(member)
+            if source is None:
+                raise OSError(f"no se pudo leer el miembro {name!r} del archivo")
             with open(destination_path, "wb") as fh:
                 while chunk := source.read(1 << 16):
                     fh.write(chunk)

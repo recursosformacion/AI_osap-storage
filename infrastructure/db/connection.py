@@ -38,5 +38,26 @@ class Database:
     @asynccontextmanager
     async def connection(self) -> AsyncIterator[aiomysql.Connection]:
         await self.connect()
-        async with self._pool.acquire() as conn:
+        pool = self._pool
+        assert pool is not None
+        async with pool.acquire() as conn:
             yield conn
+
+    @asynccontextmanager
+    async def transaction(self) -> AsyncIterator[aiomysql.Connection]:
+        """Abre una transacción atómica sobre una única conexión.
+
+        Si el cuerpo lanza una excepción, hace ROLLBACK y la propaga. Si no, COMMIT.
+        El pool usa autocommit, por lo que se desactiva aquí para agrupar las sentencias.
+        """
+        await self.connect()
+        pool = self._pool
+        assert pool is not None
+        async with pool.acquire() as conn:
+            try:
+                await conn.begin()
+                yield conn
+                await conn.commit()
+            except Exception:
+                await conn.rollback()
+                raise

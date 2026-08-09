@@ -1,274 +1,238 @@
 # OSAP Provider API Contract v1.3
 
 ## Introducción
-Este documento define el contrato públicamente estable para integraciones entre OSAP y los proveedores de recursos musicales. Cualquier proveedor que implemente esta API es automáticamente compatible con OSAP sin requerir cambios internos en el sistema.
 
-> **v1.3**: registra el **formato de Work enriquecida** (Metadata Enrichment) y la respuesta de **dos niveles**
-> (búsqueda ligera vs. resolución enriquecida). Compatible hacia atrás con v1.2.
+Este documento define el contrato que **osap-storage** expone como proveedor de información.
 
-## Endpoints Base
+> **v1.3**: rediseño del contrato. **No** mantiene compatibilidad conceptual con versiones
+> anteriores. Los cambios son **incompatibles**.
+
+## Filosofía
+
+**osap-storage es un proveedor de información.** Su única responsabilidad es:
+
+- **localizar** obras,
+- devolver **toda la información conocida** sobre una `Work`,
+- generar los **enlaces de descarga** de los recursos físicos.
+
+osap-storage **no conoce**:
+
+- Matching Works
+- Work Resolution
+- Relationships
+- Knowledge Hub
+- Representations
+
+Será **OSAP-API** quien adapte esta información a su modelo interno (RepresentationInfo, etc.).
+Storage solo publica datos y enlaces **consumibles por clientes**; nunca expone información de
+almacenamiento interno (hashes, rutas físicas, CDN, R2, IPFS...).
+
+## Endpoints
+
 | Método | Path | Descripción |
 |--------|------|-------------|
-| `POST` | `/api/license` | Establece términos de licencia |
-| `GET`  | `/api/search` | Busca recursos (Works ligeras) |
-| `GET`  | `/api/resource/{id}` | Obtiene una Work completa (según `include=`) |
-| `GET`  | `/api/resource/{id}/representations/{representationId}/download` | Descarga una representación (stream) |
-| `GET`  | `/api/version` | Retorna versión del contracto |
+| `GET` | `/api/search` | Busca y devuelve **Works completas**. |
+| `GET` | `/api/lookup` | Autocompletado: solo índice (mínimo para localizar). |
+| `GET` | `/api/resource/{id}` | Una Work completa (mismo DTO que `search`). |
+| `GET` | `/api/download/{resource_id}` | Resuelve y descarga (stream o redirect) un recurso físico. |
+| `GET` | `/api/version` | Versión del contrato. |
 
-## Parámetros Comunes
+## LOOKUP — `GET /api/lookup?q=...`
 
-### Búsqueda (`GET /api/search`)
-```json
-{
-  "schema": "object",
-  "properties": {
-    "q": {"type": "string", "description": "Texto de búsqueda libre"},
-    "composer": {"type": "string"},
-    "catalog": {"type": "string"},
-    "type": {
-      "type": "string", 
-      "enum": ["score", "audio", "video", "lyric", "all"]
-    },
-    "page": {"type": "integer", "minimum": 1},
-    "per_page": {"type": "integer", "maximum": 100}
-  }
-}
-```
+Optimizado para **autocompletado**. **No** consulta metadata ni recursos. Devuelve únicamente la
+información mínima para localizar una obra:
 
-### Respuesta de Búsqueda
-```json
-{
-  "query": { /* parámetros de búsqueda originales */ },
-  "total": 42,
-  "resources": [
-    {
-      "id": "res_abc123",
-      "title": "Ave Verum Corpus",
-      "provider_id": "omr-v3",
-      "composer": "Wolfgang Amadeus Mozart",
-      "catalog": "K. 618",
-      "type": "score",
-      "formats": ["xml", "pdf"],
-      "access": {
-        "mode": "direct",
-        "license": "CC BY-SA",
-        "url": "https://repository.org/scores/ave-verum.xml",
-        "expires": "2025-01-01T00:00:00Z"
-      }
-    }
-  ]
-}
-```
-
-## Work enriquecida — Metadata Enrichment (v1.3)
-
-**Filosofía:** el proveedor devuelve **entidades musicales enriquecidas** (`Work`). OSAP-API construye
-la **Work Resolution** a partir de esas entidades.
-
-> **Nota clave (arquitectónica):** El proveedor **nunca** devuelve una Work Resolution. Devuelve
-> entidades `Work` enriquecidas. La construcción de Matching Works, Work Resolution, Relationships
-> y Knowledge Hub corresponde **exclusivamente a OSAP-API**.
->
-> Esta separación evita que, en el futuro, se intente mover lógica de resolución a Storage.
-
-### Separación de responsabilidades
-
-| Componente | Responsable de |
-|---|---|
-| osap-storage (proveedor) | Conocer dónde están físicamente los ficheros (R2, CDN, disco, IPFS...), **generar las URLs/tokens de descarga** y exponer las representaciones. |
-| osap-api | Resolver obras, fusionar proveedores, construir la Work Resolution y exponer una API unificada. **No sabe dónde vive un fichero** ni cómo generar URLs. |
-| Frontend | Nunca conocer hashes ni rutas físicas; solo consume `representation_id`. |
-
-**Quién genera las URLs: osap-storage** (el propietario del repositorio). osap-api únicamente copia
-esos campos en su `RepresentationInfo`; no construye URLs a partir de `relative_path` (no conoce el
-CDN, la estructura de directorios, R2 ni los hashes).
-
-### Niveles de información
-
-**Nivel 1 — índice (lo mínimo para buscar):**
-`id`, `composer`, `title`, `catalogue`, `aliases`.
-
-**Nivel 2 — metadata musical (extraída del JSON de la fuente):**
-`subtitle`, `artist`, `song_name`, `opus`, `musical_key` (tonalidad), `duration`, `measures`,
-`pages`, `parts`, `complexity`, `license`, `public_domain`, `description`, `thumbnails`,
-`genres` (lista), `tags` (lista), `instruments` (lista), `parts_names` (lista).
-
-**Nivel 3 — representación (por recurso, no por obra):** `format`, `license`, `voices`,
-`compressed`, `validated`, `mime_type`.
-
-### Origen de la metadata
-- El índice inicial procede del **CSV** de la fuente.
-- La metadata musical se **enriquece** a partir del **JSON** (p. ej. el JSON de MuseScore por obra).
-- El **JSON original se conserva** como documento fuente (no se guarda entero en la BD); en la base
-  solo se extraen los campos necesarios.
-
-### Flujo
-
-```
-GET /api/search                          → Works ligeras (solo para localizar)
-GET /api/resource/{id}                   → Work + Metadata + Statistics + Representations (según include=)
-GET /api/resource/{id}/representations/{representationId}/download → stream
-```
-
-### Búsqueda (siempre ligera)
-`GET /api/search` devuelve **únicamente** lo mínimo para localizar (sin metadata, statistics ni
-representations):
 ```json
 {
   "works": [
-    { "id": 264, "title": "Contredanse in F, K. 15h", "composer": "W.A. Mozart", "catalogue": "K. 15h", "confidence": 0.98 }
-  ]
-}
-```
-
-### Recurso (endpoint rico)
-`GET /api/resource/{id}` devuelve **toda** la información enriquecida, según `include=`:
-- `GET /api/resource/264`
-- `GET /api/resource/264?include=metadata`
-- `GET /api/resource/264?include=representations`
-- `GET /api/resource/264?include=metadata,representations,statistics`
-
-Formato de `include` (lista separada por comas):
-```
-include = metadata[,representations][,statistics] | all
-```
-- `all` es un alias de `metadata,statistics,representations` (para clientes sencillos).
-
-**Comportamiento por defecto:** si no se especifica `include`, el proveedor devuelve **únicamente**
-el objeto `work`.
-
-Ejemplo (con `include=metadata,representations`): `work`, `metadata`, `statistics` y
-`representations` son **objetos de nivel superior** (independientes; `work` no crece
-indefinidamente):
-```json
-{
-  "work": { "id": 264, "title": "Contredanse in F, K. 15h", "composer": "W.A. Mozart", "catalogue": "K. 15h" },
-  "metadata": {
-    "subtitle": null,
-    "song_name": "The London Sketchbook 15a - 15ss",
-    "opus": null,
-    "musical_key": "F major",
-    "duration": "00:53",
-    "measures": 25,
-    "pages": 2,
-    "parts": 1,
-    "license": "cc-zero",
-    "public_domain": true,
-    "description": "...",
-    "thumbnails": "{...}",
-    "genres": ["classical"],
-    "tags": ["contredanse", "chamber"],
-    "instruments": ["piano"],
-    "parts_names": ["Piano"]
-  },
-  "statistics": { "favorites": 1, "downloads": 0, "views": 300, "rating": 0 },
-  "representations": [
     {
-      "id": "rep_100654_pdf",
-      "format": "PDF",
-      "available": true,
-      "license": "cc-zero",
-      "mime_type": "application/pdf",
-      "links": { "download": "https://cdn.../pdf/....pdf", "view": "...", "thumbnail": "..." }
+      "id": 264,
+      "title": "Contredanse in F, K. 15h",
+      "composer": "W.A. Mozart",
+      "catalogue": "K. 15h",
+      "confidence": 1.0
     }
   ]
 }
 ```
 
-Nota: `confidence` pertenece a **Search** (evaluación de candidatos); en `resource/{id}` no tiene
-sentido (ya no se evalúan candidatos), por lo que no aparece en este endpoint.
+Cada elemento contiene únicamente: `id`, `title`, `composer`, `catalogue`, `confidence`.
+No devuelve `metadata`, `resources` ni `statistics`. Debe ser **extremadamente rápido**
+(usa exclusivamente el índice).
 
-### Representaciones
-El DTO de representación **no expone rutas físicas** (`relative_path`, `source_url`, `hash`), sino
-**únicamente enlaces públicos** (`links`) generados por el proveedor. El cliente no necesita conocer
-rutas ni hashes. Estilo HAL / JSON:API:
+## SEARCH — `GET /api/search?q=...`
+
+Endpoints principal. Devuelve **siempre Works completas**; nunca requiere llamadas posteriores para
+completar una Work. **No existe** "search ligero" ni `include`.
+
+Cada `Work` contiene toda la información conocida por Storage:
+
+- **Identidad**: `id`, `title`, `composer`, `composer_id`, `catalogue`, `aliases`
+- **Metadata**: `subtitle`, `artist`, `song_name`, `opus`, `musical_key`, `duration`, `measures`,
+  `pages`, `parts`, `complexity`, `license`, `public_domain`, `description`, `thumbnails`,
+  `genres`, `tags`, `instruments`, `parts_names`
+- **Statistics**: `favorites`, `downloads`, `views`, `rating`
+- **Resources**: los ficheros descargables conocidos por Storage (no "Representations"; será
+  OSAP-API quien los transforme). Cada recurso: `id`, `format`, `mime_type`, `available`,
+  `license` y `links` (`download`, `view`, `thumbnail`).
+
 ```json
 {
-  "id": "rep_100654_pdf",
-  "format": "PDF",
-  "available": true,
-  "license": "cc-zero",
-  "mime_type": "application/pdf",
-  "links": { "download": "...", "view": "...", "thumbnail": "..." }
+  "works": [
+    {
+      "id": 264,
+      "title": "Contredanse in F, K. 15h",
+      "composer": "Wolfgang Amadeus Mozart",
+      "composer_id": "8f5b3a7e",
+      "catalogue": "K. 15h",
+      "aliases": [],
+      "metadata": {
+        "subtitle": null,
+        "artist": null,
+        "song_name": "The London Sketchbook 15a - 15ss",
+        "opus": null,
+        "musical_key": "F major",
+        "duration": "00:53",
+        "measures": 25,
+        "pages": 2,
+        "parts": 1,
+        "complexity": null,
+        "license": "cc-zero",
+        "public_domain": true,
+        "description": "Contredanse del London Sketchbook",
+        "thumbnails": "{...}",
+        "genres": ["classical"],
+        "tags": ["contredanse", "chamber"],
+        "instruments": ["piano"],
+        "parts_names": ["Piano"]
+      },
+      "statistics": { "favorites": null, "downloads": null, "views": null, "rating": null },
+      "resources": [
+        {
+          "id": "100654",
+          "format": "PDF",
+          "mime_type": "application/pdf",
+          "available": true,
+          "license": "cc-zero",
+          "links": {
+            "download": "/api/download/100654",
+            "view": null,
+            "thumbnail": null
+          }
+        }
+      ]
+    }
+  ]
 }
 ```
-La URL la genera **osap-storage**. Si se quiere ocultar por completo el CDN, `links.download` puede
-ser una ruta relativa (`/api/resource/{id}/representations/{representationId}/download`) que
-resuelve el propio proveedor.
 
-El endpoint de descarga es **anidado** bajo el recurso (`/api/resource/{id}/representations/{rid}/download`)
-porque la representación pertenece a una obra: evita ids globales, facilita la caché y simplifica los
-permisos. Alternativa válida: `/api/resource/{id}/download/{representationId}`.
+`links.download` es una ruta **resoluble por Storage** (`/api/download/{resource_id}`): oculta el
+CDN, R2, disco, IPFS y los hashes. `view` y `thumbnail` quedan reservados para enlaces públicos.
 
-### Estadísticas
-`favorites`, `downloads`, `views`, `rating` son **opcionales** (cada proveedor tiene métricas
-distintas; un proveedor puede no tener ninguna).
+## RESOURCE — `GET /api/resource/{id}`
 
-### Por qué `include=` en `/resource/{id}`
-Evita el patrón N+1 al obtener una ficha completa en una única llamada, sin que el buscador
-transportee información pesada:
-```
-Antes:  resource → metadata → representations → statistics (4 llamadas)
-Ahora:  resource/{id}?include=metadata,representations,statistics → 1 llamada
+Devuelve **exactamente el mismo DTO que `search`**, pero para un único `id`:
+
+```json
+{ "work": { "id": 264, "title": "...", "composer": "...", "composer_id": "...", "catalogue": "...", "aliases": [],
+            "metadata": { ... }, "statistics": { ... }, "resources": [ ... ] } }
 ```
 
-**OSAP-API**, a partir de los datos de este contrato:
+## IDENTIDAD CANÓNICA DE COMPOSITORES
+
+`composer_id` es el **identificador canónico** de un compositor mantenido por Storage. El campo
+`composer` contiene su **nombre canónico**. La resolución es responsabilidad exclusiva de Storage,
+no de OSAP-API ni del `mapping.yaml` de cada proveedor.
+
 ```
-Search → Matching Works → Work Resolution → Relationships → Knowledge Hub
+PROVEEDOR  →  composer = "Mozart, W. A."
+Storage    →  composer_aliases  →  composer_id  →  composers → Work.composer / Work.composer_id
 ```
 
+- **`composer`**: nombre canónico del compositor (p. ej. `"Wolfgang Amadeus Mozart"`).
+- **`composer_id`**: UUID estable y opaco de la identidad canónica (p. ej. `"8f5b3a7e"`).
+- **`composer_aliases`**: tabla de nombres conocidos (`alias`) con su forma normalizada
+  (`normalized_alias`). Un mismo `normalized_alias` no puede apuntar a dos compositores
+  (`UNIQUE`); si se detecta ese conflicto, se trata como un **conflicto de datos** y no se
+  resuelve arbitrariamente.
 
+Distintos proveedores pueden usar nombres distintos para el mismo compositor (OMR
+`"Wolfgang Amadeus Mozart"`, IMSLP `"Mozart, W. A."`, OpenScore `"W. A. Mozart"`) y todos
+terminan resolviéndose al mismo `composer_id`.
+
+Cuando un nombre **no puede resolverse**, Storage **no crea** un compositor nuevo: devuelve
+
+```json
+{ "composer": "Algún compositor desconocido", "composer_id": null }
+```
+
+La creación y asociación de nuevos compositores se controla posteriormente desde administración,
+para no llenar la tabla con errores procedentes de proveedores. La administración de la identidad
+canónica (listado, detalle, candidatos y fusión de compositores) vive en los endpoints
+`/api/admin/composers*`; ver `docs/composer-administration-v1.md`.
+
+### Población inicial
+
+Las tablas `composers` / `composer_aliases` se crean **vacías** (sin datos inventados) en la
+migración. Para poblarlas de forma segura se recomienda un proceso admin idempotente:
+
+1. Añadir el compositor canónico a `composers` (con su UUID y nombre canónico).
+2. Añadir a `composer_aliases` cada nombre conocido (incluido el canónico), siempre con su
+   `normalized_alias`. Si un `normalized_alias` ya existe para otro compositor, `add_alias`
+   lanza `DuplicateComposerAlias` (conflicto de datos) en lugar de resolver arbitrariamente.
+3. Al añadir un alias nuevo, las futuras Works que contengan ese nombre se resuelven de inmediato
+   al mismo `composer_id` (no hay proceso de re-importación).
+
+Hay un comando CLI que automatiza la población desde un CSV de PDMX (p. ej. la copia del mirror
+en `G:\osap-storage\PDMX.csv`):
+
+```
+osap-storage populate-composers G:\osap-storage\PDMX.csv
+```
+
+El proceso agrupa los nombres de compositor por su `normalized_alias`, elige un **nombre canónico
+determinista** para cada grupo (el más frecuente, desempate al más largo) y crea el compositor con
+un UUID + su alias canónico. Es **idempotente**: al repetirlo reutiliza los existentes. No aplica
+ningún algoritmo de "mejor compositor": dos formas normalizadas distintas quedan como compositores
+separados hasta que la administración los fusione. Para producción se recomienda generar antes un
+CSV compacto de nombres (solo la columna de compositor) y copiarlo al servidor:
+
+```
+scripts\export_composer_names.ps1 -Source G:\osap-storage\PDMX.csv -Out G:\osap-storage\composer_names.csv
+scp G:\osap-storage\composer_names.csv ocw@91.134.255.134:/tmp/composer_names.csv
+osap-storage populate-composers /tmp/composer_names.csv   # en el servidor
+```
+
+## DOWNLOAD — `GET /api/download/{resource_id}`
+
+Storage **resuelve internamente** el recurso físico y responde con un **stream** o un **redirect**
+(302). El `resource_id` pertenece al **Resource**, no a la Work. OSAP-API **nunca** construye URLs:
+solo consume el enlace generado por Storage.
+
+## MODELO
+
+Una `Work` debe ser **autocontenida**. No se obliga al consumidor a realizar llamadas adicionales.
+
+## Validaciones del contrato
+
+- `lookup` utiliza **exclusivamente el índice** (sin metadata ni recursos).
+- `search` **no** realiza llamadas N+1 (usa consultas por lote).
+- `resource` **reutiliza exactamente** el DTO de `search`.
+- `download` **nunca** expone hashes ni rutas internas (solo un redirect/stream a un enlace consumible).
+- **Ningún DTO** contiene conceptos de OSAP-API (Work Resolution, Matching Works, Relationships,
+  RepresentationInfo).
 
 ## Códigos de Error (HTTP)
-| Código | Error        | Descripción                              |
-|--------|--------------|------------------------------------------|
-| 400    | InvalidRequest | Parámetros incorrectos                 |
-| 401    | AuthRequired | Requiere autenticación                 |
-| 403    | Forbidden    | Credenciales inválidas/quota agotado    |
-| 404    | NotFound     | Recurso no encontrado                 |
-| 429    | RateLimited  | Demasiadas solicitudes                 |
-| 500    | ServerError  | Error interno del proveedor            |
 
-## Autenticación
-Usar Basic Auth en encabezado `Authorization`:
-```
-Authorization: Basic Om15cGFzc3dvcmQ=
-```
-
-Claves API para alta demanda:
-```
-X-API-Key: my_provider_api_key
-```
-
-## Paginación
-Siempre usar paginación estilo cursor:
-```json
-{
-  "pagination": {
-    "next_cursor": "dXNlcjpVMEc5V",
-    "prev_cursor": "dXNlcjpXQklK",
-    "total_pages": 5,
-    "current_page": 2
-  }
-}
-```
+| Código | Descripción |
+|--------|-------------|
+| 400 | Parámetros incorrectos |
+| 404 | Recurso/Work no encontrado |
+| 500 | Error interno |
 
 ## Versionamiento
-El modelo sigue SemVer estricto (MAJOR.MINOR.PATCH). Cambios en:
-- MAJOR: Cambios incompatibles
-- MINOR: Nuevos features compatibles
-- PATCH: Correcciones compatibles
 
-## Compatibilidad hacia atrás
-Todos los endpoints requieren:
-```http
-Accept: application/vnd.osap-api.v1.3+json
-```
-
-## Garantías
-1. Las URLs de acceso serán válidas por mínimo 60 días
-2. Los metadatos conservarán formato estable
-3. El ID de recurso persistirá permanentemente
+- `GET /api/version` → `{ "contract": "osap-provider-v1", "version": "1.0" }`
 
 ---
-*Documento congelado para uso público - v1.3 (2026-08)*
+*Documento del contrato v1.3 (2026-08) — proveedor de información puro.*

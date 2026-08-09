@@ -42,7 +42,7 @@ async def migrate(db: Database) -> None:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
-    asyncio.run(migrate(Database(Settings())))
+    asyncio.run(migrate(Database(Settings())))  # type: ignore[call-arg]
 
 
 if __name__ == "__main__":

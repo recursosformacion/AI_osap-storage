@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TypeVar, cast
+from typing import Any, cast
 
 from domain.ports.repositories import StorageProviderRepository
 from fastapi import Request
 from infrastructure.config import Settings
 from infrastructure.container import Container
 from infrastructure.db.connection import Database
-
-T = TypeVar("T")
 
 
 def get_container(request: Request) -> Container:
@@ -32,8 +30,12 @@ def get_file_repo(request: Request):
     return cast(Container, request.app.state.container).file_repo
 
 
-def _use_case(attr: str) -> Callable[..., T]:
-    def resolver(request: Request) -> T:
+def get_archive_entry_repo(request: Request):
+    return cast(Container, request.app.state.container).archive_entry_repo
+
+
+def _use_case(attr: str) -> Callable[[Request], Any]:
+    def resolver(request: Request) -> Any:
         return cast(Container, request.app.state.container).__getattribute__(attr)
 
     return resolver
@@ -58,4 +60,13 @@ GetArchiveDep = _use_case("get_archive")
 CountMissingEntriesDep = _use_case("count_missing_entries")
 GetStatisticsDep = _use_case("get_statistics")
 SearchWorksDep = _use_case("search_works")
+SearchWorksFullDep = _use_case("search_works_full")
 GetWorkDep = _use_case("get_work")
+ListComposersDep = _use_case("list_composers")
+GetComposerDetailDep = _use_case("get_composer_detail")
+GetComposerWorksDep = _use_case("get_composer_works")
+MergeComposersDep = _use_case("merge_composers")
+RecordVoteDep = _use_case("record_vote")
+GetWorkStatisticsDep = _use_case("get_work_statistics")
+GetComposerStatisticsDep = _use_case("get_composer_statistics")
+RefreshVotingStatisticsDep = _use_case("refresh_voting_statistics")

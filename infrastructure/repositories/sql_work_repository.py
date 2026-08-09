@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from domain.entities.work import Work
+from domain.entities.work import Work, WorkLists
 from domain.ports.work_repository import WorkRepository
 
 from infrastructure.db.connection import Database
@@ -11,6 +11,7 @@ def _row_to_work(row: dict) -> Work:
         id=row["id"],
         work_key=row["work_key"],
         composer=row["composer"],
+        composer_id=row["composer_id"],
         title=row["title"],
         subtitle=row["subtitle"],
         artist=row["artist"],
@@ -44,8 +45,8 @@ class SqlWorkRepository(WorkRepository):
     async def create(self, work: Work) -> Work:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "INSERT INTO works (work_key, composer, title) VALUES (%s, %s, %s)",
-                (work.work_key, work.composer, work.title),
+                "INSERT INTO works (work_key, composer, composer_id, title) VALUES (%s, %s, %s, %s)",
+                (work.work_key, work.composer, work.composer_id, work.title),
             )
             work.id = cur.lastrowid
             return work
@@ -53,12 +54,13 @@ class SqlWorkRepository(WorkRepository):
     async def update(self, work: Work) -> None:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "UPDATE works SET composer=%s, title=%s, subtitle=%s, artist=%s, song_name=%s, "
+                "UPDATE works SET composer=%s, composer_id=%s, title=%s, subtitle=%s, artist=%s, song_name=%s, "
                 "genre=%s, opus=%s, catalogue=%s, musical_key=%s, year=%s, instrumentation=%s, "
                 "language=%s, tags=%s, duration=%s, measures=%s, pages=%s, parts=%s, complexity=%s, "
                 "license=%s, public_domain=%s, description=%s, thumbnails=%s WHERE id=%s",
                 (
                     work.composer,
+                    work.composer_id,
                     work.title,
                     work.subtitle,
                     work.artist,
@@ -106,7 +108,7 @@ class SqlWorkRepository(WorkRepository):
             )
             return [_row_to_work(row) for row in await cur.fetchall()]
 
-    async def list(self, *, limit: int = 100, offset: int = 0) -> list[Work]:
+    async def all_(self, *, limit: int = 100, offset: int = 0) -> list[Work]:
         return await self.list_all(limit=limit, offset=offset)
 
     async def list_all(self, *, limit: int = 1000, offset: int = 0) -> list[Work]:
@@ -167,3 +169,23 @@ class SqlWorkRepository(WorkRepository):
 
     async def get_parts(self, work_id: int) -> list[str]:
         return await self._get_list("work_parts", "part_name", work_id)
+
+    async def get_lists_bulk(self, work_ids: list[int]) -> dict[int, WorkLists]:
+        if not work_ids:
+            return {}
+        result: dict[int, WorkLists] = {wid: WorkLists() for wid in work_ids}
+        placeholders = ", ".join(["%s"] * len(work_ids))
+        for table, column, attr in (
+            ("work_tags", "tag", "tags"),
+            ("work_genres", "genre", "genres"),
+            ("work_instruments", "instrument", "instruments"),
+            ("work_parts", "part_name", "parts_names"),
+        ):
+            async with self._db.connection() as conn, conn.cursor() as cur:
+                await cur.execute(
+                    f"SELECT work_id, {column} AS v FROM {table} WHERE work_id IN ({placeholders}) ORDER BY id",
+                    work_ids,
+                )
+                for row in await cur.fetchall():
+                    getattr(result[row["work_id"]], attr).append(row["v"])
+        return result

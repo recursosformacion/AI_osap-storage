@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import csv
 import json
 from dataclasses import asdict, is_dataclass
 from typing import Any
@@ -9,6 +10,7 @@ from typing import Any
 from application.use_cases.import_pdmx import PdmxImportResult
 from application.use_cases.materialize_archive import MaterializeArchiveCommand
 from application.use_cases.materialize_file import MaterializeFileCommand
+from application.use_cases.populate_composers import PopulateComposers
 from application.use_cases.register_existing_file import RegisterExistingFileCommand
 from application.use_cases.register_resources import RegisterMirrorResourcesCommand
 from domain.entities.import_source import ImportSource
@@ -26,6 +28,61 @@ def _dumps(obj: Any) -> str:
     if is_dataclass(obj):
         return json.dumps(asdict(obj), ensure_ascii=False, default=str)
     return json.dumps(obj, ensure_ascii=False, default=str)
+
+
+_COMPOSER_COLUMNS = ("composer_name", "composer", "artist_name", "artist")
+
+
+def _read_composer_names(path: str) -> list[str]:
+    """Lee los nombres de compositor de un CSV (detectando la columna)."""
+    with open(path, newline="", encoding="utf-8-sig") as fh:
+        reader = csv.DictReader(fh)
+        header = list(reader.fieldnames or [])
+        lowered = [h.strip().lower() for h in header]
+        column = next((header[lowered.index(c)] for c in _COMPOSER_COLUMNS if c in lowered), None)
+        if column is None:
+            raise ValueError(f"CSV sin columna de compositor; encontradas: {', '.join(header)}")
+        return [record[column] for record in reader if record.get(column)]
+
+
+def _cmd_populate_composers(args: argparse.Namespace, container: Container):
+    csv_path = args.csv or container.settings.pdmx_source_csv
+    if not csv_path:
+        raise ValueError("no CSV: indica --csv o providers.pdmx.source.csv en config")
+    names = _read_composer_names(csv_path)
+    return PopulateComposers(container.composer_repo).execute(names)
+
+
+async def _cmd_backfill_composer_ids(args: argparse.Namespace, container: Container):
+    from domain.services.composer_resolver import ComposerResolver
+
+    resolver = ComposerResolver(container.composer_repo)
+    updated = 0
+    scanned = 0
+    offset = 0
+    limit = 500
+    while True:
+        works = await container.work_repo.list_all(limit=limit, offset=offset)
+        if not works:
+            break
+        resolved = await resolver.resolve_many([w.composer for w in works])
+        pending = []
+        for w in works:
+            scanned += 1
+            r = resolved.get(w.composer)
+            new_id = r[0] if r else None
+            if w.composer_id != new_id:
+                w.composer_id = new_id
+                pending.append(w)
+        for w in pending:
+            await container.work_repo.update(w)
+        updated += len(pending)
+        offset += limit
+    return {"scanned": scanned, "updated": updated}
+
+
+async def _cmd_recompute_statistics(args: argparse.Namespace, container: Container):
+    return await container.refresh_voting_statistics.execute()
 
 
 def _cmd_import_pdmx(args: argparse.Namespace, container: Container):
@@ -318,6 +375,25 @@ def build_parser() -> argparse.ArgumentParser:
                         help="De dónde leer los JSON (local=G:, r2=Cloudflare R2)")
     enrich.set_defaults(handler=_cmd_enrich_metadata)
 
+    populate = sub.add_parser(
+        "populate-composers",
+        help="Poblar composers/composer_aliases desde un CSV con columna de compositor",
+    )
+    populate.add_argument("csv", nargs="?", default=None, help="Ruta al CSV (por defecto: config)")
+    populate.set_defaults(handler=_cmd_populate_composers)
+
+    backfill = sub.add_parser(
+        "backfill-composer-ids",
+        help="Rellenar works.composer_id resolviendo works.composer contra los alias",
+    )
+    backfill.set_defaults(handler=_cmd_backfill_composer_ids)
+
+    recompute = sub.add_parser(
+        "recompute-statistics",
+        help="Recalcular las estadísticas de votación (works y compositores). Idempotente.",
+    )
+    recompute.set_defaults(handler=_cmd_recompute_statistics)
+
     return parser
 
 
@@ -333,7 +409,7 @@ async def _run(args: argparse.Namespace, container: Container) -> None:
 
 def main() -> None:
     args = build_parser().parse_args()
-    container = build_container(Settings())
+    container = build_container(Settings())  # type: ignore[call-arg]
     asyncio.run(_run(args, container))
 
 

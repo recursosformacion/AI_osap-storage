@@ -30,11 +30,13 @@ function Invoke-Remote($cmd) {
 Write-Host "== Liberación de osap-storage ==" -ForegroundColor Cyan
 
 if (-not $SkipTests) {
-    Write-Host "[1/6] Tests y lint..."
+    Write-Host "[1/6] Tests, lint y tipos..."
     & "$root\.venv\Scripts\python.exe" -m pytest -q
     if ($LASTEXITCODE -ne 0) { throw "Tests fallidos" }
     & "$root\.venv\Scripts\ruff.exe" check .
     if ($LASTEXITCODE -ne 0) { throw "Lint fallido" }
+    & "$root\.venv\Scripts\python.exe" -m mypy api application domain infrastructure
+    if ($LASTEXITCODE -ne 0) { throw "Mypy fallido" }
 } else {
     Write-Host "[1/6] Tests omitidos"
 }

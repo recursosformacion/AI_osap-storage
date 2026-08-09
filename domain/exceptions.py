@@ -34,3 +34,28 @@ class DownloadFailed(DomainError):
 
 class UnsupportedProvider(DomainError):
     pass
+
+
+class DuplicateComposerAlias(DomainError):
+    """Un normalized_alias ya apunta a otro compositor; conflicto de datos no resoluble."""
+
+    def __init__(self, normalized_alias: str) -> None:
+        super().__init__(f"normalized_alias '{normalized_alias}' already belongs to a composer")
+        self.normalized_alias = normalized_alias
+
+
+class InvalidMerge(DomainError):
+    """Una operación de fusión de compositores es inválida."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
+class DuplicateVote(DomainError):
+    """El usuario ya votó esa obra en ese día."""
+
+    def __init__(self, user_id: str, work_id: int) -> None:
+        super().__init__(f"user {user_id} already voted work {work_id} today")
+        self.user_id = user_id
+        self.work_id = work_id

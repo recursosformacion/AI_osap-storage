@@ -1,0 +1,1 @@
+pwsh .\scripts\arrancando_uvicirn.ps1

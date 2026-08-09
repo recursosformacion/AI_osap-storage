@@ -51,4 +51,8 @@ async def get_work(
                 url=url,
             )
         )
-    return WorkDetailRead(work=WorkRead.model_validate(detail.work), resources=resources)
+    work_read = WorkRead.model_validate(detail.work)
+    work_read.genres = detail.genres
+    work_read.instruments = detail.instruments
+    work_read.parts_names = detail.parts_names
+    return WorkDetailRead(work=work_read, resources=resources)

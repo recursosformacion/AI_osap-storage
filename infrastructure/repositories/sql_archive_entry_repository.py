@@ -140,6 +140,17 @@ class SqlArchiveEntryRepository(ArchiveEntryRepository):
             )
             return [_row_to_entry(row) for row in await cur.fetchall()]
 
+    async def list_by_work_ids(self, work_ids: list[int]) -> list[ArchiveEntry]:
+        if not work_ids:
+            return []
+        placeholders = ", ".join(["%s"] * len(work_ids))
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                f"SELECT * FROM archive_entries WHERE work_id IN ({placeholders}) ORDER BY id",
+                work_ids,
+            )
+            return [_row_to_entry(row) for row in await cur.fetchall()]
+
     async def list_all(self, *, limit: int = 1000, offset: int = 0) -> list[ArchiveEntry]:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(

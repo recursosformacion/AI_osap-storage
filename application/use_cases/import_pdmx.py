@@ -68,6 +68,7 @@ class PdmxImporter:
                         Archive(name=row.archive_name, url=row.archive_url, status=ArchiveStatus.IMPORTED)
                     )
                     new_archives += 1
+                assert archive.id is not None
                 cache[row.archive_name] = archive.id
                 archive_id = archive.id
 

@@ -24,6 +24,7 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "ruff>=0.4",
+    "mypy>=1.10",
 ]
 
 [project.scripts]
@@ -51,3 +52,16 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 "api/routes/root.py" = ["E501"]
 "api/metrics.py" = ["B008"]
 "api/web/*.py" = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+check_untyped_defs = false
+disallow_untyped_defs = false
+no_implicit_optional = false
+warn_unused_ignores = false
+# Las entidades del dominio usan ids/colonas Optional (se rellenan al persistir) y los
+# repositorios/use cases los pasan como int. Desactivamos arg-type (deuda sistémica de
+# diseño), manteniendo activas el resto de comprobaciones de tipos.
+disable_error_code = ["arg-type"]
+exclude = ["tests/", "infrastructure/db/migrations/"]
