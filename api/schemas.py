@@ -232,11 +232,23 @@ class ComposerAdminRead(Model):
     status: str
     aliases_count: int = 0
     works_count: int = 0
+    review_status: str = "pending"
 
 
 class ComposerAdminListResult(Model):
     items: list[ComposerAdminRead]
     total: int
+
+
+class ComposerCreationEvidenceRead(Model):
+    id: int | None = None
+    composer_id: str
+    work_id: int | None = None
+    work_title: str | None = None
+    extracted_author: str | None = None
+    provider: str | None = None
+    resource_reference: str | None = None
+    created_at: datetime | None = None
 
 
 class ComposerAdminDetail(Model):
@@ -247,6 +259,13 @@ class ComposerAdminDetail(Model):
     works_count: int = 0
     merged_into: str | None = None
     merged_at: datetime | None = None
+    review_status: str = "pending"
+    reviewed_at: datetime | None = None
+    creation_evidence: list[ComposerCreationEvidenceRead] = []
+
+
+class ComposerReviewRequest(BaseModel):
+    review_status: str = Field(pattern="^(correct|incorrect|reviewed|not_reviewed)$")
 
 
 class ComposerWorkRefRead(Model):
@@ -262,6 +281,10 @@ class ComposerWorksResult(Model):
 
 class MergeComposersRequest(BaseModel):
     source_ids: list[str]
+
+
+class CreateComposerRequest(BaseModel):
+    name: str = Field(min_length=1)
 
 
 class MergeComposersResultRead(Model):

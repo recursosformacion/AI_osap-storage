@@ -1,25 +1,31 @@
 from __future__ import annotations
 
 from application.use_cases.composer_admin import (
+    CreateComposer,
     GetComposerDetail,
     GetComposerWorks,
     ListComposers,
     MergeComposers,
+    ReviewComposer,
 )
 from fastapi import APIRouter, Depends, Query
 
 from api.dependencies import (
+    CreateComposerDep,
     GetComposerDetailDep,
     GetComposerWorksDep,
     ListComposersDep,
     MergeComposersDep,
+    ReviewComposerDep,
 )
 from api.schemas import (
     ComposerAdminDetail,
     ComposerAdminListResult,
     ComposerAdminRead,
+    ComposerReviewRequest,
     ComposerWorkRefRead,
     ComposerWorksResult,
+    CreateComposerRequest,
     MergeComposersRequest,
     MergeComposersResultRead,
 )
@@ -27,20 +33,38 @@ from api.schemas import (
 router = APIRouter(prefix="/api/admin/composers", tags=["admin-composers"])
 
 
+@router.post(
+    "",
+    response_model=ComposerAdminRead,
+    status_code=201,
+    summary="Crear compositor",
+    description="Crea un compositor con el nombre dado (para fusionar hacia un compositor "
+    "inexistente). Si ya existe uno activo con ese nombre, devuelve ese.",
+)
+async def create_composer(
+    payload: CreateComposerRequest,
+    uc: CreateComposer = Depends(CreateComposerDep),
+) -> ComposerAdminRead:
+    result = await uc.execute(payload.name)
+    return ComposerAdminRead.model_validate(result)
+
+
 @router.get(
     "",
     response_model=ComposerAdminListResult,
     summary="Listar compositores",
     description="Listado administrativo paginado de compositores activos. "
-    "Filtra por nombre o alias con la misma normalización del resolver.",
+    "Filtra por nombre o alias con la misma normalización del resolver, y opcionalmente "
+    "por estado de revisión (?review=correct|false|pending).",
 )
 async def list_composers(
     q: str | None = Query(default=None, description="Filtro por nombre o alias"),
+    review: str | None = Query(default=None, description="Filtro por review_status"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     uc: ListComposers = Depends(ListComposersDep),
 ) -> ComposerAdminListResult:
-    result = await uc.execute(limit=limit, offset=offset, q=q)
+    result = await uc.execute(limit=limit, offset=offset, q=q, review=review)
     return ComposerAdminListResult(
         items=[ComposerAdminRead.model_validate(i) for i in result.items],
         total=result.total,
@@ -113,3 +137,18 @@ async def merge_composers(
 ) -> MergeComposersResultRead:
     result = await uc.execute(target_id, payload.source_ids)
     return MergeComposersResultRead.model_validate(result)
+
+
+@router.post(
+    "/{composer_id}/review",
+    response_model=ComposerAdminDetail,
+    summary="Marcar revisión de un compositor",
+    description="Marca un compositor como correct/false/pending. No borra ni modifica la identidad.",
+)
+async def review_composer(
+    composer_id: str,
+    payload: ComposerReviewRequest,
+    uc: ReviewComposer = Depends(ReviewComposerDep),
+) -> ComposerAdminDetail:
+    detail = await uc.execute(composer_id, payload.review_status)
+    return ComposerAdminDetail.model_validate(detail)

@@ -8,10 +8,15 @@ from application.services.tar_downloader import TarDownloader
 from application.use_cases.archives import CountMissingEntries, GetArchive, ListArchives
 from application.use_cases.build_works import BuildWorks
 from application.use_cases.composer_admin import (
-    GetComposerDetail,
-    GetComposerWorks,
-    ListComposers,
-    MergeComposers,
+ClassifyComposers,
+CleanComposerNames,
+CreateComposer,
+GetComposerDetail,
+GetComposerWorks,
+ListComposers,
+MergeComposers,
+PruneComposers,
+ReviewComposer,
 )
 from application.use_cases.delete_file import DeleteFile
 from application.use_cases.enrich_metadata import EnrichWork
@@ -104,6 +109,11 @@ class Container:
     get_composer_detail: GetComposerDetail
     get_composer_works: GetComposerWorks
     merge_composers: MergeComposers
+    create_composer: CreateComposer
+    review_composer: ReviewComposer
+    classify_composers: ClassifyComposers
+    clean_composer_names: CleanComposerNames
+    prune_composers: PruneComposers
     record_vote: RecordVote
     get_work_statistics: GetWorkStatistics
     get_composer_statistics: GetComposerStatistics
@@ -239,6 +249,11 @@ def build_container(settings: Settings) -> Container:
     get_composer_detail = GetComposerDetail(composer_repo)
     get_composer_works = GetComposerWorks(composer_repo)
     merge_composers = MergeComposers(composer_repo)
+    create_composer = CreateComposer(composer_repo)
+    review_composer = ReviewComposer(composer_repo)
+    classify_composers = ClassifyComposers(composer_repo)
+    clean_composer_names = CleanComposerNames(composer_repo)
+    prune_composers = PruneComposers(composer_repo)
     record_vote = RecordVote(voting_repo, work_repo)
     get_work_statistics = GetWorkStatistics(voting_repo, work_repo)
     get_composer_statistics = GetComposerStatistics(voting_repo, composer_repo)
@@ -261,6 +276,11 @@ def build_container(settings: Settings) -> Container:
         get_composer_detail=get_composer_detail,
         get_composer_works=get_composer_works,
         merge_composers=merge_composers,
+        create_composer=create_composer,
+        review_composer=review_composer,
+        classify_composers=classify_composers,
+        clean_composer_names=clean_composer_names,
+        prune_composers=prune_composers,
         record_vote=record_vote,
         get_work_statistics=get_work_statistics,
         get_composer_statistics=get_composer_statistics,
