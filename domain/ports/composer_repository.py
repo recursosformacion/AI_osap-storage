@@ -5,6 +5,7 @@ from typing import Protocol
 from domain.entities.composer import (
     Composer,
     ComposerAlias,
+    ComposerCreationEvidence,
     ComposerDetail,
     ComposerSummary,
     ComposerWorkRef,
@@ -17,7 +18,13 @@ class ComposerRepository(Protocol):
 
     async def create(self, composer: Composer) -> Composer: ...
 
+    async def ensure_unknown_composer(self) -> Composer:
+        """Garantiza que existe el compositor 'Compositor sin indicar' (id estable)."""
+
     async def get_by_id(self, composer_id: str) -> Composer | None: ...
+
+    async def get_by_name(self, name: str) -> Composer | None:
+        """Compositor activo con ese nombre exacto (insensible a mayúsculas) o None."""
 
     async def add_alias(self, composer_id: str, alias: str, normalized_alias: str) -> ComposerAlias:
         """Añade un alias. Debe fallar si `normalized_alias` ya apunta a otro compositor."""
@@ -32,13 +39,49 @@ class ComposerRepository(Protocol):
 
     async def list_aliases(self, composer_id: str) -> list[ComposerAlias]: ...
 
-    async def list_summaries(
-        self, *, limit: int, offset: int, q: str | None = None
-    ) -> list[ComposerSummary]:
-        """Lista compositores activos (paginado). Si `q`, filtra por nombre/alias."""
+    async def add_creation_evidence(
+        self,
+        composer_id: str,
+        *,
+        work_id: int | None = None,
+        work_title: str | None = None,
+        extracted_author: str | None = None,
+        provider: str | None = None,
+        resource_reference: str | None = None,
+    ) -> ComposerCreationEvidence:
+        """Asocia una obra/referencia como evidencia de creación de un compositor."""
 
-    async def count(self, q: str | None = None) -> int:
+    async def list_creation_evidence(self, composer_id: str) -> list[ComposerCreationEvidence]:
+        """Evidencia de creación del compositor (trazabilidad). Nunca se borra en una fusión."""
+
+    async def backfill_creation_evidence(self, provider: str | None = None) -> int:
+        """Crea evidencia de creación para compositores activos que aún no la tienen,
+        derivada de una de sus Works. Idempotente. Devuelve cuántas se crearon."""
+
+    async def prune_zero_work_composers(self) -> int:
+        """Borra compositores activos sin ninguna obra asociada (salvo 'Compositor sin
+        indicar'). Devuelve cuántos se eliminaron."""
+
+    async def list_summaries(
+        self, *, limit: int, offset: int, q: str | None = None, review: str | None = None
+    ) -> list[ComposerSummary]:
+        """Lista compositores activos (paginado). Si `q`, filtra por nombre/alias.
+        Si `review`, filtra por review_status (correct/false/pending)."""
+
+    async def count(self, q: str | None = None, review: str | None = None) -> int:
         """Cuenta compositores activos (mismo criterio de filtro que `list_summaries`)."""
+
+    async def review_counts(self) -> dict[str, int]:
+        """Conteo de compositores activos por review_status (total, correct, incorrect, reviewed, not_reviewed)."""
+
+    async def set_review_status(self, composer_id: str, review_status: str) -> None:
+        """Marca el estado de revisión de un compositor (correct/false/pending)."""
+
+    async def rename_composer(self, composer_id: str, new_name: str) -> None:
+        """Actualiza el nombre canónico de un compositor y su alias canónico."""
+
+    async def list_pending_review(self, *, limit: int, offset: int) -> list[ComposerSummary]:
+        """Compositores activos pendientes de revisión (para clasificación heurística)."""
 
     async def get_detail(self, composer_id: str) -> ComposerDetail | None:
         """Detalle administrativo: aliases, works_count, estado y referencia de fusión."""

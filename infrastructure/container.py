@@ -10,6 +10,7 @@ from application.use_cases.build_works import BuildWorks
 from application.use_cases.composer_admin import (
 ClassifyComposers,
 CleanComposerNames,
+ComposerReviewStats,
 CreateComposer,
 GetComposerDetail,
 GetComposerWorks,
@@ -111,6 +112,7 @@ class Container:
     merge_composers: MergeComposers
     create_composer: CreateComposer
     review_composer: ReviewComposer
+    composer_review_stats: ComposerReviewStats
     classify_composers: ClassifyComposers
     clean_composer_names: CleanComposerNames
     prune_composers: PruneComposers
@@ -251,6 +253,7 @@ def build_container(settings: Settings) -> Container:
     merge_composers = MergeComposers(composer_repo)
     create_composer = CreateComposer(composer_repo)
     review_composer = ReviewComposer(composer_repo)
+    composer_review_stats = ComposerReviewStats(composer_repo)
     classify_composers = ClassifyComposers(composer_repo)
     clean_composer_names = CleanComposerNames(composer_repo)
     prune_composers = PruneComposers(composer_repo)
@@ -278,6 +281,7 @@ def build_container(settings: Settings) -> Container:
         merge_composers=merge_composers,
         create_composer=create_composer,
         review_composer=review_composer,
+        composer_review_stats=composer_review_stats,
         classify_composers=classify_composers,
         clean_composer_names=clean_composer_names,
         prune_composers=prune_composers,

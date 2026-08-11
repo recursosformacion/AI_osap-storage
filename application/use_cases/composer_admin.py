@@ -51,6 +51,16 @@ class ReviewComposer:
         return detail
 
 
+class ComposerReviewStats:
+    """Conteo de compositores por estado de revisión (para el resumen de admin)."""
+
+    def __init__(self, composers: ComposerRepository) -> None:
+        self._composers = composers
+
+    async def execute(self) -> dict[str, int]:
+        return await self._composers.review_counts()
+
+
 class ClassifyComposers:
     """Clasifica heurísticamente los compositores pendientes como correct/false."""
 

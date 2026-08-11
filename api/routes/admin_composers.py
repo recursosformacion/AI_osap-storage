@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from application.use_cases.composer_admin import (
+    ComposerReviewStats,
     CreateComposer,
     GetComposerDetail,
     GetComposerWorks,
@@ -11,6 +12,7 @@ from application.use_cases.composer_admin import (
 from fastapi import APIRouter, Depends, Query
 
 from api.dependencies import (
+    ComposerReviewStatsDep,
     CreateComposerDep,
     GetComposerDetailDep,
     GetComposerWorksDep,
@@ -31,6 +33,16 @@ from api.schemas import (
 )
 
 router = APIRouter(prefix="/api/admin/composers", tags=["admin-composers"])
+
+
+@router.get(
+    "/stats",
+    summary="Composer review statistics",
+    description="Conteo de compositores activos por review_status (total, correct, "
+    "incorrect, reviewed, not_reviewed).",
+)
+async def composer_review_stats(uc: ComposerReviewStats = Depends(ComposerReviewStatsDep)) -> dict[str, int]:
+    return await uc.execute()
 
 
 @router.post(
