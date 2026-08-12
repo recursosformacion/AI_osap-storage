@@ -94,9 +94,16 @@ class ServiceTokenValidator:
 
         Lanza `ServiceAuthError` si el token no es un service token válido o no tiene scope.
         """
-        unverified = jwt.decode(token, options={"verify_signature": False})
+        try:
+            unverified = jwt.decode(token, options={"verify_signature": False})
+        except jwt.InvalidTokenError as exc:
+            raise ServiceAuthError(401, "token inválido") from exc
         kid = unverified.get("kid") or self._kid
-        key = await self._get_verification_key(kid)
+        try:
+            key = await self._get_verification_key(kid)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("clave de verificación no disponible: %s", exc)
+            key = None
         if key is None:
             raise ServiceAuthError(503, "verification key unavailable")
 

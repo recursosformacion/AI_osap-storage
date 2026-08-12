@@ -64,7 +64,7 @@ auth:
   enabled: false
   issuer: https://auth.openmusicrepository.com
   audience: osap-storage
-  jwks_url: https://auth.openmusicrepository.com/.well-known/jwks.json
+  jwks_url: http://127.0.0.1:8200/auth/.well-known/jwks.json
   # public_key: <PEM de osap-auth>   # alternativa/local (sin JWKS)
   # kid: osap-auth-v1
   clock_skew_seconds: 60

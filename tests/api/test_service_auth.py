@@ -77,6 +77,7 @@ def test_no_token_401():
     priv, pub = _make_keys()
     client = TestClient(_make_app(priv, pub))
     assert client.get("/api/search").status_code == 401
+    assert client.get("/api/search", headers={"Authorization": "Bearer no-es-un-jwt"}).status_code == 401
 
 
 def test_read_requires_storage_read():
