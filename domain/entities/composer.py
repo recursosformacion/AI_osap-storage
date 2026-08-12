@@ -3,6 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
+# Composer especial "Compositor sin indicar": las obras sin compositor (o que queden
+# vacías) apuntan a esta identidad, que se define como un compositor más del sistema.
+UNKNOWN_COMPOSER = "Compositor sin indicar"
+UNKNOWN_COMPOSER_ID = "00000000-0000-0000-0000-000000000001"
+
 
 class ComposerStatus:
     ACTIVE = "active"
@@ -20,9 +25,12 @@ class Composer:
 
     id: str
     name: str
+    musicbrainz_id: str | None = None
     status: str = ComposerStatus.ACTIVE
     merged_into: str | None = None
     merged_at: datetime | None = None
+    review_status: str = "not_reviewed"
+    reviewed_at: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -43,6 +51,26 @@ class ComposerAlias:
     created_at: datetime | None = None
 
 
+@dataclass
+class ComposerCreationEvidence:
+    """Trazabilidad de cómo un compositor fue creado a partir de una obra.
+
+    Referencia a la obra que provocó la creación (o, en su ausencia, la referencia
+    al recurso original), los datos de autor extraídos originalmente y el proveedor.
+    No se copia la obra; se conserva una referencia. La evidencia nunca se borra en
+    una fusión: se redirige al compositor destino.
+    """
+
+    composer_id: str
+    extracted_author: str | None = None
+    work_id: int | None = None
+    work_title: str | None = None
+    provider: str | None = None
+    resource_reference: str | None = None
+    id: int | None = None
+    created_at: datetime | None = None
+
+
 @dataclass(frozen=True)
 class ComposerSummary:
     """Fila ligera del listado administrativo (sin cargar aliases ni Works)."""
@@ -52,6 +80,7 @@ class ComposerSummary:
     status: str
     aliases_count: int = 0
     works_count: int = 0
+    review_status: str = "not_reviewed"
 
 
 @dataclass(frozen=True)
@@ -65,6 +94,9 @@ class ComposerDetail:
     works_count: int = 0
     merged_into: str | None = None
     merged_at: datetime | None = None
+    review_status: str = "not_reviewed"
+    reviewed_at: datetime | None = None
+    creation_evidence: list[ComposerCreationEvidence] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

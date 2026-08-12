@@ -137,4 +137,38 @@ con el **añadido** de que todas sus rutas exigen ahora un **token de servicio**
 `storage:read`. Los DTOs no cambian.
 
 ---
+
+# 9. Estado de implementación (tarea prioritaria de seguridad)
+
+> **Implementado, NO desplegado.** Se trata de una tarea prioritaria de infraestructura/seguridad
+> que **no debe desplegarse hasta probar conjuntamente** `osap-api → osap-auth → osap-storage`.
+
+Implementado en `api/security.py`:
+- `ServiceTokenValidator`: valida JWT de servicio (RS256) contra el **JWKS** de osap-auth (o clave
+  pública configurada), comprueba `iss`, `aud`, `exp` (+ clock skew), `token_use == "service"` y
+  `scope`.
+- `ServiceAuthMiddleware`: **protect-all-by-default** — protege todas las rutas salvo `/api/v1/health`
+  y `/metrics`. Determina el scope según método/ruta:
+  - `/api/admin/*` → `storage:admin`
+  - `POST/PUT/PATCH/DELETE` → `storage:write`
+  - resto (`GET` etc.) → `storage:read`
+
+Configuración (en `config.example.yaml` y `Settings`):
+```yaml
+auth:
+  enabled: false            # activar solo al desplegar la frontera de seguridad
+  issuer: https://auth.openmusicrepository.com
+  audience: osap-storage
+  jwks_url: https://auth.openmusicrepository.com/.well-known/jwks.json
+  clock_skew_seconds: 60
+```
+
+Valores operativos confirmados del contrato de osap-auth: `issuer=https://auth.openmusicrepository.com`,
+`jwt_kid=osap-auth-v1`, scopes de servicio `storage:read` / `storage:write` / `storage:admin`, y
+`token_use` (`user`/`service`). Pendiente de confirmar antes del despliegue: URL JWKS efectiva y
+`audience` concreta que osap-auth emita para storage.
+
+`/api/admin/composers/{target_id}/merge` exige **`storage:admin`** (no basta `storage:read`).
+
+---
 *Documento de autenticación de servicio para osap-storage (v1, 2026-08).*

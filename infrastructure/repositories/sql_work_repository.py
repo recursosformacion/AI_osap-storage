@@ -33,6 +33,7 @@ def _row_to_work(row: dict) -> Work:
         public_domain=bool(row["public_domain"]),
         description=row["description"],
         thumbnails=row["thumbnails"],
+        relative_path=row["relative_path"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
@@ -45,8 +46,9 @@ class SqlWorkRepository(WorkRepository):
     async def create(self, work: Work) -> Work:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "INSERT INTO works (work_key, composer, composer_id, title) VALUES (%s, %s, %s, %s)",
-                (work.work_key, work.composer, work.composer_id, work.title),
+                "INSERT INTO works (work_key, relative_path, composer, composer_id, title, tags) "
+                "VALUES (%s, %s, %s, %s, %s, %s)",
+                (work.work_key, work.relative_path, work.composer, work.composer_id, work.title, work.tags),
             )
             work.id = cur.lastrowid
             return work
@@ -54,11 +56,13 @@ class SqlWorkRepository(WorkRepository):
     async def update(self, work: Work) -> None:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "UPDATE works SET composer=%s, composer_id=%s, title=%s, subtitle=%s, artist=%s, song_name=%s, "
-                "genre=%s, opus=%s, catalogue=%s, musical_key=%s, year=%s, instrumentation=%s, "
-                "language=%s, tags=%s, duration=%s, measures=%s, pages=%s, parts=%s, complexity=%s, "
-                "license=%s, public_domain=%s, description=%s, thumbnails=%s WHERE id=%s",
+                "UPDATE works SET relative_path=%s, composer=%s, composer_id=%s, title=%s, "
+                "subtitle=%s, artist=%s, song_name=%s, genre=%s, opus=%s, catalogue=%s, "
+                "musical_key=%s, year=%s, instrumentation=%s, language=%s, tags=%s, "
+                "duration=%s, measures=%s, pages=%s, parts=%s, complexity=%s, license=%s, "
+                "public_domain=%s, description=%s, thumbnails=%s WHERE id=%s",
                 (
+                    work.relative_path,
                     work.composer,
                     work.composer_id,
                     work.title,

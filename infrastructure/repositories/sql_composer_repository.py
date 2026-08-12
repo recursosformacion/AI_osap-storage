@@ -23,6 +23,7 @@ def _row_to_composer(row: dict) -> Composer:
     return Composer(
         id=row["id"],
         name=row["name"],
+        musicbrainz_id=row.get("musicbrainz_id"),
         status=row.get("status") or ComposerStatus.ACTIVE,
         merged_into=row.get("merged_into"),
         merged_at=row.get("merged_at"),
@@ -285,6 +286,13 @@ class SqlComposerRepository(ComposerRepository):
             await cur.execute(
                 "UPDATE composers SET review_status = %s, reviewed_at = NOW(6) WHERE id = %s",
                 (review_status, composer_id),
+            )
+
+    async def set_musicbrainz_id(self, composer_id: str, musicbrainz_id: str | None) -> None:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "UPDATE composers SET musicbrainz_id = %s, updated_at = NOW(6) WHERE id = %s",
+                (musicbrainz_id, composer_id),
             )
 
     async def rename_composer(self, composer_id: str, new_name: str) -> None:

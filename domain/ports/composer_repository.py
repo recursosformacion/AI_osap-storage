@@ -77,6 +77,9 @@ class ComposerRepository(Protocol):
     async def set_review_status(self, composer_id: str, review_status: str) -> None:
         """Marca el estado de revisión de un compositor (correct/false/pending)."""
 
+    async def set_musicbrainz_id(self, composer_id: str, musicbrainz_id: str | None) -> None:
+        """Guarda el identificador del artista en MusicBrainz (trazabilidad)."""
+
     async def rename_composer(self, composer_id: str, new_name: str) -> None:
         """Actualiza el nombre canónico de un compositor y su alias canónico."""
 

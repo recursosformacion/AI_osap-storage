@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from application.use_cases.works import GetWork, ResourceSummary, SearchWorks, SearchWorksFull, WorkDetail
+from domain.entities.work import display_composer
 from domain.ports.archive_repositories import ArchiveEntryRepository
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
@@ -97,7 +98,7 @@ def _work(detail: WorkDetail) -> dict[str, Any]:
     return {
         "id": w.id,
         "title": w.title,
-        "composer": w.composer,
+        "composer": display_composer(w.composer),
         "composer_id": w.composer_id,
         "catalogue": w.catalogue,
         "aliases": [],
@@ -132,7 +133,7 @@ async def lookup(
         ProviderLookupItem(
             id=w.id,
             title=w.title,
-            composer=w.composer,
+            composer=display_composer(w.composer),
             catalogue=w.catalogue,
             confidence=1.0,
         )

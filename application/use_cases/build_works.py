@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from domain.entities.composer import UNKNOWN_COMPOSER_ID
 from domain.entities.work import Work
 from domain.ports.archive_repositories import ArchiveEntryRepository
 from domain.ports.work_repository import WorkRepository
@@ -49,12 +50,15 @@ class BuildWorks:
         offset = 0
 
         async def composer_id_of(name: str | None) -> str | None:
-            if name is None:
-                return None
-            if name not in composer_cache:
-                resolved = await self._resolver.resolve(name) if self._resolver else None
-                composer_cache[name] = resolved[0] if resolved else None
-            return composer_cache[name]
+            from domain.services.composer_quality import extract_composer_name
+
+            extracted = extract_composer_name(name)
+            if extracted is None:
+                return UNKNOWN_COMPOSER_ID
+            if extracted not in composer_cache:
+                resolved = await self._resolver.resolve(extracted) if self._resolver else None
+                composer_cache[extracted] = resolved[0] if resolved else UNKNOWN_COMPOSER_ID
+            return composer_cache[extracted]
 
         while True:
             batch = await self._entries.list_all(limit=limit, offset=offset)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from domain.entities.composer import UNKNOWN_COMPOSER_ID
 from domain.entities.work import Work
 from domain.ports.work_repository import WorkRepository
 from domain.services.composer_resolver import ComposerResolver
@@ -68,8 +69,11 @@ class EnrichWork:
             work.instrumentation = ", ".join(e.parts_names)
 
         if self._resolver is not None:
-            resolved = await self._resolver.resolve(work.composer)
-            work.composer_id = resolved[0] if resolved else None
+            from domain.services.composer_quality import extract_composer_name
+
+            extracted = extract_composer_name(work.composer)
+            resolved = await self._resolver.resolve(extracted) if extracted else None
+            work.composer_id = resolved[0] if resolved else UNKNOWN_COMPOSER_ID
 
         await self._works.update(work)
         await self._works.replace_tags(work.id, e.tags)

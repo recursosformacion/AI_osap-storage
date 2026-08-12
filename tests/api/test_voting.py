@@ -68,6 +68,12 @@ def _container(settings, works, votes, composers) -> Container:
         get_composer_detail=object(),  # type: ignore[arg-type]
         get_composer_works=object(),  # type: ignore[arg-type]
         merge_composers=object(),  # type: ignore[arg-type]
+        review_composer=object(),  # type: ignore[arg-type]
+        classify_composers=object(),  # type: ignore[arg-type]
+        clean_composer_names=object(),  # type: ignore[arg-type]
+        prune_composers=object(),  # type: ignore[arg-type]
+        create_composer=object(),  # type: ignore[arg-type]
+        composer_review_stats=object(),  # type: ignore[arg-type]
         record_vote=RecordVote(votes, works),
         get_work_statistics=GetWorkStatistics(votes, works),
         get_composer_statistics=GetComposerStatistics(votes, composers),

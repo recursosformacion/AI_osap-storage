@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from domain.entities.composer import Composer
 from domain.ports.composer_repository import ComposerRepository
 from domain.services.composer_names import normalize_composer_name
+from domain.services.composer_quality import clean_composer_name, extract_composer_name
 
 _EMPTY_MARKERS = {"na", "n/a", "nan", "null", "none", "unknown", "anon", "anon.", "anonymous", "-"}
 
@@ -35,13 +36,23 @@ class PopulateComposers:
     def __init__(self, composers: ComposerRepository) -> None:
         self._composers = composers
 
-    async def execute(self, names: Iterable[str]) -> PopulateComposersResult:
+    async def execute(
+        self, names: Iterable[str], *, provider: str | None = None
+    ) -> PopulateComposersResult:
         groups: dict[str, dict[str, int]] = {}
+        extract_cache: dict[str, str | None] = {}
         for name in names:
             raw = (name or "").strip()
             if not raw or raw.lower() in _EMPTY_MARKERS:
                 continue
-            normalized = normalize_composer_name(raw)
+            # Caché por nombre bruto: evita repetir NER para el mismo texto (los nombres
+            # aparecen muchas veces en el índice, pero las extracciones son pocas y costosas).
+            if raw not in extract_cache:
+                extract_cache[raw] = extract_composer_name(raw)
+            extracted = extract_cache[raw]
+            if not extracted:
+                continue
+            normalized = normalize_composer_name(extracted)
             if not normalized:
                 continue
             spellings = groups.setdefault(normalized, {})
@@ -51,13 +62,23 @@ class PopulateComposers:
         aliases = 0
         reused = 0
         for normalized, spellings in groups.items():
-            canonical = self._pick_canonical(spellings)
+            raw_canonical = self._pick_canonical(spellings)
+            canonical = extract_composer_name(raw_canonical) or clean_composer_name(raw_canonical)
             existing = await self._composers.resolve_by_normalized(normalized)
             if existing is not None:
                 reused += 1
                 continue
             composer = await self._composers.create(Composer(id="", name=canonical))
-            await self._composers.add_alias(composer.id, canonical, normalized)
+            await self._composers.add_alias(
+                composer.id, canonical, normalize_composer_name(canonical)
+            )
+            if provider:
+                await self._composers.add_creation_evidence(
+                    composer.id,
+                    extracted_author=canonical,
+                    provider=provider,
+                    resource_reference=canonical,
+                )
             created += 1
             aliases += 1
 

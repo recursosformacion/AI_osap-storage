@@ -50,27 +50,69 @@ def _cmd_populate_composers(args: argparse.Namespace, container: Container):
     if not csv_path:
         raise ValueError("no CSV: indica --csv o providers.pdmx.source.csv en config")
     names = _read_composer_names(csv_path)
-    return PopulateComposers(container.composer_repo).execute(names)
+    return PopulateComposers(container.composer_repo).execute(names, provider=args.provider)
+
+
+async def _cmd_backfill_creation_evidence(args: argparse.Namespace, container: Container):
+    return {"created": await container.composer_repo.backfill_creation_evidence(provider=args.provider)}
+
+
+async def _cmd_classify_composers(args: argparse.Namespace, container: Container):
+    return await container.classify_composers.execute()
+
+
+async def _cmd_clean_composer_names(args: argparse.Namespace, container: Container):
+    return await container.clean_composer_names.execute()
+
+
+async def _cmd_prune_composers(args: argparse.Namespace, container: Container):
+    return {"removed": await container.prune_composers.execute()}
+
+
+async def _cmd_musicbrainz_enrich(args: argparse.Namespace, container: Container):
+    from application.use_cases.musicbrainz_enrich import EnrichComposersMusicBrainz
+
+    from infrastructure.repositories.sql_musicbrainz_cache_repository import (
+        SqlMusicBrainzCacheRepository,
+    )
+    from infrastructure.services.musicbrainz_client import (
+        CachedMusicBrainzClient,
+        MusicBrainzClient,
+    )
+
+    mb = CachedMusicBrainzClient(MusicBrainzClient(), SqlMusicBrainzCacheRepository(container.db))
+    return await EnrichComposersMusicBrainz(container.composer_repo, mb).execute(limit=args.limit)
 
 
 async def _cmd_backfill_composer_ids(args: argparse.Namespace, container: Container):
+    from domain.entities.composer import UNKNOWN_COMPOSER_ID
+    from domain.services.composer_quality import extract_composer_name
     from domain.services.composer_resolver import ComposerResolver
 
     resolver = ComposerResolver(container.composer_repo)
+    await container.composer_repo.ensure_unknown_composer()
     updated = 0
     scanned = 0
     offset = 0
     limit = 500
+    extract_cache: dict[str | None, str | None] = {}
     while True:
         works = await container.work_repo.list_all(limit=limit, offset=offset)
         if not works:
             break
-        resolved = await resolver.resolve_many([w.composer for w in works])
-        pending = []
+        # Extrae el nombre del compositor con el MISMO algoritmo de populate (heurística+NER),
+        # con caché por texto bruto (los nombres se repiten en miles de obras).
+        extracted = []
         for w in works:
+            if w.composer not in extract_cache:
+                extract_cache[w.composer] = extract_composer_name(w.composer)
+            extracted.append(extract_cache[w.composer])
+        resolved = await resolver.resolve_many(extracted)
+        pending = []
+        for w, name in zip(works, extracted, strict=True):
             scanned += 1
-            r = resolved.get(w.composer)
-            new_id = r[0] if r else None
+            r = resolved.get(name)
+            new_id = r[0] if r else UNKNOWN_COMPOSER_ID
             if w.composer_id != new_id:
                 w.composer_id = new_id
                 pending.append(w)
@@ -83,6 +125,23 @@ async def _cmd_backfill_composer_ids(args: argparse.Namespace, container: Contai
 
 async def _cmd_recompute_statistics(args: argparse.Namespace, container: Container):
     return await container.refresh_voting_statistics.execute()
+
+
+async def _cmd_register_external_work(args: argparse.Namespace, container: Container):
+    from application.use_cases.external_works import RegisterExternalWork
+
+    work = await RegisterExternalWork(container.work_repo).execute(
+        reference=args.reference,
+        provider=args.provider,
+        composer=args.composer,
+        title=args.title,
+    )
+    return {
+        "work_id": work.id,
+        "work_key": work.work_key,
+        "relative_path": work.relative_path,
+        "tags": work.tags,
+    }
 
 
 def _cmd_import_pdmx(args: argparse.Namespace, container: Container):
@@ -380,7 +439,41 @@ def build_parser() -> argparse.ArgumentParser:
         help="Poblar composers/composer_aliases desde un CSV con columna de compositor",
     )
     populate.add_argument("csv", nargs="?", default=None, help="Ruta al CSV (por defecto: config)")
+    populate.add_argument("--provider", default="pdmx",
+                          help="Proveedor/origen para registrar evidencia de creación")
     populate.set_defaults(handler=_cmd_populate_composers)
+
+    backfill_ev = sub.add_parser(
+        "backfill-creation-evidence",
+        help="Crear evidencia de creación para compositores activos que aún no la tienen",
+    )
+    backfill_ev.add_argument("--provider", default="pdmx", help="Origen a registrar")
+    backfill_ev.set_defaults(handler=_cmd_backfill_creation_evidence)
+
+    classify = sub.add_parser(
+        "classify-composers",
+        help="Clasificar heurísticamente los compositores pendientes como correct/false",
+    )
+    classify.set_defaults(handler=_cmd_classify_composers)
+
+    clean = sub.add_parser(
+        "clean-composer-names",
+        help="Limpiar los nombres de compositor y fusionar colisiones",
+    )
+    clean.set_defaults(handler=_cmd_clean_composer_names)
+
+    prune = sub.add_parser(
+        "prune-composers",
+        help="Eliminar compositores activos sin ninguna obra (fantasmas)",
+    )
+    prune.set_defaults(handler=_cmd_prune_composers)
+
+    mb = sub.add_parser(
+        "musicbrainz-enrich",
+        help="Validar/canonicalizar/fusionar compositores con MusicBrainz (respeta 1 req/s)",
+    )
+    mb.add_argument("--limit", type=int, default=50, help="Nº de compositores a procesar")
+    mb.set_defaults(handler=_cmd_musicbrainz_enrich)
 
     backfill = sub.add_parser(
         "backfill-composer-ids",
@@ -393,6 +486,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Recalcular las estadísticas de votación (works y compositores). Idempotente.",
     )
     recompute.set_defaults(handler=_cmd_recompute_statistics)
+
+    external = sub.add_parser(
+        "register-external-work",
+        help="Registrar una obra externa sin fichero local (conserva referencia y procedencia)",
+    )
+    external.add_argument("--reference", required=True, help="Referencia proporcionada por el proveedor")
+    external.add_argument("--provider", required=True, help="Nombre del proveedor/directorio externo")
+    external.add_argument("--composer", default=None, help="Compositor (opcional)")
+    external.add_argument("--title", default=None, help="Título (opcional)")
+    external.set_defaults(handler=_cmd_register_external_work)
 
     return parser
 

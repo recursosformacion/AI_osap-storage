@@ -49,7 +49,7 @@ Write-Host "[3/6] Subiendo código al servidor..."
 tar.exe -czf - `
     --exclude=.venv --exclude=data --exclude=__pycache__ --exclude=.git `
     --exclude=.pytest_cache --exclude=.ruff_cache --exclude=.env `
-    --exclude=config.yaml --exclude=config.production.yaml -C $root . |
+    --exclude=config.yaml --exclude=config.test.yaml --exclude=config.production.yaml -C $root . |
     ssh -o BatchMode=yes "$User@$Server" "mkdir -p $RemoteDir && tar -xzf - -C $RemoteDir"
 if ($LASTEXITCODE -ne 0) { throw "Fallo al subir el código" }
 

@@ -67,6 +67,12 @@ def _container(settings, composer_repo) -> Container:
         get_composer_detail=GetComposerDetail(composer_repo),
         get_composer_works=GetComposerWorks(composer_repo),
         merge_composers=MergeComposers(composer_repo),
+        review_composer=object(),  # type: ignore[arg-type]
+        classify_composers=object(),  # type: ignore[arg-type]
+        clean_composer_names=object(),  # type: ignore[arg-type]
+        prune_composers=object(),  # type: ignore[arg-type]
+        create_composer=object(),  # type: ignore[arg-type]
+        composer_review_stats=object(),  # type: ignore[arg-type]
         voting_repo=object(),  # type: ignore[arg-type]
         record_vote=object(),  # type: ignore[arg-type]
         get_work_statistics=object(),  # type: ignore[arg-type]
@@ -145,7 +151,7 @@ def test_list_composers_paginated(client):
     body = resp.json()
     assert body["total"] == 3
     assert len(body["items"]) == 2
-    assert set(body["items"][0].keys()) == {"id", "name", "status", "aliases_count", "works_count"}
+    assert set(body["items"][0].keys()) == {"id", "name", "status", "aliases_count", "works_count", "review_status"}
 
 
 def test_list_search_by_name(client):

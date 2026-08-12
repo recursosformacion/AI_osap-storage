@@ -13,7 +13,7 @@ def _names():
         "W. A. Mozart", "w. a. mozart", "W A Mozart", "W. A. Mozart",
         # Grupo "wolfgang amadeus mozart"
         "Wolfgang Amadeus Mozart",
-        # Desconocido / ruido que se conserva como propio grupo
+        # Texto sin persona reconocible -> se descarta (no crea compositor)
         "Compositor Inexistente",
         # Vacíos se ignoran
         "", "NA", None,
@@ -27,7 +27,6 @@ def test_populate_creates_composers_and_aliases():
     assert result.aliases == 3
     assert result.reused == 0
 
-    # La variante trivial y la canónica completa son grupos distintos (no se fusionan).
     assert len(repo._composers) == 3
     aliases = []
     for group in repo._aliases.values():
@@ -52,10 +51,10 @@ def test_canonical_is_most_frequent_longest():
     asyncio.run(PopulateComposers(repo).execute(
         ["W. A. Mozart", "W. A. Mozart", "Wolfgang Amadeus Mozart"]
     ))
-    # Grupo "w a mozart": "W. A. Mozart" más frecuente -> canónico
+    # Grupo "w a mozart": "W. A. Mozart" más frecuente -> canónico (limpiado)
     resolved = asyncio.run(repo.resolve_by_normalized("w a mozart"))
     assert resolved is not None
-    assert resolved[1] == "W. A. Mozart"
+    assert resolved[1] == "W A Mozart"
     # Grupo "wolfgang amadeus mozart"
     resolved2 = asyncio.run(repo.resolve_by_normalized("wolfgang amadeus mozart"))
     assert resolved2 is not None
@@ -67,5 +66,5 @@ def test_populate_resolvable_from_alias():
     asyncio.run(PopulateComposers(repo).execute(_names()))
     result = asyncio.run(repo.resolve_by_normalized(normalize_composer_name("w. a. mozart")))
     assert result is not None
-    assert result[1] == "W. A. Mozart"
+    assert result[1] == "W A Mozart"
     assert result[0]  # id no vacío

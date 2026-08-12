@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from application.use_cases.works import GetWork, SearchWorks
+from domain.entities.work import display_composer
 from fastapi import APIRouter, Depends, Query
 from infrastructure.config import Settings
 
@@ -24,7 +25,12 @@ async def list_works(
     uc: SearchWorks = Depends(SearchWorksDep),
 ) -> list[WorkRead]:
     works = await uc.execute(q, limit=limit, offset=offset)
-    return [WorkRead.model_validate(w) for w in works]
+    out = []
+    for w in works:
+        item = WorkRead.model_validate(w)
+        item.composer = display_composer(item.composer)
+        out.append(item)
+    return out
 
 
 @router.get(
@@ -52,6 +58,7 @@ async def get_work(
             )
         )
     work_read = WorkRead.model_validate(detail.work)
+    work_read.composer = display_composer(work_read.composer)
     work_read.genres = detail.genres
     work_read.instruments = detail.instruments
     work_read.parts_names = detail.parts_names

@@ -68,6 +68,19 @@ def _load_yaml_config(path: Path) -> dict[str, Any]:
     if "create_default_provider" in bootstrap:
         cfg["bootstrap_create_default_provider"] = bootstrap["create_default_provider"]
 
+    auth = data.get("auth") or {}
+    for key, field in {
+        "enabled": "auth_enabled",
+        "issuer": "auth_issuer",
+        "audience": "auth_audience",
+        "jwks_url": "auth_jwks_url",
+        "public_key": "auth_public_key",
+        "kid": "auth_kid",
+        "clock_skew_seconds": "auth_clock_skew_seconds",
+    }.items():
+        if key in auth:
+            cfg[field] = auth[key]
+
     pdmx = ((data.get("providers") or {}).get("pdmx") or {}).get("source") or {}
     if "csv" in pdmx:
         cfg["pdmx_source_csv"] = pdmx["csv"]
@@ -120,6 +133,15 @@ class Settings(BaseSettings):
 
     # Crear el proveedor por defecto según repository.provider al arrancar
     bootstrap_create_default_provider: bool
+
+    # Autenticación de servicio (service-auth-v1). Desactivada por defecto hasta desplegar.
+    auth_enabled: bool = False
+    auth_issuer: str = ""
+    auth_audience: str = ""
+    auth_jwks_url: str = ""
+    auth_public_key: str = ""
+    auth_kid: str = ""
+    auth_clock_skew_seconds: int = 60
 
     @classmethod
     def settings_customise_sources(

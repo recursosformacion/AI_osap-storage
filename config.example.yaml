@@ -56,3 +56,15 @@ providers:
       csv: data/pdmx/pdmx.csv
       zenodo:
         base_url: https://zenodo.org/records/XXXX
+
+# Autenticación de servicio (service-auth-v1).
+# Desactivada por defecto (auth.enabled: false). Al desplegar la frontera de seguridad,
+# se activa con el JWKS de osap-auth y la audiencia de storage.
+auth:
+  enabled: false
+  issuer: https://auth.openmusicrepository.com
+  audience: osap-storage
+  jwks_url: https://auth.openmusicrepository.com/.well-known/jwks.json
+  # public_key: <PEM de osap-auth>   # alternativa/local (sin JWKS)
+  # kid: osap-auth-v1
+  clock_skew_seconds: 60

@@ -27,6 +27,8 @@ y nunca ejecuta fusiones automáticas.
 | `status`     | `VARCHAR`       | `active` o `merged`.                                    |
 | `merged_into`| `CHAR(36)` NULL | Id del compositor target cuando `status = merged`.      |
 | `merged_at`  | `DATETIME` NULL | Cuándo se fusionó.                                      |
+| `review_status`| `VARCHAR`     | `correct`, `incorrect`, `reviewed` o `not_reviewed` (clasificación heurística). |
+| `reviewed_at`| `DATETIME` NULL | Cuándo se revisó.                                       |
 
 ### `composer_aliases`
 
@@ -57,11 +59,12 @@ físicamente; se marcan como `merged` con `merged_into` para resolver referencia
 
 Todos bajo `/api/admin/composers`.
 
-### `GET /api/admin/composers?q=&limit=&offset=`
+### `GET /api/admin/composers?q=&review=&limit=&offset=`
 
 Listado paginado de compositores **activos**.
 
 - `q`: filtra por nombre o alias usando la misma normalización del resolver.
+- `review`: filtra por estado de revisión (`correct`, `false`, `pending`).
 - `limit` (1-500, por defecto 50), `offset` (por defecto 0).
 
 ```json
@@ -72,12 +75,47 @@ Listado paginado de compositores **activos**.
       "name": "Wolfgang Amadeus Mozart",
       "status": "active",
       "aliases_count": 5,
-      "works_count": 264
+      "works_count": 264,
+      "review_status": "pending"
     }
   ],
   "total": 1
 }
 ```
+
+### `POST /api/admin/composers/{id}/review`
+
+Body: `{ "review_status": "correct" | "incorrect" | "reviewed" | "not_reviewed" }`
+
+Marca el estado de revisión de un compositor (no borra ni modifica la identidad). El listado
+permite filtrar por `?review=` para revisar solo los `incorrect` (sospechosos) o los
+`not_reviewed`.
+
+### Clasificación heurística y extracción (NER)
+
+`osap-storage classify-composers` aplica una heurística (`domain/services/composer_quality.py`)
+sobre los compositores `not_reviewed`:
+
+- `correct`: nombre limpio de persona.
+- `incorrect`: sospechoso claro (patrones como `arranged from/by`, `attributed to`, `arr.`,
+  `by `, `[]`, `&`, `/`, cifras, sin letras). Estos van a la lista de revisión manual.
+- `not_reviewed`: ambiguo (palabra única o caracteres no sencillos), sin veredicto.
+- `reviewed`: lo fija la administración; el clasificador no lo emite.
+
+La extracción del compositor dentro del texto bruto usa dos fases (aplicadas en `populate-composers`
+y en el enlace de obras, para que ambos coincidan):
+
+1. **Heurística por marcas** (`arranged by/from`, `attributed to`, `arr.`, `" by "`) → compositor
+   claro antes/después de la marca.
+2. **NER** (spaCy `en_core_web_md`, opcional): extrae la entidad `PERSON` más larga, p. ej.
+   `"A bluegrass song gone haywire David Ladue"` → `"David Ladue"`.
+
+El candidato resultante pasa por `validar_nombre_compositor` (puntuación antroponímica: iniciales,
+mayúsculas, partículas, palabras prohibidas como `song`/`bluegrass`/`op`...). Si no es válido, el
+nombre se descarta y la obra va a "Compositor sin indicar". Dependencia opcional: `pip install
+"spacy>=3.7"` + `python -m spacy download en_core_web_md`.
+
+Es un filtro agresivo y no garantiza la identidad canónica; la revisión final es manual.
 
 ### `GET /api/admin/composers/candidates?q=&limit=&offset=`
 
@@ -183,6 +221,117 @@ esta sección; no hay una solución paralela en el código.
 Ver "Población inicial" en `docs/provider-api-contract.md`. Comandos:
 
 ```
-osap-storage populate-composers <csv>
-osap-storage backfill-composer-ids          # rellena works.composer_id desde works.composer
+osap-storage populate-composers <csv>                 # --provider registra evidencia de creación
+osap-storage backfill-composer-ids                    # rellena works.composer_id desde works.composer
+osap-storage backfill-creation-evidence --provider pdmx   # evidencia para compositores activos sin ella
 ```
+
+---
+
+## Requisito — Evidencia de creación de compositores
+
+> Estado: **implementado** (tabla `composer_creation_evidence`). Se registra al crear un
+> compositor a partir de una obra y se conserva como trazabilidad.
+
+### Motivación
+
+Hoy un compositor se representa aproximadamente como:
+
+```
+composer
+ ├── nombre
+ ├── aliases
+ └── works
+```
+
+Cuando un compositor se genera a partir de una obra (extracción), se pierde el **motivo por el que
+nació ese registro**. Esto dificulta la decisión de fusión y oculta errores del propio algoritmo de
+extracción.
+
+### Concepto
+
+Se introduce la noción de **evidencia de origen del compositor automático** (nombre tentativo en
+el modelo definitivo: `creation_evidence`). Distinguir:
+
+- **compositor creado manualmente** → sin evidencia automática;
+- **compositor creado por extracción** → evidencia de extracción que conserva la obra que provocó
+  la creación, los datos originales extraídos y el origen/proveedor.
+
+### Datos a conservar
+
+Cuando el algoritmo crea un compositor a partir de una obra, debe quedar asociada al menos una
+referencia a la obra que originó la creación:
+
+```
+Composer
+ ├── id
+ ├── name
+ ├── aliases
+ ├── ...
+ └── creation_evidence
+       ├── work_id                     # referencia a la obra (propiedad de osap-storage)
+       ├── nombre de la obra
+       ├── datos de autor extraídos    # texto/autor extraído originalmente
+       ├── proveedor / origen
+       └── referencia al recurso original
+```
+
+No se copia la obra dentro del compositor: se conserva una **referencia a `work_id`**, porque la
+obra ya es propiedad de osap-storage.
+
+### Utilidades
+
+1. **Pantalla de fusión**: mostrar por qué existe cada registro antes de fusionar.
+
+   ```
+   Compositor: Johann Sebastian Bach
+   Creado automáticamente a partir de:
+     Preludio en Do mayor
+     proveedor: IMSLP
+     referencia: ...
+     autor extraído originalmente: J. S. Bach
+
+   Compositor: J. S. Bach
+   Creado a partir de:
+     Prelude BWV 846
+     proveedor: X
+     autor extraído: Johann Seb. Bach
+   ```
+
+2. **Detección de errores de extracción**: al revisar la fuente se puede determinar si el
+   compositor está bien identificado, si el nombre se normalizó mal, si se creó un duplicado, si se
+   atribuyó la obra al compositor equivocado, o si el texto extraído no era realmente el
+   compositor. Esto es mucho más valioso que almacenar simplemente "este compositor tiene estas
+   obras".
+
+### Regla de fusión
+
+**No borrar la evidencia de creación tras una fusión.** La trazabilidad histórica puede ser
+precisamente lo que se necesite para deshacer o investigar una atribución incorrecta. La fusión
+redirige la evidencia de los compositores origen hacia el target (y registra la operación en
+`composer_merge_history`), **nunca la elimina**.
+
+### Modelo
+
+Tabla `composer_creation_evidence`:
+
+| campo               | tipo             | descripción                              |
+|---------------------|------------------|------------------------------------------|
+| `id`                | BIGINT (PK)      |                                          |
+| `composer_id`       | `CHAR(36)` (FK)  | Composer al que pertenece la evidencia.  |
+| `work_id`           | BIGINT NULL (FK) | Referencia a la obra que originó la creación. |
+| `work_title`        | `VARCHAR`        | Nombre de la obra en el momento de creación. |
+| `extracted_author`  | `VARCHAR`        | Datos de autor extraídos originalmente.  |
+| `provider`          | `VARCHAR`        | Proveedor / origen.                      |
+| `resource_reference`| `VARCHAR`        | Referencia al recurso original.          |
+| `created_at`        | `DATETIME`       |                                          |
+
+La obra no se copia en el compositor: se conserva una **referencia a `work_id`**. En `GET
+/api/admin/composers/{id}` el detalle incluye `creation_evidence` con estos datos, de modo que la
+pantalla de fusión puede mostrar por qué existe cada registro y detectar errores de extracción
+(normalización mal hecha, duplicados, atribución errónea, texto que no era el compositor).
+
+### Alcance
+
+Este requisito aplica a osap-storage y afecta a la administración de compositores. Queda fuera
+de esta anotación la lógica de osap-api.

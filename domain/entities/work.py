@@ -3,6 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from domain.entities.composer import UNKNOWN_COMPOSER
+
+
+def display_composer(composer: str | None) -> str:
+    """Devuelve el compositor o la etiqueta de compositor no indicado si está vacío."""
+    return composer if composer and composer.strip() else UNKNOWN_COMPOSER
+
 
 @dataclass
 class WorkLists:
@@ -40,6 +47,7 @@ class Work:
     description: str | None = None
     thumbnails: str | None = None
     work_key: str | None = None
+    relative_path: str | None = None
     id: int | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None

@@ -69,6 +69,20 @@ def create_app() -> FastAPI:
     app.state.container = container
     errors.register_exception_handlers(app)
     app.add_middleware(MetricsMiddleware)
+    if settings.auth_enabled:
+        from api.security import ServiceAuthMiddleware, ServiceTokenValidator
+
+        app.add_middleware(
+            ServiceAuthMiddleware,
+            validator=ServiceTokenValidator(
+                issuer=settings.auth_issuer,
+                audience=settings.auth_audience,
+                jwks_url=settings.auth_jwks_url,
+                public_key=settings.auth_public_key,
+                kid=settings.auth_kid,
+                clock_skew_seconds=settings.auth_clock_skew_seconds,
+            ),
+        )
     app.include_router(pages.router)
     app.include_router(search.router)
     app.include_router(health.router)
