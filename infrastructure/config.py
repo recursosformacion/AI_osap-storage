@@ -81,6 +81,12 @@ def _load_yaml_config(path: Path) -> dict[str, Any]:
         if key in auth:
             cfg[field] = auth[key]
 
+    osap_api = data.get("osap_api") or {}
+    if "base_url" in osap_api:
+        cfg["osap_api_base_url"] = osap_api["base_url"]
+    if "service_token" in osap_api:
+        cfg["osap_api_service_token"] = osap_api["service_token"]
+
     pdmx = ((data.get("providers") or {}).get("pdmx") or {}).get("source") or {}
     if "csv" in pdmx:
         cfg["pdmx_source_csv"] = pdmx["csv"]
@@ -142,6 +148,11 @@ class Settings(BaseSettings):
     auth_public_key: str = ""
     auth_kid: str = ""
     auth_clock_skew_seconds: int = 60
+
+    # osap-api (especialista en resolución de entidades externas). Storage llama a su
+    # POST /api/v1/composers/resolve y procesa la respuesta.
+    osap_api_base_url: str = "https://app.openmusicrepository.com"
+    osap_api_service_token: str | None = None
 
     @classmethod
     def settings_customise_sources(

@@ -15,6 +15,9 @@ class ComposerStatus:
 
 
 class ComposerResolutionDecision:
+    RESOLVED = "resolved"
+    AMBIGUOUS = "ambiguous"
+    NOT_FOUND = "not_found"
     AUTO_CORRECT = "auto_correct"
     PENDING_HUMAN = "pending_human"
     REJECTED = "rejected"

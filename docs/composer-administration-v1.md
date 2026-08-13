@@ -205,6 +205,36 @@ osap-storage recover-composer-identities --limit N
 
 Tablas: `composers.suspicious`/`suspicious_reason`, `composer_resolution` (auditoría).
 
+### Resolución delegada a osap-api
+
+Storage **no consulta entidades externas** (MusicBrainz, Wikidata, VIAF...): **osap-api** es el
+especialista. Storage llama a su endpoint público
+
+```
+POST https://app.openmusicrepository.com/api/v1/composers/resolve
+```
+
+con un payload mínimo `{work:{title, catalog, year}, composer:{name}, source, representations}`,
+y procesa la respuesta (`data.status`, `data.composer`, `data.confidence`, `data.input_quality`,
+`data.candidates[]`, `data.evidence[]`):
+
+- `status=resolved` → el compositor es la identidad canónica; storage la crea/enlaza
+  (`work.composer_id` = candidato), guarda alias/`musicbrainz_id`, y registra la resolución.
+- `status=ambiguous` → hay candidatos; revisión humana (`pending_human`).
+- `status=not_found` → sin candidatos; **no inventa** (`pending_human`).
+- `input_quality=corrupt_or_suspicious` → un nombre corrupto **nunca** se convierte en el canónico
+  (osap-api resuelve a partir de la obra, no del nombre).
+
+Cliente: `infrastructure/services/osap_api_client.py`. Config: `osap_api.base_url` (y opcional
+`osap_api.service_token` para `Authorization: Bearer`). Comando:
+
+```
+osap-storage recover-composer-identities --limit N
+```
+
+El dato original corrupto nunca se destruye: queda como `old_composer_id`/evidencia en
+`composer_resolution`.
+
 ### Pantalla web de gestión (osap-storage)
 
 osap-storage sirve una **pantalla web completa** del CRUD en `GET /admin`. Es storage quien

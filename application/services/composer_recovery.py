@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+from contextlib import suppress
+from dataclasses import dataclass, replace
 
 from domain.entities.composer import (
     Composer,
@@ -12,10 +14,9 @@ from domain.entities.work import Work
 from domain.ports.composer_repository import ComposerRepository
 from domain.ports.work_repository import WorkRepository
 from domain.services.composer_quality import is_mojibake
-from infrastructure.services.musicbrainz_client import MusicBrainzClient
+from infrastructure.services.osap_api_client import OsapApiClient
 
-RESOLVER_VERSION = "composer-recovery-v1"
-AUTO_THRESHOLD = 0.9
+RESOLVER_VERSION = "composer-recovery-v3"
 
 
 @dataclass(frozen=True)
@@ -24,30 +25,31 @@ class RecoveryStats:
     recovered: int = 0
     pending_human: int = 0
     no_title: int = 0
+    errors: int = 0
 
 
 class ComposerRecoveryService:
-    """Recupera la identidad de compositores partiendo de la OBRA, no del nombre corrupto.
+    """Recupera la identidad del compositor partiendo de la OBRA (no del nombre corrupto).
 
-    Flujo:
-    1. `detect_suspicious`: marca como sospechosos los compositores con nombre corrupto
-       (encoding) sin cambiar el valor original.
-    2. `recover(work)`: para una obra con compositor sospechoso, extrae la identidad del
-       título, busca evidencias independientes (MusicBrainz `work` -> compositor), calcula
-       confianza y guarda un `composer_resolution` (auditoría). Si la confianza es alta,
-       corrige `work.composer_id`; si es débil, queda para revisión humana.
-    El dato original corrupto nunca se destruye: queda como `old_composer_id`/evidencia.
+    Storage NO consulta entidades externas: es responsabilidad de osap-api
+    (`POST /api/v1/composers/resolve`). Storage le envía la obra y procesa la respuesta:
+    - resolved: el compositor es la identidad canónica -> aplicar a la obra.
+    - ambiguous: hay candidatos -> revisión humana (pending_human).
+    - not_found: sin candidatos -> no inventar (pending_human).
+    - input_quality corrupt_or_suspicious: un nombre corrupto nunca se convierte en canónico
+      (lo resuelve osap-api a partir de la obra).
+    Se guarda un `composer_resolution` (auditoría) y el dato original corrupto no se destruye.
     """
 
     def __init__(
         self,
         composers: ComposerRepository,
         works: WorkRepository,
-        mb: MusicBrainzClient,
+        osap_api: OsapApiClient,
     ) -> None:
         self._composers = composers
         self._works = works
-        self._mb = mb
+        self._osap_api = osap_api
 
     async def detect_suspicious(self, *, limit: int = 1000) -> RecoveryStats:
         stats = RecoveryStats()
@@ -59,12 +61,11 @@ class ComposerRecoveryService:
             for item in batch:
                 if is_mojibake(item.name):
                     await self._composers.set_suspicious(item.id, True, "encoding_anomaly")
-                    stats = RecoveryStats(detected=stats.detected + 1)
+                    stats = replace(stats, detected=stats.detected + 1)
             offset += limit
         return stats
 
     async def recover_batch(self, *, limit: int = 50) -> RecoveryStats:
-        """Recupera la identidad de un lote de obras con compositor sospechoso."""
         stats = RecoveryStats()
         processed = 0
         offset = 0
@@ -78,10 +79,12 @@ class ComposerRecoveryService:
                     if processed >= limit:
                         return stats
                     resolution = await self.recover(work, old_composer=composer)
-                    if resolution.decision == ComposerResolutionDecision.AUTO_CORRECT:
-                        stats = RecoveryStats(recovered=stats.recovered + 1)
+                    if resolution.decision == "resolved":
+                        stats = replace(stats, recovered=stats.recovered + 1)
+                    elif resolution.reason == "error":
+                        stats = replace(stats, errors=stats.errors + 1)
                     else:
-                        stats = RecoveryStats(pending_human=stats.pending_human + 1)
+                        stats = replace(stats, pending_human=stats.pending_human + 1)
                     processed += 1
             offset += limit
         return stats
@@ -98,108 +101,99 @@ class ComposerRecoveryService:
             )
             return await self._composers.record_resolution(resolution)
 
-        evidence: list[str] = []
-        candidate = await self._mb_composer_for_title(work.title, evidence)
-
-        if candidate is None:
+        payload = _build_payload(work, composer_name=old_composer.name if old_composer else None)
+        try:
+            envelope = await self._osap_api.resolve_composer(payload)
+        except Exception:
             resolution = ComposerResolution(
-                work_id=work.id, old_composer_id=old_id, reason="no_match",
-                evidence="\n".join(evidence),
+                work_id=work.id, old_composer_id=old_id, reason="error",
                 resolver_version=RESOLVER_VERSION,
                 decision=ComposerResolutionDecision.PENDING_HUMAN,
             )
             return await self._composers.record_resolution(resolution)
 
-        candidate_name, mbid = candidate
-        confidence = await self._confidence(work, candidate_name, evidence)
-        decision = (
-            ComposerResolutionDecision.AUTO_CORRECT
-            if confidence >= AUTO_THRESHOLD
-            else ComposerResolutionDecision.PENDING_HUMAN
+        data = envelope.get("data", {}) or {}
+        status = data.get("status") or "not_found"
+        confidence = float(data.get("confidence") or 0)
+        input_quality = data.get("input_quality") or "normal"
+        api_composer = data.get("composer") or None
+        candidates = data.get("candidates", []) or []
+        evidence = data.get("evidence", []) or []
+
+        evidence_json = json.dumps(
+            {
+                "status": status,
+                "input_quality": input_quality,
+                "confidence": confidence,
+                "candidates": candidates,
+                "evidence": evidence,
+            },
+            ensure_ascii=False,
         )
+
         resolution = ComposerResolution(
             work_id=work.id,
             old_composer_id=old_id,
             candidate_composer_id=None,
-            reason="work_identity",
-            evidence="\n".join(evidence),
+            reason=status,
+            evidence=evidence_json,
             confidence=confidence,
             resolver_version=RESOLVER_VERSION,
-            decision=decision,
+            decision=ComposerResolutionDecision.PENDING_HUMAN,
         )
 
-        if decision == ComposerResolutionDecision.AUTO_CORRECT:
-            composer = await self._get_or_create(candidate_name, mbid)
-            resolution.candidate_composer_id = composer.id
-            work.composer_id = composer.id
-            await self._works.update(work)
+        if status == "resolved" and api_composer:
+            canonical = await self._apply_canonical(work, api_composer)
+            resolution.candidate_composer_id = canonical.id
+            resolution.decision = "resolved"
         return await self._composers.record_resolution(resolution)
 
-    async def _mb_composer_for_title(
-        self, title: str, evidence: list[str]
-    ) -> tuple[str, str | None] | None:
-        try:
-            works = await self._mb.search_works(title)
-        except Exception:
-            return None
-        if not works:
-            return None
-        evidence.append(f"musicbrainz_work_hits={len(works)}")
-        title_norm = normalize_title(title)
-        for mb_work in works:
-            if normalize_title(mb_work.get("title")) == title_norm:
-                evidence.append("title_exact_match")
-            relations = mb_work.get("relations", [])
-            for rel in relations:
-                if rel.get("type") in ("composer", "writer", "lyricist"):
-                    artist = rel.get("artist") or {}
-                    name = (artist.get("name") or "").strip()
-                    if name and (artist.get("type") or "").lower() == "person":
-                        evidence.append(
-                            f"work='{mb_work.get('title')}' -> composer='{name}' (mbid={artist.get('id')})"
-                        )
-                        return name, artist.get("id")
-        return None
+    async def _apply_canonical(self, work: Work, api_composer: dict) -> Composer:
+        name = (api_composer.get("name") or "").strip()
+        composer = await self._composers.get_by_name(name) if name else None
+        if composer is None and name:
+            composer = await self._composers.create(Composer(id="", name=name))
+        if composer is None:
+            raise ValueError("osap-api resolved sin nombre de compositor")
 
-    async def _confidence(
-        self, work: Work, candidate_name: str, evidence: list[str]
-    ) -> float:
-        # Señales explícitas de confianza (0..1).
-        c = 0.0
-        title_norm = normalize_title(work.title)
-        # El candidato proviene de una obra de MusicBrainz con relación de compositor.
-        c += 0.5
-        # Coincidencia exacta del título con la obra de MusicBrainz (señal fuerte).
-        if "title_exact_match" in evidence:
-            c += 0.4
-        # Coincidencia del nombre del compositor en el título (señal débil).
-        for token in candidate_name.lower().split():
-            if token and token in title_norm:
-                c += 0.2
-                break
-        return min(1.0, c)
-
-    async def _get_or_create(self, name: str, mbid: str | None) -> Composer:
-        existing = await self._composers.get_by_name(name)
-        if existing is not None:
-            if mbid and not existing.musicbrainz_id:
-                await self._composers.set_musicbrainz_id(existing.id, mbid)
-            return existing
-        composer = await self._composers.create(Composer(id="", name=name))
-        if mbid:
+        external_ids = api_composer.get("external_ids") or {}
+        mbid = external_ids.get("musicbrainz") or external_ids.get("mbid")
+        if mbid and not composer.musicbrainz_id:
             await self._composers.set_musicbrainz_id(composer.id, mbid)
-        await self._composers.add_alias(
-            composer.id, name, normalize_alias(name)
-        )
+
+        from domain.services.composer_names import normalize_composer_name
+
+        aliases = api_composer.get("aliases") or []
+        for alias in aliases:
+            a = (alias or "").strip()
+            if not a:
+                continue
+            with suppress(Exception):
+                await self._composers.add_alias(
+                    composer.id, a, normalize_composer_name(a)
+                )
+
+        work.composer_id = composer.id
+        work.composer = name
+        await self._works.update(work)
         return composer
 
 
-def normalize_alias(name: str) -> str:
-    from domain.services.composer_names import normalize_composer_name
+def _build_payload(work: Work, *, composer_name: str | None) -> dict:
+    return {
+        "work": {
+            "title": work.title,
+            "catalog": work.catalogue,
+            "year": extract_year(work.title),
+        },
+        "composer": {"name": composer_name} if composer_name else None,
+        "source": {"provider": "pdmx", "source_work_id": work.work_key},
+        "representations": [{"title": work.title, "provider": "pdmx", "format": "musicxml"}],
+    }
 
-    return normalize_composer_name(name)
 
+def extract_year(title: str | None) -> int | None:
+    import re
 
-def normalize_title(title: str | None) -> str:
-    """Normaliza un título para comparar coincidencias (minúsculas, sin espacios dobles)."""
-    return " ".join((title or "").strip().lower().split())
+    m = re.search(r"\b(1[89]\d\d|20\d\d)\b", title or "")
+    return int(m.group(1)) if m else None

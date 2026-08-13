@@ -78,22 +78,19 @@ async def _cmd_flag_mojibake_composers(args: argparse.Namespace, container: Cont
 async def _cmd_recover_composer_identities(args: argparse.Namespace, container: Container):
     from application.services.composer_recovery import ComposerRecoveryService
 
-    from infrastructure.repositories.sql_musicbrainz_cache_repository import (
-        SqlMusicBrainzCacheRepository,
-    )
-    from infrastructure.services.musicbrainz_client import (
-        CachedMusicBrainzClient,
-        MusicBrainzClient,
-    )
+    from infrastructure.services.osap_api_client import OsapApiClient
 
-    mb = CachedMusicBrainzClient(MusicBrainzClient(), SqlMusicBrainzCacheRepository(container.db))
-    svc = ComposerRecoveryService(container.composer_repo, container.work_repo, mb)
+    osap_api = OsapApiClient(
+        container.settings.osap_api_base_url, container.settings.osap_api_service_token
+    )
+    svc = ComposerRecoveryService(container.composer_repo, container.work_repo, osap_api)
     detected = await svc.detect_suspicious()
     stats = await svc.recover_batch(limit=args.limit)
     return {
         "detected_suspicious": detected.detected,
         "recovered": stats.recovered,
         "pending_human": stats.pending_human,
+        "errors": stats.errors,
     }
 
 
