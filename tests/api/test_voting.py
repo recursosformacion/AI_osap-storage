@@ -64,6 +64,8 @@ def _container(settings, works, votes, composers) -> Container:
         composer_repo=composers,
         composer_resolver=object(),  # type: ignore[arg-type]
         voting_repo=votes,
+        catalogue_repo=object(),  # type: ignore[arg-type]
+        catalogue_queries=object(),  # type: ignore[arg-type]
         list_composers=object(),  # type: ignore[arg-type]
         get_composer_detail=object(),  # type: ignore[arg-type]
         get_composer_works=object(),  # type: ignore[arg-type]

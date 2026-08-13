@@ -17,6 +17,7 @@ from api.metrics import router as metrics_router
 from api.routes import (
     admin_composers,
     archives,
+    catalogues,
     downloads,
     entries,
     files,
@@ -96,6 +97,7 @@ def create_app() -> FastAPI:
     app.include_router(provider.router)
     app.include_router(admin_composers.router)
     app.include_router(voting.router)
+    app.include_router(catalogues.router)
     app.include_router(metrics_router)
     return app
 

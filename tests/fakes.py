@@ -5,6 +5,7 @@ from pathlib import Path
 
 from domain.entities.archive import Archive
 from domain.entities.archive_entry import ArchiveEntry, ArchiveEntryStatus
+from domain.entities.catalogue import Catalogue
 from domain.entities.composer import (
     Composer,
     ComposerAlias,
@@ -30,6 +31,7 @@ from domain.entities.voting import (
 from domain.entities.work import Work, WorkLists
 from domain.exceptions import DownloadFailed
 from domain.ports.archive_repositories import ArchiveEntryRepository, ArchiveRepository
+from domain.ports.catalogue_repository import CatalogueRepository
 from domain.ports.composer_repository import ComposerRepository
 from domain.ports.import_source_repository import ImportSourceRepository
 from domain.ports.musicbrainz_cache_repository import MusicBrainzCacheRepository
@@ -788,6 +790,35 @@ class InMemoryMusicBrainzCacheRepository(MusicBrainzCacheRepository):
 
     async def set(self, query: str, payload: str) -> None:
         self._items[query] = payload
+
+
+class InMemoryCatalogueRepository(CatalogueRepository):
+    def __init__(self) -> None:
+        self._items: list[Catalogue] = []
+        self._seq = 0
+
+    async def get_by_prefix(self, prefix: str) -> list[Catalogue]:
+        return [c for c in self._items if c.prefix == prefix]
+
+    async def get_by_composer(self, composer: str) -> list[Catalogue]:
+        norm = normalize_composer_name(composer)
+        return [c for c in self._items if norm and norm in normalize_composer_name(c.composer)]
+
+    async def list_all(self, *, limit: int, offset: int) -> list[Catalogue]:
+        items = sorted(self._items, key=lambda c: (c.composer, c.prefix))
+        return items[offset : offset + limit]
+
+    async def seed(self, catalogues: list[Catalogue]) -> int:
+        inserted = 0
+        keys = {(c.prefix, c.composer, c.catalogue_name) for c in self._items}
+        for c in catalogues:
+            if (c.prefix, c.composer, c.catalogue_name) not in keys:
+                self._seq += 1
+                c.id = self._seq
+                self._items.append(c)
+                keys.add((c.prefix, c.composer, c.catalogue_name))
+                inserted += 1
+        return inserted
 
 
 class InMemoryImportSourceRepository(ImportSourceRepository):

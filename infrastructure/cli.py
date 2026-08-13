@@ -69,6 +69,13 @@ async def _cmd_prune_composers(args: argparse.Namespace, container: Container):
     return {"removed": await container.prune_composers.execute()}
 
 
+async def _cmd_seed_catalogues(args: argparse.Namespace, container: Container):
+    from infrastructure.seed.catalogues import CATALOGUES
+
+    inserted = await container.catalogue_repo.seed(CATALOGUES)
+    return {"inserted": inserted, "total": len(CATALOGUES)}
+
+
 async def _cmd_musicbrainz_enrich(args: argparse.Namespace, container: Container):
     from application.use_cases.musicbrainz_enrich import EnrichComposersMusicBrainz
 
@@ -106,7 +113,15 @@ async def _cmd_backfill_composer_ids(args: argparse.Namespace, container: Contai
         for w in works:
             if w.composer not in extract_cache:
                 extract_cache[w.composer] = extract_composer_name(w.composer)
-            extracted.append(extract_cache[w.composer])
+            name = extract_cache[w.composer]
+            # Fallback: si no se extrae compositor, el catálogo de la obra (p. ej. "K. 15h")
+            # puede identificar al compositor (p. ej. Köchel -> Mozart) si el prefijo es único.
+            if name is None and w.catalogue:
+                from application.use_cases.catalogues import CatalogueQueries
+
+                name = await CatalogueQueries(container.catalogue_repo).composer_from_reference(w.catalogue)
+                extract_cache[w.composer] = name
+            extracted.append(name)
         resolved = await resolver.resolve_many(extracted)
         pending = []
         for w, name in zip(works, extracted, strict=True):
@@ -474,6 +489,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     mb.add_argument("--limit", type=int, default=50, help="Nº de compositores a procesar")
     mb.set_defaults(handler=_cmd_musicbrainz_enrich)
+
+    seedcat = sub.add_parser(
+        "seed-catalogues",
+        help="Sembrar la tabla de catálogos musicales (idempotente)",
+    )
+    seedcat.set_defaults(handler=_cmd_seed_catalogues)
 
     backfill = sub.add_parser(
         "backfill-composer-ids",

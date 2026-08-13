@@ -7,17 +7,18 @@ from application.services.mirror_resources import MirrorResourceRegistrar
 from application.services.tar_downloader import TarDownloader
 from application.use_cases.archives import CountMissingEntries, GetArchive, ListArchives
 from application.use_cases.build_works import BuildWorks
+from application.use_cases.catalogues import CatalogueQueries
 from application.use_cases.composer_admin import (
-ClassifyComposers,
-CleanComposerNames,
-ComposerReviewStats,
-CreateComposer,
-GetComposerDetail,
-GetComposerWorks,
-ListComposers,
-MergeComposers,
-PruneComposers,
-ReviewComposer,
+    ClassifyComposers,
+    CleanComposerNames,
+    ComposerReviewStats,
+    CreateComposer,
+    GetComposerDetail,
+    GetComposerWorks,
+    ListComposers,
+    MergeComposers,
+    PruneComposers,
+    ReviewComposer,
 )
 from application.use_cases.delete_file import DeleteFile
 from application.use_cases.enrich_metadata import EnrichWork
@@ -47,6 +48,7 @@ from application.use_cases.voting import (
 from application.use_cases.works import GetWork, SearchWorks, SearchWorksFull
 from domain.entities.storage_provider import ProviderType
 from domain.ports.archive_repositories import ArchiveEntryRepository, ArchiveRepository
+from domain.ports.catalogue_repository import CatalogueRepository
 from domain.ports.composer_repository import ComposerRepository
 from domain.ports.download import FileDownloader
 from domain.ports.hashing import FileHasher
@@ -80,6 +82,7 @@ from infrastructure.providers.registry import (
 from infrastructure.providers.s3 import S3Backend
 from infrastructure.repositories.sql_archive_entry_repository import SqlArchiveEntryRepository
 from infrastructure.repositories.sql_archive_repository import SqlArchiveRepository
+from infrastructure.repositories.sql_catalogue_repository import SqlCatalogueRepository
 from infrastructure.repositories.sql_composer_repository import SqlComposerRepository
 from infrastructure.repositories.sql_file_repository import SqlFileRepository
 from infrastructure.repositories.sql_import_source_repository import SqlImportSourceRepository
@@ -105,6 +108,8 @@ class Container:
     work_repo: WorkRepository
     composer_repo: ComposerRepository
     composer_resolver: ComposerResolver
+    catalogue_repo: CatalogueRepository
+    catalogue_queries: CatalogueQueries
     voting_repo: VotingRepository
     list_composers: ListComposers
     get_composer_detail: GetComposerDetail
@@ -170,6 +175,8 @@ def build_container(settings: Settings) -> Container:
     work_repo = SqlWorkRepository(db)
     composer_repo = SqlComposerRepository(db)
     composer_resolver = ComposerResolver(composer_repo)
+    catalogue_repo = SqlCatalogueRepository(db)
+    catalogue_queries = CatalogueQueries(catalogue_repo)
     voting_repo = SqlVotingRepository(db)
     hasher = HashlibHasher()
     downloader = HttpxDownloader()
@@ -274,6 +281,8 @@ def build_container(settings: Settings) -> Container:
         work_repo=work_repo,
         composer_repo=composer_repo,
         composer_resolver=composer_resolver,
+        catalogue_repo=catalogue_repo,
+        catalogue_queries=catalogue_queries,
         voting_repo=voting_repo,
         list_composers=list_composers,
         get_composer_detail=get_composer_detail,

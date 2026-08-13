@@ -327,3 +327,13 @@ class ComposerStatisticsRead(Model):
     work_count: int = 0
     confidence: float | None = None
     calculated_at: datetime | None = None
+
+
+class CatalogueRead(Model):
+    id: int | None = None
+    prefix: str
+    composer: str
+    catalogue_name: str
+    creator: str
+    ordering_criterion: str
+    created_at: datetime | None = None

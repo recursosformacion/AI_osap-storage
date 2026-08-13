@@ -117,6 +117,45 @@ nombre se descarta y la obra va a "Compositor sin indicar". Dependencia opcional
 
 Es un filtro agresivo y no garantiza la identidad canónica; la revisión final es manual.
 
+---
+
+## Catálogos musicales
+
+Los **catálogos temáticos** (Köchel, BWV, Hoboken, Ryom, Deutsch, Zimmerman...) identifican el
+catálogo de una obra por su **prefijo/sigla** y señalan al **compositor**, por lo que participan en
+el registro de obras y ayudan a la **limpieza de compositores**.
+
+### Modelo — `catalogues`
+
+| campo                | tipo        | descripción                     |
+|----------------------|-------------|---------------------------------|
+| `prefix`             | `VARCHAR`   | Sigla (K, KV, BWV, Hob, RV, D...).|
+| `composer`           | `VARCHAR`   | Compositor del catálogo.        |
+| `catalogue_name`     | `VARCHAR`   | Nombre del catálogo.            |
+| `creator`            | `VARCHAR`   | Creador / musicólogo.           |
+| `ordering_criterion` | `VARCHAR`   | Criterio de ordenación.         |
+
+Se siembra de forma idempotente con `osap-storage seed-catalogues`.
+
+### API
+
+`GET /api/v1/catalogues` (protegida por service token `storage:read`):
+
+- `?prefix=K` → catálogos con sigla K (Mozart, Scarlatti...).
+- `?composer=mozart` → catálogos de ese compositor.
+- sin filtros → listado paginado (`limit`, `offset`).
+
+### Integración con la limpieza
+
+`CatalogueQueries.composer_from_reference(ref)` extrae el prefijo de una referencia de obra
+(p. ej. `"BWV 846"` → `BWV`, `"K. 15h"` → `K`) y, si el prefijo identifica a **un único**
+catálogo, devuelve su compositor (p. ej. BWV → Johann Sebastian Bach). Si es ambiguo (p. ej. K
+→ Mozart y Scarlatti), devuelve `None`.
+
+El enlace de obras (`backfill-composer-ids`) lo usa como **fallback**: si no se puede extraer el
+compositor del texto de la obra pero su catálogo es inequívoco, se asigna el compositor del
+catálogo. Esto reduce las obras que quedan en "Compositor sin indicar" por falta de pista.
+
 ### `GET /api/admin/composers/candidates?q=&limit=&offset=`
 
 Asistencia a la revisión manual. Devuelve compositores activos que coinciden con la búsqueda por

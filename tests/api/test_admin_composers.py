@@ -74,6 +74,8 @@ def _container(settings, composer_repo) -> Container:
         create_composer=object(),  # type: ignore[arg-type]
         composer_review_stats=object(),  # type: ignore[arg-type]
         voting_repo=object(),  # type: ignore[arg-type]
+        catalogue_repo=object(),  # type: ignore[arg-type]
+        catalogue_queries=object(),  # type: ignore[arg-type]
         record_vote=object(),  # type: ignore[arg-type]
         get_work_statistics=object(),  # type: ignore[arg-type]
         get_composer_statistics=object(),  # type: ignore[arg-type]
