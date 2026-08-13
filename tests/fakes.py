@@ -11,6 +11,7 @@ from domain.entities.composer import (
     ComposerAlias,
     ComposerCreationEvidence,
     ComposerDetail,
+    ComposerResolution,
     ComposerStatus,
     ComposerSummary,
     ComposerWorkRef,
@@ -583,6 +584,22 @@ class InMemoryComposerRepository(ComposerRepository):
         if composer is not None:
             composer.musicbrainz_id = musicbrainz_id
 
+    async def set_suspicious(self, composer_id: str, suspicious: bool, reason: str | None = None) -> None:
+        composer = self._composers.get(composer_id)
+        if composer is not None:
+            composer.suspicious = suspicious
+            composer.suspicious_reason = reason if suspicious else None
+
+    async def record_resolution(self, resolution: ComposerResolution) -> ComposerResolution:
+        if not hasattr(self, "_resolutions"):
+            self._resolutions = []
+        self._resolutions.append(resolution)
+        resolution.id = len(self._resolutions)
+        return resolution
+
+    async def list_resolutions(self, work_id: int) -> list[ComposerResolution]:
+        return [r for r in getattr(self, "_resolutions", []) if r.work_id == work_id]
+
     async def rename_composer(self, composer_id: str, new_name: str) -> None:
         composer = self._composers.get(composer_id)
         if composer is not None:
@@ -599,6 +616,14 @@ class InMemoryComposerRepository(ComposerRepository):
                    if c.status == "active" and c.review_status == "not_reviewed"]
         pending.sort(key=lambda c: c.id or 0)
         page = pending[offset : offset + limit]
+        return [ComposerSummary(id=c.id, name=c.name, status=c.status,
+                                review_status=c.review_status or "not_reviewed") for c in page]
+
+    async def list_suspicious(self, *, limit: int, offset: int) -> list[ComposerSummary]:
+        susp = [c for c in self._composers.values()
+                if c.status == "active" and c.suspicious]
+        susp.sort(key=lambda c: c.id or 0)
+        page = susp[offset : offset + limit]
         return [ComposerSummary(id=c.id, name=c.name, status=c.status,
                                 review_status=c.review_status or "not_reviewed") for c in page]
 
@@ -939,6 +964,11 @@ class InMemoryWorkRepository(WorkRepository):
             "parts": {},
         }
         self._seq = 0
+
+    async def list_by_composer(self, composer_id: str, *, limit: int = 100, offset: int = 0) -> list[Work]:
+        items = [w for w in self._items.values() if w.composer_id == composer_id]
+        items.sort(key=lambda w: w.id or 0)
+        return items[offset : offset + limit]
 
     async def create(self, work: Work) -> Work:
         self._seq += 1

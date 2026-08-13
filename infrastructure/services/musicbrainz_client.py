@@ -39,6 +39,25 @@ class MusicBrainzClient:
             data = resp.json()
             return data.get("artists", [])
 
+    async def search_works(self, title: str) -> list[dict]:
+        """Busca obras por título (MusicBrainz `work`), con sus relaciones de compositor."""
+        now = asyncio.get_event_loop().time()
+        wait = 1.0 - (now - self._last)
+        if wait > 0:
+            await asyncio.sleep(wait)
+        self._last = now
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.get(
+                f"{self.BASE}/work",
+                params={"query": f'work:"{title}"', "fmt": "json", "limit": "10",
+                        "inc": "artist-rels"},
+                headers={"User-Agent": _USER_AGENT},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("works", [])
+
 
 class CachedMusicBrainzClient:
     """Envuelve MusicBrainzClient con una caché en BD.

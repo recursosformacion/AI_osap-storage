@@ -75,6 +75,28 @@ async def _cmd_flag_mojibake_composers(args: argparse.Namespace, container: Cont
     return await FlagMojibakeComposers(container.composer_repo).execute()
 
 
+async def _cmd_recover_composer_identities(args: argparse.Namespace, container: Container):
+    from application.services.composer_recovery import ComposerRecoveryService
+
+    from infrastructure.repositories.sql_musicbrainz_cache_repository import (
+        SqlMusicBrainzCacheRepository,
+    )
+    from infrastructure.services.musicbrainz_client import (
+        CachedMusicBrainzClient,
+        MusicBrainzClient,
+    )
+
+    mb = CachedMusicBrainzClient(MusicBrainzClient(), SqlMusicBrainzCacheRepository(container.db))
+    svc = ComposerRecoveryService(container.composer_repo, container.work_repo, mb)
+    detected = await svc.detect_suspicious()
+    stats = await svc.recover_batch(limit=args.limit)
+    return {
+        "detected_suspicious": detected.detected,
+        "recovered": stats.recovered,
+        "pending_human": stats.pending_human,
+    }
+
+
 async def _cmd_seed_catalogues(args: argparse.Namespace, container: Container):
     from infrastructure.seed.catalogues import CATALOGUES
 
@@ -494,6 +516,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Marcar como incorrect los compositores con nombre corrupto (encoding)",
     )
     flag.set_defaults(handler=_cmd_flag_mojibake_composers)
+
+    recover = sub.add_parser(
+        "recover-composer-identities",
+        help="Recuperar la identidad del compositor partiendo de la obra (MusicBrainz work). "
+        "Marca sospechosos, busca evidencia, guarda auditoría y corrige si es de alta confianza.",
+    )
+    recover.add_argument("--limit", type=int, default=50, help="Nº de obras a procesar")
+    recover.set_defaults(handler=_cmd_recover_composer_identities)
 
     mb = sub.add_parser(
         "musicbrainz-enrich",

@@ -123,6 +123,16 @@ class SqlWorkRepository(WorkRepository):
             )
             return [_row_to_work(row) for row in await cur.fetchall()]
 
+    async def list_by_composer(
+        self, composer_id: str, *, limit: int = 100, offset: int = 0
+    ) -> list[Work]:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT * FROM works WHERE composer_id = %s ORDER BY id LIMIT %s OFFSET %s",
+                (composer_id, limit, offset),
+            )
+            return [_row_to_work(row) for row in await cur.fetchall()]
+
     async def count(self) -> int:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute("SELECT COUNT(*) AS total FROM works")

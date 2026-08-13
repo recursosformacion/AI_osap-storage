@@ -7,6 +7,7 @@ from domain.entities.composer import (
     ComposerAlias,
     ComposerCreationEvidence,
     ComposerDetail,
+    ComposerResolution,
     ComposerStatus,
     ComposerSummary,
     ComposerWorkRef,
@@ -29,6 +30,8 @@ def _row_to_composer(row: dict) -> Composer:
         merged_at=row.get("merged_at"),
         review_status=row.get("review_status") or "not_reviewed",
         reviewed_at=row.get("reviewed_at"),
+        suspicious=bool(row.get("suspicious")),
+        suspicious_reason=row.get("suspicious_reason"),
         created_at=row.get("created_at"),
         updated_at=row.get("updated_at"),
     )
@@ -302,6 +305,44 @@ class SqlComposerRepository(ComposerRepository):
                 (musicbrainz_id, composer_id),
             )
 
+    async def set_suspicious(self, composer_id: str, suspicious: bool, reason: str | None = None) -> None:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "UPDATE composers SET suspicious = %s, suspicious_reason = %s, "
+                "reviewed_at = NOW(6) WHERE id = %s",
+                (1 if suspicious else 0, reason if suspicious else None, composer_id),
+            )
+
+    async def record_resolution(self, resolution: ComposerResolution) -> ComposerResolution:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "INSERT INTO composer_resolution "
+                "(work_id, old_composer_id, candidate_composer_id, reason, evidence, "
+                "confidence, resolver_version, decision) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                (resolution.work_id, resolution.old_composer_id, resolution.candidate_composer_id,
+                 resolution.reason, resolution.evidence, resolution.confidence,
+                 resolution.resolver_version, resolution.decision),
+            )
+            resolution.id = cur.lastrowid
+            return resolution
+
+    async def list_resolutions(self, work_id: int) -> list[ComposerResolution]:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT * FROM composer_resolution WHERE work_id = %s ORDER BY id", (work_id,)
+            )
+            return [
+                ComposerResolution(
+                    id=r["id"], work_id=r["work_id"], old_composer_id=r["old_composer_id"],
+                    candidate_composer_id=r["candidate_composer_id"], reason=r["reason"],
+                    evidence=r["evidence"], confidence=float(r["confidence"] or 0),
+                    resolver_version=r["resolver_version"], decision=r["decision"],
+                    created_at=r["created_at"],
+                )
+                for r in await cur.fetchall()
+            ]
+
     async def rename_composer(self, composer_id: str, new_name: str) -> None:
         from domain.services.composer_names import normalize_composer_name
 
@@ -321,6 +362,23 @@ class SqlComposerRepository(ComposerRepository):
             await cur.execute(
                 "SELECT id, name, status, review_status, 0 AS aliases_count, 0 AS works_count "
                 "FROM composers WHERE status = %s AND review_status = 'not_reviewed' "
+                "ORDER BY id LIMIT %s OFFSET %s",
+                (ComposerStatus.ACTIVE, limit, offset),
+            )
+            return [
+                ComposerSummary(
+                    id=r["id"], name=r["name"], status=r["status"],
+                    review_status=r["review_status"] or "not_reviewed",
+                )
+                for r in await cur.fetchall()
+            ]
+
+    async def list_suspicious(self, *, limit: int, offset: int) -> list[ComposerSummary]:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT id, name, status, review_status, suspicious_reason, "
+                "0 AS aliases_count, 0 AS works_count "
+                "FROM composers WHERE status = %s AND suspicious = 1 "
                 "ORDER BY id LIMIT %s OFFSET %s",
                 (ComposerStatus.ACTIVE, limit, offset),
             )

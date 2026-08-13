@@ -7,6 +7,7 @@ from domain.entities.composer import (
     ComposerAlias,
     ComposerCreationEvidence,
     ComposerDetail,
+    ComposerResolution,
     ComposerSummary,
     ComposerWorkRef,
     MergeComposersResult,
@@ -80,11 +81,23 @@ class ComposerRepository(Protocol):
     async def set_musicbrainz_id(self, composer_id: str, musicbrainz_id: str | None) -> None:
         """Guarda el identificador del artista en MusicBrainz (trazabilidad)."""
 
+    async def set_suspicious(self, composer_id: str, suspicious: bool, reason: str | None = None) -> None:
+        """Marca un compositor como sospechoso (con motivo) o lo desmarca."""
+
+    async def record_resolution(self, resolution: ComposerResolution) -> ComposerResolution:
+        """Guarda una recuperación de identidad (evidencia/auditoría)."""
+
+    async def list_resolutions(self, work_id: int) -> list[ComposerResolution]:
+        """Resoluciones de identidad registradas para una obra."""
+
     async def rename_composer(self, composer_id: str, new_name: str) -> None:
         """Actualiza el nombre canónico de un compositor y su alias canónico."""
 
     async def list_pending_review(self, *, limit: int, offset: int) -> list[ComposerSummary]:
         """Compositores activos pendientes de revisión (para clasificación heurística)."""
+
+    async def list_suspicious(self, *, limit: int, offset: int) -> list[ComposerSummary]:
+        """Compositores activos marcados como sospechosos (para recuperación de identidad)."""
 
     async def get_detail(self, composer_id: str) -> ComposerDetail | None:
         """Detalle administrativo: aliases, works_count, estado y referencia de fusión."""

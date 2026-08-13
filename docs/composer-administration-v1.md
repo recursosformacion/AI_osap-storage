@@ -177,6 +177,34 @@ Seguridad:
   (las desconocidas se ignoran); todos los valores van **parametrizados** (sin inyección SQL).
 - Las tablas internas (`schema_migrations`) no se exponen.
 
+---
+
+## Recuperación de identidad de compositores (desde la obra)
+
+Cuando el `composer_name` de PDMX llega corrupto (mojibake por encoding), **no se repara desde el
+nombre** (no es fuente de verdad). `ComposerRecoveryService` recupera la identidad **desde la obra**
+(título) y deja auditoría:
+
+1. **`detect_suspicious`** — marca como sospechosos los compositores con nombre corrupto
+   (`composers.suspicious=1`, `suspicious_reason='encoding_anomaly'`), sin cambiar el valor.
+2. **`recover(work)`** — para una obra con compositor sospechoso:
+   - extrae la identidad del **título**;
+   - busca evidencias independientes (MusicBrainz **`work`** → compositor `Person`);
+   - calcula **confianza** (coincidencia exacta de título, nombre en el título);
+   - guarda un **`composer_resolution`** (auditoría: work_id, old_composer_id,
+     candidate_composer_id, reason, evidence, confidence, resolver_version, decision);
+   - si `confidence >= 0.9` → `auto_correct` (crea/enlaza el candidato y actualiza
+     `work.composer_id`); si no → `pending_human` (revisión con la evidencia a la vista).
+   - El dato original corrupto **no se destruye** (queda como `old_composer_id`/evidencia).
+
+Comando:
+
+```
+osap-storage recover-composer-identities --limit N
+```
+
+Tablas: `composers.suspicious`/`suspicious_reason`, `composer_resolution` (auditoría).
+
 ### Pantalla web de gestión (osap-storage)
 
 osap-storage sirve una **pantalla web completa** del CRUD en `GET /admin`. Es storage quien

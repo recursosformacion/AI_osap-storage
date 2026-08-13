@@ -39,3 +39,9 @@ class WorkRepository(Protocol):
     async def get_parts(self, work_id: int) -> list[str]: ...
 
     async def get_lists_bulk(self, work_ids: list[int]) -> dict[int, WorkLists]: ...
+
+    async def list_by_composer(
+        self, composer_id: str, *, limit: int = 100, offset: int = 0
+    ) -> list[Work]:
+        """Works cuyo composer_id es exactamente este compositor."""
+

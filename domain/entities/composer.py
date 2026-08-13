@@ -14,6 +14,33 @@ class ComposerStatus:
     MERGED = "merged"
 
 
+class ComposerResolutionDecision:
+    AUTO_CORRECT = "auto_correct"
+    PENDING_HUMAN = "pending_human"
+    REJECTED = "rejected"
+
+
+@dataclass
+class ComposerResolution:
+    """Trazabilidad de una recuperación de identidad de compositor de una obra.
+
+    Guarda el compositor anterior (posiblemente sospechoso), el candidato recuperado
+    desde la obra (título/catálogo + evidencia externa), la confianza y la decisión.
+    El dato original corrupto NO se destruye: queda como `old_composer_id` / evidencia.
+    """
+
+    work_id: int
+    old_composer_id: str | None = None
+    candidate_composer_id: str | None = None
+    reason: str = ""
+    evidence: str | None = None
+    confidence: float = 0.0
+    resolver_version: str = ""
+    decision: str = ComposerResolutionDecision.PENDING_HUMAN
+    id: int | None = None
+    created_at: datetime | None = None
+
+
 @dataclass
 class Composer:
     """Identidad canónica de un compositor mantenida por Storage.
@@ -31,6 +58,8 @@ class Composer:
     merged_at: datetime | None = None
     review_status: str = "not_reviewed"
     reviewed_at: datetime | None = None
+    suspicious: bool = False
+    suspicious_reason: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
