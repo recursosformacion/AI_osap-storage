@@ -75,17 +75,25 @@ class ClassifyComposers:
         )
 
         counts = {REVIEW_CORRECT: 0, REVIEW_INCORRECT: 0}
-        offset = 0
+        # Pasadas repetidas hasta converger: al marcar un compositor correct/incorrect
+        # sale del conjunto not_reviewed y la paginación por offset se desplaza, saltando
+        # compositores. Se repite hasta una pasada sin cambios.
         while True:
-            pending = await self._composers.list_pending_review(limit=limit, offset=offset)
-            if not pending:
+            pass_changes = 0
+            offset = 0
+            while True:
+                pending = await self._composers.list_pending_review(limit=limit, offset=offset)
+                if not pending:
+                    break
+                for item in pending:
+                    verdict = classify_composer_name(item.name)
+                    if verdict in counts:
+                        await self._composers.set_review_status(item.id, verdict)
+                        counts[verdict] += 1
+                        pass_changes += 1
+                offset += limit
+            if pass_changes == 0:
                 break
-            for item in pending:
-                verdict = classify_composer_name(item.name)
-                if verdict in counts:
-                    await self._composers.set_review_status(item.id, verdict)
-                    counts[verdict] += 1
-            offset += limit
         return counts
 
 

@@ -151,6 +151,20 @@ def test_classify_pending_composers():
     assert asyncio.run(repo.get_by_id("digits")).review_status == "incorrect"
 
 
+def test_classify_no_skip_on_pagination():
+    # Regresión: con un limit pequeño, clasificar no debe saltarse compositores
+    # (el conjunto not_reviewed se reduce y el offset se desplaza).
+    repo = InMemoryComposerRepository()
+    names = [f"Nombre De Prueba {chr(65+i)} Xyz" for i in range(6)]  # todos correctos
+    for i, n in enumerate(names):
+        asyncio.run(repo.create(Composer(id=f"c{i}", name=n)))
+    result = asyncio.run(ClassifyComposers(repo).execute(limit=2))
+    assert result[REVIEW_CORRECT] == 6
+    assert result[REVIEW_INCORRECT] == 0
+    for i in range(6):
+        assert asyncio.run(repo.get_by_id(f"c{i}")).review_status == "correct"
+
+
 def test_list_filter_by_review():
     repo = InMemoryComposerRepository()
     asyncio.run(repo.create(Composer(id="a", name="Clean Name", review_status="correct")))
