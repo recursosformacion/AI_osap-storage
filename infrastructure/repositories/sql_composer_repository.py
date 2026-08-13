@@ -215,8 +215,12 @@ class SqlComposerRepository(ComposerRepository):
         where = ["c.status = %s"]
         params: list = [ComposerStatus.ACTIVE]
         if review and (review := review.strip()):
-            where.append("c.review_status = %s")
-            params.append(review)
+            # "revisados" = correctos o incorrectos (correct + incorrect).
+            if review == "reviewed":
+                where.append("c.review_status IN ('correct', 'incorrect')")
+            else:
+                where.append("c.review_status = %s")
+                params.append(review)
         if q and (q := q.strip()):
             norm = normalize_composer_name(q)
             where.append(
@@ -250,8 +254,11 @@ class SqlComposerRepository(ComposerRepository):
         where = ["status = %s"]
         params: list = [ComposerStatus.ACTIVE]
         if review and (review := review.strip()):
-            where.append("review_status = %s")
-            params.append(review)
+            if review == "reviewed":
+                where.append("review_status IN ('correct', 'incorrect')")
+            else:
+                where.append("review_status = %s")
+                params.append(review)
         if q and (q := q.strip()):
             norm = normalize_composer_name(q)
             where.append(
