@@ -128,6 +128,20 @@ def test_populate_skips_mojibake():
     assert names == ["Wolfgang Amadeus Mozart"]
 
 
+def test_flag_mojibake_marks_incorrect_even_if_correct():
+    from application.use_cases.composer_admin import FlagMojibakeComposers
+
+    repo = InMemoryComposerRepository()
+    # un mojibake que quedó 'correct' (de antes del detector)
+    asyncio.run(repo.create(Composer(id="m", name="\u00d0\u00d0\u00d0\u00ba\u00d0 \u00d0\u00d0",
+                                     review_status="correct")))
+    asyncio.run(repo.create(Composer(id="g", name="Wolfgang Amadeus Mozart", review_status="correct")))
+    result = asyncio.run(FlagMojibakeComposers(repo).execute())
+    assert result["flagged"] == 1
+    assert asyncio.run(repo.get_by_id("m")).review_status == "incorrect"
+    assert asyncio.run(repo.get_by_id("g")).review_status == "correct"
+
+
 def test_classifier_clean_name_correct():
     assert classify_composer_name("Wolfgang Amadeus Mozart") == REVIEW_CORRECT
     assert classify_composer_name("Bach, Johann Sebastian") == REVIEW_CORRECT

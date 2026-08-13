@@ -69,6 +69,12 @@ async def _cmd_prune_composers(args: argparse.Namespace, container: Container):
     return {"removed": await container.prune_composers.execute()}
 
 
+async def _cmd_flag_mojibake_composers(args: argparse.Namespace, container: Container):
+    from application.use_cases.composer_admin import FlagMojibakeComposers
+
+    return await FlagMojibakeComposers(container.composer_repo).execute()
+
+
 async def _cmd_seed_catalogues(args: argparse.Namespace, container: Container):
     from infrastructure.seed.catalogues import CATALOGUES
 
@@ -482,6 +488,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Eliminar compositores activos sin ninguna obra (fantasmas)",
     )
     prune.set_defaults(handler=_cmd_prune_composers)
+
+    flag = sub.add_parser(
+        "flag-mojibake-composers",
+        help="Marcar como incorrect los compositores con nombre corrupto (encoding)",
+    )
+    flag.set_defaults(handler=_cmd_flag_mojibake_composers)
 
     mb = sub.add_parser(
         "musicbrainz-enrich",

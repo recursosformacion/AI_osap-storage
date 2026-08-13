@@ -163,6 +163,33 @@ class PruneComposers:
         return await self._composers.prune_zero_work_composers()
 
 
+class FlagMojibakeComposers:
+    """Marca como `incorrect` los compositores cuyo nombre es texto corrupto (encoding).
+
+    Recorre todos los compositores activos y aplica `is_mojibake` (independiente del estado
+    de revisión actual), para que ningún nombre corrompido quede como `correct`/`not_reviewed`.
+    """
+
+    def __init__(self, composers: ComposerRepository) -> None:
+        self._composers = composers
+
+    async def execute(self, *, limit: int = 1000) -> dict[str, int]:
+        from domain.services.composer_quality import REVIEW_INCORRECT, is_mojibake
+
+        flagged = 0
+        offset = 0
+        while True:
+            batch = await self._composers.list_summaries(limit=limit, offset=offset)
+            if not batch:
+                break
+            for item in batch:
+                if is_mojibake(item.name) and item.review_status != REVIEW_INCORRECT:
+                    await self._composers.set_review_status(item.id, REVIEW_INCORRECT)
+                    flagged += 1
+            offset += limit
+        return {"flagged": flagged}
+
+
 class GetComposerDetail:
     def __init__(self, composers: ComposerRepository) -> None:
         self._composers = composers
