@@ -177,6 +177,21 @@ Seguridad:
   (las desconocidas se ignoran); todos los valores van **parametrizados** (sin inyección SQL).
 - Las tablas internas (`schema_migrations`) no se exponen.
 
+### Pantalla web de gestión (osap-storage)
+
+osap-storage sirve una **pantalla web completa** del CRUD en `GET /admin`. Es storage quien
+realiza todas las funciones; osap-api solo necesita un enlace **"Gestión storage"** que apunte a
+esa pantalla:
+
+```
+https://storage.openmusicrepository.com/admin?token=<service-token-storage:admin>
+```
+
+La página (shell) se sirve sin token (no contiene datos), pero las operaciones las realiza su JS
+llamando a `/api/admin/tables/*` con el service token como `Bearer` (protegido con `storage:admin`).
+Esto mantiene storage ajeno a usuarios: solo autentica el **servicio** (osap-api) que le pasa el
+token.
+
 ### `GET /api/admin/composers/candidates?q=&limit=&offset=`
 
 Asistencia a la revisión manual. Devuelve compositores activos que coinciden con la búsqueda por

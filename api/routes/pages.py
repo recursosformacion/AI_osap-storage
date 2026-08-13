@@ -17,6 +17,7 @@ from api.dependencies import (
     get_settings,
 )
 from api.web import about as about_view
+from api.web import admin_tables as admin_view
 from api.web import api_doc, landing, search, statistics, works
 
 router = APIRouter(tags=["pages"])
@@ -111,3 +112,15 @@ async def work_detail(
 ) -> HTMLResponse:
     detail = await uc.execute(work_id)
     return HTMLResponse(works.work_detail_page(detail, settings))
+
+
+@router.get(
+    "/admin",
+    response_class=HTMLResponse,
+    summary="Gestión de storage (CRUD de tablas)",
+    description="Pantalla web completa de administración de tablas de osap-storage. "
+    "osap-api la invoca con un enlace 'Gestión storage'. Requiere un service token "
+    "storage:admin (se pasa por ?token=... o se pega en la pantalla).",
+)
+async def admin_page(token: str = Query(default="")) -> HTMLResponse:
+    return HTMLResponse(admin_view.admin_tables_page(token=token))

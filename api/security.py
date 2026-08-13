@@ -18,8 +18,9 @@ SCOPE_READ = "storage:read"
 SCOPE_WRITE = "storage:write"
 SCOPE_ADMIN = "storage:admin"
 
-# Rutas exentas de autenticación (salud y métricas operativas).
-EXEMPT_PATHS = {"/api/v1/health", "/metrics"}
+# Rutas exentas de autenticación (salud, métricas y el shell de la pantalla de gestión;
+# el shell no contiene datos: el API /api/admin/tables* sí exige storage:admin).
+EXEMPT_PATHS = {"/api/v1/health", "/metrics", "/admin"}
 
 
 class ServiceTokenValidator:
