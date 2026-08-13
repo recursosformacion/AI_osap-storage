@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from domain.entities.composer import Composer
 from domain.ports.composer_repository import ComposerRepository
 from domain.services.composer_names import normalize_composer_name
-from domain.services.composer_quality import clean_composer_name, extract_composer_name
+from domain.services.composer_quality import clean_composer_name, extract_composer_name, is_mojibake
 
 _EMPTY_MARKERS = {"na", "n/a", "nan", "null", "none", "unknown", "anon", "anon.", "anonymous", "-"}
 
@@ -44,6 +44,9 @@ class PopulateComposers:
         for name in names:
             raw = (name or "").strip()
             if not raw or raw.lower() in _EMPTY_MARKERS:
+                continue
+            # Nombres corruptos por encoding (mojibake): no crear compositores desde ellos.
+            if is_mojibake(raw):
                 continue
             # Caché por nombre bruto: evita repetir NER para el mismo texto (los nombres
             # aparecen muchas veces en el índice, pero las extracciones son pocas y costosas).

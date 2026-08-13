@@ -41,6 +41,26 @@ _NOISE_SINGLE = {
     "verse", "chorus", "traditional", "anon", "anonymous", "unknown", "na",
 }
 
+# Marcadores de mojibake (bytes UTF-8 de cirílico/japonés mal decodificados como Latin-1).
+# Ð (U+00D0) y Ã (U+00C3) son leading-bytes de UTF-8; casi nunca aparecen en nombres reales.
+_MOJIBAKE_HARD = "\u00d0\u00c3"  # Ð Ã
+_MOJIBAKE_MARKERS = "\u00d0\u00c3\u00c5\u00e3\u00e5\u00e7\u00ea\u00eb\u00ee\u00ed\u00ec"  # Ð Ã Å ã å ç ê ë î í ì
+
+
+def is_mojibake(name: str | None) -> bool:
+    """True si el nombre parece texto corrupto por una conversión UTF-8 <-> Latin-1.
+
+    Detecta la firma clásica de mojibake: caracter de reemplazo (U+FFFD), presencia de
+    Ð/Ã (leading-bytes de UTF-8), o >=2 marcadores. Permite distinguir nombres no latinos
+    corruptos de nombres cirílicos/chinos/japoneses válidos.
+    """
+    s = name or ""
+    if "\ufffd" in s:
+        return True
+    if any(ch in _MOJIBAKE_HARD for ch in s):
+        return True
+    return sum(1 for ch in s if ch in _MOJIBAKE_MARKERS) >= 2
+
 
 # Partículas de nombre que se conservan en minúscula (no se tratan como tokens de apellido).
 PARTICULAS_VALIDAS = {"de", "del", "van", "von", "di", "da", "y", "la", "le", "dos", "den"}
@@ -209,6 +229,9 @@ def extract_composer_name(name: str | None) -> str | None:
     if not s:
         return None
 
+    if is_mojibake(s):
+        return None
+
     cand = _heuristic_candidate(s)
     if cand is None:
         cand = _ner_candidate(s)
@@ -244,8 +267,10 @@ def classify_composer_name(name: str | None) -> str:
     s = (name or "").strip()
     if not s or len(s) < 2:
         return REVIEW_INCORRECT
-    if not _HAS_LETTER.search(s):
+    if not any(ch.isalpha() for ch in s):  # soporta cirílico, chino, japonés...
         return REVIEW_INCORRECT
+    if is_mojibake(s):
+        return REVIEW_INCORRECT  # texto corrupto por encoding: ir a revisión, no un compositor
 
     lower = s.lower()
     if any(p in lower for p in _NOISE_PATTERNS):

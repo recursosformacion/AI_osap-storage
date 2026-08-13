@@ -19,6 +19,7 @@ from domain.services.composer_quality import (
     classify_composer_name,
     clean_composer_name,
     extract_composer_name,
+    is_mojibake,
     is_suspicious,
 )
 from tests.fakes import InMemoryComposerRepository
@@ -91,6 +92,40 @@ def test_extract_composer_name_rejects_noise():
     assert extract_composer_name("A bluegrass song gone haywire") is None
     assert extract_composer_name("") is None
     assert extract_composer_name("76") is None
+
+
+def test_is_mojibake_detection():
+    assert is_mojibake("\u00d0\u00d0\u00d0\u00ba\u00d0 \u00d0\u00d0\u00d1") is True  # ÐÐÐºÐ
+    assert is_mojibake("ç\u00e5 ååª Kataoka Kenta") is True
+    assert is_mojibake("texto con \ufffd corrompido") is True
+    # Nombres válidos NO son mojibake (incl. cirílico/chino/japonés reales)
+    assert is_mojibake("Wolfgang Amadeus Mozart") is False
+    assert is_mojibake("Пётр Ильич Чайковский") is False  # cirílico correcto
+    assert is_mojibake("武満徹") is False  # japonés correcto
+    assert is_mojibake("José María") is False  # acentos latinos
+
+
+def test_classify_marks_mojibake_incorrect_and_keeps_cyrillic():
+    assert classify_composer_name("\u00d0\u00d0\u00d0\u00ba\u00d0 \u00d0") == REVIEW_INCORRECT
+    # Cirílico válido: no es corrupción; no se puede validar -> not_reviewed (no incorrect)
+    assert classify_composer_name("Пётр Ильич Чайковский") == REVIEW_NOT_REVIEWED
+    # Nombre latino normal sigue correct
+    assert classify_composer_name("Wolfgang Amadeus Mozart") == REVIEW_CORRECT
+
+
+def test_extract_rejects_mojibake():
+    assert extract_composer_name("\u00d0\u00d0\u00d0\u00ba\u00d0 \u00d0\u00d0") is None
+
+
+def test_populate_skips_mojibake():
+    from application.use_cases.populate_composers import PopulateComposers
+
+    repo = InMemoryComposerRepository()
+    asyncio.run(PopulateComposers(repo).execute(
+        ["Wolfgang Amadeus Mozart", "\u00d0\u00d0\u00d0\u00ba\u00d0 \u00d0\u00d0"]
+    ))
+    names = [c.name for c in repo._composers.values()]
+    assert names == ["Wolfgang Amadeus Mozart"]
 
 
 def test_classifier_clean_name_correct():
