@@ -59,3 +59,7 @@ class DuplicateVote(DomainError):
         super().__init__(f"user {user_id} already voted work {work_id} today")
         self.user_id = user_id
         self.work_id = work_id
+
+
+class InvalidTableCrud(DomainError):
+    """Operación de CRUD genérico no permitida (tabla/columna inválida)."""

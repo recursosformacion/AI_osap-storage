@@ -337,3 +337,18 @@ class CatalogueRead(Model):
     creator: str
     ordering_criterion: str
     created_at: datetime | None = None
+
+
+class TableCrudRow(Model):
+    table: str
+    row: dict[str, Any] = {}
+
+
+class TableCrudRows(Model):
+    table: str
+    total: int
+    rows: list[dict[str, Any]] = []
+
+
+class TableCrudTables(Model):
+    tables: list[str] = []

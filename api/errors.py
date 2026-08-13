@@ -12,6 +12,7 @@ from domain.exceptions import (
     InvalidFileData,
     InvalidMerge,
     InvalidSha256,
+    InvalidTableCrud,
     UnsupportedProvider,
 )
 from fastapi import FastAPI, Request
@@ -28,6 +29,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(InvalidSha256)
     @app.exception_handler(InvalidFileData)
     @app.exception_handler(InvalidMerge)
+    @app.exception_handler(InvalidTableCrud)
     async def _bad_request(_: Request, exc: DomainError) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": str(exc)})
 

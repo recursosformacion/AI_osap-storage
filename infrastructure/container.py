@@ -38,6 +38,7 @@ from application.use_cases.search_entries import SearchEntries
 from application.use_cases.start_download import StartDownload
 from application.use_cases.statistics import GetStatistics, RefreshStatistics
 from application.use_cases.stream_file import StreamFile
+from application.use_cases.table_crud import TableCrud
 from application.use_cases.verify_file import VerifyFile
 from application.use_cases.voting import (
     GetComposerStatistics,
@@ -90,6 +91,7 @@ from infrastructure.repositories.sql_job_repository import SqlDownloadJobReposit
 from infrastructure.repositories.sql_location_repository import SqlStorageLocationRepository
 from infrastructure.repositories.sql_provider_repository import SqlStorageProviderRepository
 from infrastructure.repositories.sql_statistics_repository import SqlStatisticsRepository
+from infrastructure.repositories.sql_table_crud_repository import SqlTableCrudRepository
 from infrastructure.repositories.sql_voting_repository import SqlVotingRepository
 from infrastructure.repositories.sql_work_repository import SqlWorkRepository
 from infrastructure.tasks.asyncio_scheduler import AsyncioTaskScheduler
@@ -110,6 +112,7 @@ class Container:
     composer_resolver: ComposerResolver
     catalogue_repo: CatalogueRepository
     catalogue_queries: CatalogueQueries
+    table_crud: TableCrud
     voting_repo: VotingRepository
     list_composers: ListComposers
     get_composer_detail: GetComposerDetail
@@ -177,6 +180,7 @@ def build_container(settings: Settings) -> Container:
     composer_resolver = ComposerResolver(composer_repo)
     catalogue_repo = SqlCatalogueRepository(db)
     catalogue_queries = CatalogueQueries(catalogue_repo)
+    table_crud = TableCrud(SqlTableCrudRepository(db))
     voting_repo = SqlVotingRepository(db)
     hasher = HashlibHasher()
     downloader = HttpxDownloader()
@@ -283,6 +287,7 @@ def build_container(settings: Settings) -> Container:
         composer_resolver=composer_resolver,
         catalogue_repo=catalogue_repo,
         catalogue_queries=catalogue_queries,
+        table_crud=table_crud,
         voting_repo=voting_repo,
         list_composers=list_composers,
         get_composer_detail=get_composer_detail,

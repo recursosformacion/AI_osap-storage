@@ -156,6 +156,27 @@ El enlace de obras (`backfill-composer-ids`) lo usa como **fallback**: si no se 
 compositor del texto de la obra pero su catálogo es inequívoco, se asigna el compositor del
 catálogo. Esto reduce las obras que quedan en "Compositor sin indicar" por falta de pista.
 
+---
+
+## CRUD genérico de tablas (para osap-api)
+
+Existe un CRUD genérico sobre las tablas de osap-storage, **protegido** y pensado para que lo
+consuma **exclusivamente osap-api** (con service token `storage:admin`). Vive bajo
+`/api/admin/tables`:
+
+- `GET /api/admin/tables` → lista las tablas expuestas.
+- `GET /api/admin/tables/{table}?limit=&offset=` → lee filas (paginado).
+- `GET /api/admin/tables/{table}/{pk}` → lee una fila por clave primaria.
+- `POST /api/admin/tables/{table}` → crea una fila (body: objeto con columnas).
+- `PUT /api/admin/tables/{table}/{pk}` → actualiza una fila.
+- `DELETE /api/admin/tables/{table}/{pk}` → borra una fila.
+
+Seguridad:
+- Requiere `storage:admin` (la auth de servicio lo protege; sin token → 401).
+- La tabla debe estar en un **whitelist**; las columnas se validan contra las reales de la tabla
+  (las desconocidas se ignoran); todos los valores van **parametrizados** (sin inyección SQL).
+- Las tablas internas (`schema_migrations`) no se exponen.
+
 ### `GET /api/admin/composers/candidates?q=&limit=&offset=`
 
 Asistencia a la revisión manual. Devuelve compositores activos que coinciden con la búsqueda por

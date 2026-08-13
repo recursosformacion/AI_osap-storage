@@ -42,6 +42,7 @@ from domain.ports.repositories import (
     StorageProviderRepository,
 )
 from domain.ports.statistics_repository import StatisticsRepository
+from domain.ports.table_crud_repository import TableCrudRepository
 from domain.ports.voting_repository import VotingRepository
 from domain.ports.work_repository import WorkRepository
 from domain.services.composer_names import normalize_composer_name
@@ -790,6 +791,79 @@ class InMemoryMusicBrainzCacheRepository(MusicBrainzCacheRepository):
 
     async def set(self, query: str, payload: str) -> None:
         self._items[query] = payload
+
+
+class InMemoryTableCrudRepository(TableCrudRepository):
+    def __init__(self) -> None:
+        self._data: dict[str, dict[object, dict]] = {}
+        self._cols: dict[str, list[str]] = {}
+        self._pk: dict[str, str] = {}
+        self._seq: dict[str, int] = {}
+
+    def register(self, table: str, columns: list[str], pk: str) -> None:
+        self._cols[table] = columns
+        self._pk[table] = pk
+        self._data.setdefault(table, {})
+        self._seq[table] = 0
+
+    def seed(self, table: str, rows: list[dict]) -> None:
+        pk = self._pk[table]
+        for row in rows:
+            self._data[table][row[pk]] = dict(row)
+            if isinstance(row[pk], int):
+                self._seq[table] = max(self._seq[table], row[pk])
+
+    async def list_tables(self) -> list[str]:
+        return sorted(self._pk)
+
+    async def columns(self, table: str) -> list[str]:
+        return self._cols.get(table, [])
+
+    async def pk_column(self, table: str) -> str:
+        from domain.exceptions import InvalidTableCrud
+
+        if table not in self._pk:
+            raise InvalidTableCrud(f"tabla no permitida: {table}")
+        return self._pk[table]
+
+    async def read(self, table: str, *, limit: int, offset: int) -> list[dict]:
+        await self.pk_column(table)
+        rows = list(self._data.get(table, {}).values())
+        return rows[offset : offset + limit]
+
+    async def read_one(self, table: str, pk_value: object) -> dict | None:
+        await self.pk_column(table)
+        row = self._data.get(table, {}).get(pk_value)
+        return dict(row) if row is not None else None
+
+    async def create(self, table: str, data: dict) -> dict:
+        from domain.exceptions import InvalidTableCrud
+
+        if table not in self._pk:
+            raise InvalidTableCrud(f"tabla no permitida: {table}")
+        allowed = set(self._cols.get(table, []))
+        clean = {k: v for k, v in data.items() if k in allowed}
+        pk = self._pk[table]
+        if pk not in clean:
+            self._seq[table] += 1
+            clean[pk] = self._seq[table]
+        self._data[table][clean[pk]] = dict(clean)
+        return dict(clean)
+
+    async def update(self, table: str, pk_value: object, data: dict) -> dict | None:
+        if table not in self._data or pk_value not in self._data[table]:
+            return None
+        allowed = set(self._cols.get(table, []))
+        for k, v in data.items():
+            if k in allowed:
+                self._data[table][pk_value][k] = v
+        return dict(self._data[table][pk_value])
+
+    async def delete(self, table: str, pk_value: object) -> int:
+        if table in self._data and pk_value in self._data[table]:
+            del self._data[table][pk_value]
+            return 1
+        return 0
 
 
 class InMemoryCatalogueRepository(CatalogueRepository):
