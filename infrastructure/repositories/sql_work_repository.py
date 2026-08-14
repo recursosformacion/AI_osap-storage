@@ -104,11 +104,20 @@ class SqlWorkRepository(WorkRepository):
 
     async def search(self, query: str, *, limit: int = 50, offset: int = 0) -> list[Work]:
         pattern = f"%{query}%"
+        prefix = f"{query}%"
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT * FROM works WHERE composer LIKE %s OR title LIKE %s "
-                "OR catalogue LIKE %s ORDER BY id LIMIT %s OFFSET %s",
-                (pattern, pattern, pattern, limit, offset),
+                "SELECT *, CASE "
+                "  WHEN title = %s THEN 100 "
+                "  WHEN title LIKE %s THEN 90 "
+                "  WHEN title LIKE %s THEN 70 "
+                "  WHEN composer LIKE %s THEN 40 "
+                "  WHEN catalogue LIKE %s THEN 30 "
+                "  ELSE 0 END AS score "
+                "FROM works WHERE composer LIKE %s OR title LIKE %s OR catalogue LIKE %s "
+                "ORDER BY score DESC, id LIMIT %s OFFSET %s",
+                (query, prefix, pattern, pattern, pattern,
+                 pattern, pattern, pattern, limit, offset),
             )
             return [_row_to_work(row) for row in await cur.fetchall()]
 
