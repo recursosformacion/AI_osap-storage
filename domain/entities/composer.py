@@ -51,12 +51,22 @@ class Composer:
     `id` es un UUID estable y opaco; `name` es el nombre canónico que Storage
     devuelve en las Works. Los nombres procedentes de proveedores se resuelven
     contra la tabla de alias (ver composer_aliases).
+
+    El maestro Composer añade: `visible` (1 = utilizable públicamente),
+    `birth_year`/`death_year`, `cluster_id` (unidad de identidad del maestro),
+    `review_reason` (motivo conservado) y `source_system` (maestro|app).
     """
 
     id: str
     name: str
     musicbrainz_id: str | None = None
     status: str = ComposerStatus.ACTIVE
+    visible: bool = True
+    birth_year: str | None = None
+    death_year: str | None = None
+    cluster_id: str | None = None
+    review_reason: str | None = None
+    source_system: str = "maestro"
     merged_into: str | None = None
     merged_at: datetime | None = None
     review_status: str = "not_reviewed"
@@ -71,14 +81,56 @@ class Composer:
 class ComposerAlias:
     """Un nombre (alias) conocido que apunta a la identidad canónica de un compositor.
 
-    `normalized_alias` es la forma normalizada de `alias`, usada para la resolución
-    determinista. Un mismo `normalized_alias` no puede apuntar a dos compositores
-    (restricción UNIQUE en BD).
+    `normalized_alias` es la forma normalizada de `alias`. La restricción UNIQUE
+    es por `(composer_id, normalized_alias)`: el mismo alias puede existir en
+    compositores distintos (los homónimos no se fusionan por nombre), pero no se
+    duplica dentro de la misma persona.
     """
 
     composer_id: str
     alias: str
     normalized_alias: str
+    name_type: str = "alias"
+    language: str | None = None
+    source: str = "musicbrainz"
+    id: int | None = None
+    created_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class ComposerIdentifier:
+    """Identificador externo de un compositor (maestro).
+
+    `is_identity_anchor` marca el identificador elegido como ancla de identidad
+    por las reglas de resolución. Discogs nunca es ancla.
+    """
+
+    composer_id: str
+    id_type: str
+    id_value: str
+    is_identity_anchor: bool = False
+    source: str = "musicbrainz"
+    strength: str | None = None
+    channels: list[str] | None = None
+
+
+@dataclass(frozen=True)
+class ComposerEvidence:
+    """Evidencia de construcción/resolución de un compositor (maestro).
+
+    `rule` es la regla que lo resolvió (p. ej. 07-viaf-multi-anchor, 07-review,
+    creation, resolution). `anchor_type`/`anchor_value` siempre no-nulos.
+    """
+
+    composer_id: str
+    rule: str
+    decision: str
+    reason: str
+    anchor_type: str = "none"
+    anchor_value: str = "none"
+    channels: list | None = None
+    identifiers_used: list | None = None
+    matcher_version: str = ""
     id: int | None = None
     created_at: datetime | None = None
 
@@ -113,6 +165,7 @@ class ComposerSummary:
     aliases_count: int = 0
     works_count: int = 0
     review_status: str = "not_reviewed"
+    visible: bool = True
 
 
 @dataclass(frozen=True)
@@ -128,6 +181,13 @@ class ComposerDetail:
     merged_at: datetime | None = None
     review_status: str = "not_reviewed"
     reviewed_at: datetime | None = None
+    visible: bool = True
+    birth_year: str | None = None
+    death_year: str | None = None
+    cluster_id: str | None = None
+    review_reason: str | None = None
+    identifiers: list[ComposerIdentifier] = field(default_factory=list)
+    evidence: list[ComposerEvidence] = field(default_factory=list)
     creation_evidence: list[ComposerCreationEvidence] = field(default_factory=list)
 
 

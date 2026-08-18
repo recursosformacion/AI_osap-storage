@@ -154,7 +154,10 @@ def test_list_composers_paginated(client):
     body = resp.json()
     assert body["total"] == 3
     assert len(body["items"]) == 2
-    assert set(body["items"][0].keys()) == {"id", "name", "status", "aliases_count", "works_count", "review_status"}
+    assert set(body["items"][0].keys()) == {
+        "id", "name", "status", "aliases_count", "works_count", "review_status",
+        "visible", "birth_year", "death_year",
+    }
 
 
 def test_list_search_by_name(client):

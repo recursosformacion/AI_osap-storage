@@ -104,11 +104,25 @@ class SqlVotingRepository(VotingRepository):
             return {r["work_id"]: _row_to_work_stats(r) for r in await cur.fetchall()}
 
     async def get_composer_statistics(self, composer_id: str) -> ComposerStatistics | None:
+        # `composer_statistics` está retirado: se calcula en vivo desde
+        # work_statistics + works (solo compositores activos del maestro).
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT composer_id, rating, adjusted_rating, vote_count, work_count, "
-                "confidence, calculated_at FROM composer_statistics WHERE composer_id = %s",
-                (composer_id,),
+                "SELECT w.composer_id, "
+                "SUM(ws.adjusted_rating * SQRT(ws.vote_count)) / NULLIF(SUM(SQRT(ws.vote_count)), 0) "
+                "    AS rating, "
+                "SUM(ws.adjusted_rating * SQRT(ws.vote_count)) / NULLIF(SUM(SQRT(ws.vote_count)), 0) "
+                "    AS adjusted_rating, "
+                "COALESCE(SUM(ws.vote_count), 0) AS vote_count, "
+                "COUNT(DISTINCT w.id) AS work_count, "
+                "LEAST(1.0, COALESCE(SUM(ws.vote_count), 0) / %s) AS confidence, "
+                "NOW(6) AS calculated_at "
+                "FROM works w "
+                "JOIN composers c ON c.id = w.composer_id AND c.status = 'active' "
+                "LEFT JOIN work_statistics ws ON ws.work_id = w.id "
+                "WHERE w.composer_id = %s "
+                "GROUP BY w.composer_id",
+                (ADJUSTMENT_MIN_VOTES, composer_id),
             )
             row = await cur.fetchone()
             return _row_to_composer_stats(row) if row else None
@@ -142,34 +156,9 @@ class SqlVotingRepository(VotingRepository):
                 "WHERE v.id IS NULL"
             )
 
-            # Composer: solo activos; media ponderada por sqrt(vote_count) de cada Work.
-            await cur.execute(
-                "DELETE cs FROM composer_statistics cs "
-                "LEFT JOIN composers c ON c.id = cs.composer_id "
-                "WHERE c.id IS NULL OR c.status <> 'active'"
-            )
-            await cur.execute(
-                "INSERT INTO composer_statistics "
-                "(composer_id, rating, adjusted_rating, vote_count, work_count, confidence, calculated_at) "
-                "SELECT w.composer_id, "
-                "SUM(ws.adjusted_rating * SQRT(ws.vote_count)) / NULLIF(SUM(SQRT(ws.vote_count)), 0), "
-                "SUM(ws.adjusted_rating * SQRT(ws.vote_count)) / NULLIF(SUM(SQRT(ws.vote_count)), 0), "
-                "COALESCE(SUM(ws.vote_count), 0), "
-                "COUNT(DISTINCT w.id), "
-                "LEAST(1.0, COALESCE(SUM(ws.vote_count), 0) / %s), "
-                "NOW(6) "
-                "FROM works w "
-                "JOIN composers c ON c.id = w.composer_id AND c.status = 'active' "
-                "LEFT JOIN work_statistics ws ON ws.work_id = w.id "
-                "WHERE w.composer_id IS NOT NULL "
-                "GROUP BY w.composer_id "
-                "ON DUPLICATE KEY UPDATE "
-                "rating = VALUES(rating), adjusted_rating = VALUES(adjusted_rating), "
-                "vote_count = VALUES(vote_count), work_count = VALUES(work_count), "
-                "confidence = VALUES(confidence), calculated_at = VALUES(calculated_at)",
-                (m,),
-            )
-            composers_updated = cur.rowcount
+            # Estadísticas por compositor se calculan en vivo (composer_statistics
+            # retirado); no se materializa ninguna tabla de agregación.
+            composers_updated = 0
 
             run.finished_at = datetime.now(UTC)
             run.works_updated = works_updated

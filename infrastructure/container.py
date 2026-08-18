@@ -49,6 +49,7 @@ from application.use_cases.voting import (
 from application.use_cases.works import GetWork, SearchWorks, SearchWorksFull
 from domain.entities.storage_provider import ProviderType
 from domain.ports.archive_repositories import ArchiveEntryRepository, ArchiveRepository
+from domain.ports.authority_identifier_repository import AuthorityIdentifierRepository
 from domain.ports.catalogue_repository import CatalogueRepository
 from domain.ports.composer_repository import ComposerRepository
 from domain.ports.download import FileDownloader
@@ -83,6 +84,7 @@ from infrastructure.providers.registry import (
 from infrastructure.providers.s3 import S3Backend
 from infrastructure.repositories.sql_archive_entry_repository import SqlArchiveEntryRepository
 from infrastructure.repositories.sql_archive_repository import SqlArchiveRepository
+from infrastructure.repositories.sql_authority_identifier_repository import SqlAuthorityIdentifierRepository
 from infrastructure.repositories.sql_catalogue_repository import SqlCatalogueRepository
 from infrastructure.repositories.sql_composer_repository import SqlComposerRepository
 from infrastructure.repositories.sql_file_repository import SqlFileRepository
@@ -162,6 +164,8 @@ class Container:
     search_works_full: SearchWorksFull
     get_work: GetWork
     enrich_work: EnrichWork
+    # Opcional hasta que se consume: identificadores de autoridad (storage, no api).
+    authority_identifier_repo: AuthorityIdentifierRepository | None = None
 
 
 def build_container(settings: Settings) -> Container:
@@ -177,6 +181,7 @@ def build_container(settings: Settings) -> Container:
     statistics_repo = SqlStatisticsRepository(db)
     work_repo = SqlWorkRepository(db)
     composer_repo = SqlComposerRepository(db)
+    authority_identifier_repo = SqlAuthorityIdentifierRepository(db)
     composer_resolver = ComposerResolver(composer_repo)
     catalogue_repo = SqlCatalogueRepository(db)
     catalogue_queries = CatalogueQueries(catalogue_repo)
@@ -284,6 +289,7 @@ def build_container(settings: Settings) -> Container:
         archive_entry_repo=archive_entry_repo,
         work_repo=work_repo,
         composer_repo=composer_repo,
+        authority_identifier_repo=authority_identifier_repo,
         composer_resolver=composer_resolver,
         catalogue_repo=catalogue_repo,
         catalogue_queries=catalogue_queries,

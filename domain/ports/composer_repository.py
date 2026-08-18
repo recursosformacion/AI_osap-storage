@@ -7,6 +7,8 @@ from domain.entities.composer import (
     ComposerAlias,
     ComposerCreationEvidence,
     ComposerDetail,
+    ComposerEvidence,
+    ComposerIdentifier,
     ComposerResolution,
     ComposerSummary,
     ComposerWorkRef,
@@ -28,7 +30,35 @@ class ComposerRepository(Protocol):
         """Compositor activo con ese nombre exacto (insensible a mayúsculas) o None."""
 
     async def add_alias(self, composer_id: str, alias: str, normalized_alias: str) -> ComposerAlias:
-        """Añade un alias. Debe fallar si `normalized_alias` ya apunta a otro compositor."""
+        """Añade un alias. La UNIQUE es por (composer_id, normalized_alias): no se
+        duplica dentro de la misma persona; el mismo alias puede existir en otras."""
+
+    async def list_identifiers(self, composer_id: str) -> list[ComposerIdentifier]:
+        """Identificadores externos del compositor (maestro)."""
+
+    async def find_by_identifier(self, id_type: str, id_value: str) -> list[Composer]:
+        """SELECT previo: compositores con ese identificador (puede haber varios).
+
+        Es la guarda de idempotencia ANTES de crear un Composer nuevo por
+        identificador: no se confía solo en el UNIQUE por compositor."""
+
+    async def add_identifier(
+        self, composer_id: str, id_type: str, id_value: str, *,
+        is_identity_anchor: bool = False, source: str = "musicbrainz",
+        strength: str | None = None, channels: list[str] | None = None,
+    ) -> None:
+        """Inserta un identificador (idempotente por (composer_id, id_type, id_value))."""
+
+    async def add_evidence(
+        self, composer_id: str, *, rule: str, decision: str, reason: str,
+        anchor_type: str = "none", anchor_value: str = "none",
+        channels: list | None = None, identifiers_used: list | None = None,
+        matcher_version: str = "",
+    ) -> None:
+        """Inserta una evidencia (idempotente por (composer_id, rule, anchor)."""
+
+    async def list_evidence(self, composer_id: str) -> list[ComposerEvidence]:
+        """Evidencia de construcción/resolución del compositor (maestro)."""
 
     async def resolve_by_normalized(self, normalized: str) -> tuple[str, str] | None:
         """Devuelve (composer_id, nombre canónico) para una forma normalizada, o None."""
@@ -64,13 +94,18 @@ class ComposerRepository(Protocol):
         indicar'). Devuelve cuántos se eliminaron."""
 
     async def list_summaries(
-        self, *, limit: int, offset: int, q: str | None = None, review: str | None = None
+        self, *, limit: int, offset: int, q: str | None = None, review: str | None = None,
+        visible: str = "visible",
     ) -> list[ComposerSummary]:
-        """Lista compositores activos (paginado). Si `q`, filtra por nombre/alias.
+        """Lista compositores (paginado). `visible` = visible|hidden|all:
+        visible → visible=1 · hidden → visible=0 (candidatos y fusionados) ·
+        all → todos (incl. merged). Si `q`, filtra por nombre/alias.
         Si `review`, filtra por review_status (correct/false/pending)."""
 
-    async def count(self, q: str | None = None, review: str | None = None) -> int:
-        """Cuenta compositores activos (mismo criterio de filtro que `list_summaries`)."""
+    async def count(
+        self, q: str | None = None, review: str | None = None, visible: str = "visible"
+    ) -> int:
+        """Cuenta compositores (mismo criterio de filtro que `list_summaries`)."""
 
     async def review_counts(self) -> dict[str, int]:
         """Conteo de compositores activos por review_status (total, correct, incorrect, reviewed, not_reviewed)."""

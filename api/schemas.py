@@ -233,11 +233,38 @@ class ComposerAdminRead(Model):
     aliases_count: int = 0
     works_count: int = 0
     review_status: str = "pending"
+    visible: bool = True
+    birth_year: str | None = None
+    death_year: str | None = None
 
 
 class ComposerAdminListResult(Model):
     items: list[ComposerAdminRead]
     total: int
+
+
+class ComposerIdentifierRead(Model):
+    composer_id: str
+    id_type: str
+    id_value: str
+    is_identity_anchor: bool = False
+    source: str = "musicbrainz"
+    strength: str | None = None
+    channels: list[str] | None = None
+
+
+class ComposerEvidenceRead(Model):
+    composer_id: str
+    rule: str
+    decision: str
+    reason: str
+    anchor_type: str = "none"
+    anchor_value: str = "none"
+    channels: list | None = None
+    identifiers_used: list | None = None
+    matcher_version: str = ""
+    id: int | None = None
+    created_at: datetime | None = None
 
 
 class ComposerCreationEvidenceRead(Model):
@@ -261,6 +288,13 @@ class ComposerAdminDetail(Model):
     merged_at: datetime | None = None
     review_status: str = "pending"
     reviewed_at: datetime | None = None
+    visible: bool = True
+    birth_year: str | None = None
+    death_year: str | None = None
+    cluster_id: str | None = None
+    review_reason: str | None = None
+    identifiers: list[ComposerIdentifierRead] = []
+    evidence: list[ComposerEvidenceRead] = []
     creation_evidence: list[ComposerCreationEvidenceRead] = []
 
 

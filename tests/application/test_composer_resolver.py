@@ -69,8 +69,17 @@ def test_resolve_many_batch_and_no_n_plus_one():
     assert len(calls) == 1  # una sola consulta por lotes, nunca N consultas
 
 
-def test_duplicate_normalized_alias_rejected():
+def test_duplicate_normalized_alias_same_composer_rejected():
+    """UNIQUE por (composer_id, normalized_alias): duplicar dentro de la misma
+    persona se rechaza, pero el mismo alias puede existir en compositores distintos."""
     repo, cid = _seed()
-    other = asyncio.run(repo.create(Composer(id="another", name="Alguien")))
     with pytest.raises(DuplicateComposerAlias):
-        asyncio.run(repo.add_alias(other.id, "W. A. Mozart", normalize_composer_name("W. A. Mozart")))
+        asyncio.run(repo.add_alias(cid, "W. A. Mozart", normalize_composer_name("W. A. Mozart")))
+
+
+def test_same_alias_allowed_in_different_composer():
+    repo, _ = _seed()
+    other = asyncio.run(repo.create(Composer(id="another", name="Alguien")))
+    # El alias de Mozart puede existir en otra persona (homónimo) sin conflicto.
+    entry = asyncio.run(repo.add_alias(other.id, "W. A. Mozart", normalize_composer_name("W. A. Mozart")))
+    assert entry.normalized_alias == "w a mozart"

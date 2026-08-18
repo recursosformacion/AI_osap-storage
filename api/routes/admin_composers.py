@@ -72,11 +72,16 @@ async def create_composer(
 async def list_composers(
     q: str | None = Query(default=None, description="Filtro por nombre o alias"),
     review: str | None = Query(default=None, description="Filtro por review_status"),
+    visible: str = Query(
+        default="visible",
+        pattern=r"^(visible|hidden|all)$",
+        description="Filtro de visibilidad: visible (visible=1) | hidden (visible=0) | all (todos)",
+    ),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     uc: ListComposers = Depends(ListComposersDep),
 ) -> ComposerAdminListResult:
-    result = await uc.execute(limit=limit, offset=offset, q=q, review=review)
+    result = await uc.execute(limit=limit, offset=offset, q=q, review=review, visible=visible)
     return ComposerAdminListResult(
         items=[ComposerAdminRead.model_validate(i) for i in result.items],
         total=result.total,

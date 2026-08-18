@@ -7,6 +7,8 @@ from domain.entities.composer import (
     ComposerAlias,
     ComposerCreationEvidence,
     ComposerDetail,
+    ComposerEvidence,
+    ComposerIdentifier,
     ComposerResolution,
     ComposerStatus,
     ComposerSummary,
@@ -21,17 +23,24 @@ from infrastructure.db.connection import Database
 
 
 def _row_to_composer(row: dict) -> Composer:
+    review_reason = row.get("review_reason")
     return Composer(
         id=row["id"],
         name=row["name"],
         musicbrainz_id=row.get("musicbrainz_id"),
         status=row.get("status") or ComposerStatus.ACTIVE,
+        visible=bool(row.get("visible", 1)),
+        birth_year=row.get("birth_year"),
+        death_year=row.get("death_year"),
+        cluster_id=row.get("cluster_id"),
+        review_reason=review_reason,
+        source_system=row.get("source_system") or "maestro",
         merged_into=row.get("merged_into"),
         merged_at=row.get("merged_at"),
         review_status=row.get("review_status") or "not_reviewed",
         reviewed_at=row.get("reviewed_at"),
-        suspicious=bool(row.get("suspicious")),
-        suspicious_reason=row.get("suspicious_reason"),
+        suspicious=review_reason is not None,
+        suspicious_reason=review_reason,
         created_at=row.get("created_at"),
         updated_at=row.get("updated_at"),
     )
@@ -43,19 +52,80 @@ def _row_to_alias(row: dict) -> ComposerAlias:
         composer_id=row["composer_id"],
         alias=row["alias"],
         normalized_alias=row["normalized_alias"],
-        created_at=row["created_at"],
+        name_type=row.get("name_type") or "alias",
+        language=row.get("language"),
+        source=row.get("source") or "musicbrainz",
+        created_at=row.get("created_at"),
     )
 
 
-def _row_to_evidence(row: dict) -> ComposerCreationEvidence:
+def _json_list(value: object) -> list | None:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        import json
+
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return None
+        return parsed if isinstance(parsed, list) else None
+    return None
+
+
+def _json_obj(value: object) -> dict:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        import json
+
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _row_to_identifier(row: dict) -> ComposerIdentifier:
+    return ComposerIdentifier(
+        composer_id=row["composer_id"],
+        id_type=row["id_type"],
+        id_value=row["id_value"],
+        is_identity_anchor=bool(row.get("is_identity_anchor")),
+        source=row.get("source") or "musicbrainz",
+        strength=row.get("strength"),
+        channels=_json_list(row.get("channels")),
+    )
+
+
+def _row_to_evidence(row: dict) -> ComposerEvidence:
+    return ComposerEvidence(
+        id=row["id"],
+        composer_id=row["composer_id"],
+        rule=row["rule"],
+        decision=row["decision"],
+        reason=row["reason"],
+        anchor_type=row.get("anchor_type") or "none",
+        anchor_value=row.get("anchor_value") or "none",
+        channels=_json_list(row.get("channels")),
+        identifiers_used=_json_list(row.get("identifiers_used")),
+        matcher_version=row.get("matcher_version") or "",
+        created_at=row.get("created_at"),
+    )
+
+
+def _row_to_creation_evidence(row: dict) -> ComposerCreationEvidence:
+    """Evidencia de creación mapeada desde composer_evidence (rule='creation')."""
+    payload = _json_obj(row.get("identifiers_used"))
     return ComposerCreationEvidence(
         id=row["id"],
         composer_id=row["composer_id"],
-        work_id=row.get("work_id"),
-        work_title=row.get("work_title"),
-        extracted_author=row.get("extracted_author"),
-        provider=row.get("provider"),
-        resource_reference=row.get("resource_reference"),
+        work_id=payload.get("work_id"),
+        work_title=payload.get("work_title"),
+        extracted_author=payload.get("extracted_author"),
+        provider=payload.get("provider"),
+        resource_reference=payload.get("resource_reference"),
         created_at=row.get("created_at"),
     )
 
@@ -69,8 +139,10 @@ class SqlComposerRepository(ComposerRepository):
             composer.id = str(uuid4())
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "INSERT INTO composers (id, name, status, merged_into) VALUES (%s, %s, %s, %s)",
-                (composer.id, composer.name, composer.status, composer.merged_into),
+                "INSERT INTO composers (id, name, status, merged_into, source_system) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                (composer.id, composer.name, composer.status, composer.merged_into,
+                 composer.source_system or "app"),
             )
             return composer
 
@@ -132,40 +204,53 @@ class SqlComposerRepository(ComposerRepository):
         provider: str | None = None,
         resource_reference: str | None = None,
     ) -> ComposerCreationEvidence:
+        """Persiste evidencia de creación en composer_evidence (rule='creation')."""
+        import json as _json
+
+        anchor = str(work_id) if work_id is not None else "none"
+        payload = _json.dumps({
+            "work_id": work_id, "work_title": work_title,
+            "extracted_author": extracted_author, "provider": provider,
+            "resource_reference": resource_reference,
+        }, ensure_ascii=False)
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "INSERT INTO composer_creation_evidence "
-                "(composer_id, work_id, work_title, extracted_author, provider, resource_reference) "
-                "VALUES (%s, %s, %s, %s, %s, %s)",
-                (composer_id, work_id, work_title, extracted_author, provider, resource_reference),
+                "INSERT INTO composer_evidence "
+                "(composer_id, rule, decision, reason, anchor_type, anchor_value, "
+                "identifiers_used, matcher_version) "
+                "VALUES (%s, 'creation', 'auto', 'creation', 'work', %s, %s, 'legacy')",
+                (composer_id, anchor, payload),
             )
             await cur.execute(
-                "SELECT * FROM composer_creation_evidence WHERE id = %s", (cur.lastrowid,)
+                "SELECT * FROM composer_evidence WHERE id = %s", (cur.lastrowid,)
             )
-            return _row_to_evidence(await cur.fetchone())
+            return _row_to_creation_evidence(await cur.fetchone())
 
     async def list_creation_evidence(self, composer_id: str) -> list[ComposerCreationEvidence]:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT * FROM composer_creation_evidence "
-                "WHERE composer_id = %s ORDER BY id",
+                "SELECT * FROM composer_evidence "
+                "WHERE composer_id = %s AND rule = 'creation' ORDER BY id",
                 (composer_id,),
             )
-            return [_row_to_evidence(row) for row in await cur.fetchall()]
+            return [_row_to_creation_evidence(row) for row in await cur.fetchall()]
 
     async def backfill_creation_evidence(self, provider: str | None = None) -> int:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "INSERT INTO composer_creation_evidence "
-                "(composer_id, work_id, work_title, extracted_author, provider) "
-                "SELECT c.id, w.id, w.title, c.name, %s "
+                "INSERT INTO composer_evidence "
+                "(composer_id, rule, decision, reason, anchor_type, anchor_value, "
+                "identifiers_used, matcher_version) "
+                "SELECT c.id, 'creation', 'auto', 'creation', 'work', CAST(w.id AS CHAR), "
+                "JSON_OBJECT('work_id', w.id, 'work_title', w.title, "
+                "'extracted_author', c.name, 'provider', %s), 'legacy' "
                 "FROM composers c "
                 "JOIN works w ON w.composer_id = c.id "
                 "JOIN (SELECT composer_id, MIN(id) AS id FROM works "
                 "      WHERE composer_id IS NOT NULL GROUP BY composer_id) m ON m.id = w.id "
                 "WHERE c.status = 'active' "
-                "AND NOT EXISTS (SELECT 1 FROM composer_creation_evidence e "
-                "                WHERE e.composer_id = c.id)",
+                "AND NOT EXISTS (SELECT 1 FROM composer_evidence e "
+                "                WHERE e.composer_id = c.id AND e.rule = 'creation')",
                 (provider,),
             )
             return cur.rowcount
@@ -213,10 +298,16 @@ class SqlComposerRepository(ComposerRepository):
         return {r["norm"]: canonical[r["id"]] for r in rows if r["id"] in canonical}
 
     async def list_summaries(
-        self, *, limit: int, offset: int, q: str | None = None, review: str | None = None
+        self, *, limit: int, offset: int, q: str | None = None, review: str | None = None,
+        visible: str = "visible",
     ) -> list[ComposerSummary]:
-        where = ["c.status = %s"]
-        params: list = [ComposerStatus.ACTIVE]
+        where: list[str] = []
+        params: list = []
+        if visible == "visible":
+            where.append("c.visible = 1")
+        elif visible == "hidden":
+            where.append("c.visible = 0")
+        # 'all' → sin filtro de visibilidad (incluye candidate y merged)
         if review and (review := review.strip()):
             # "revisados" = correctos o incorrectos (correct + incorrect).
             if review == "reviewed":
@@ -231,10 +322,10 @@ class SqlComposerRepository(ComposerRepository):
                 "SELECT 1 FROM composer_aliases a WHERE a.composer_id = c.id AND a.normalized_alias LIKE %s))"
             )
             params.extend([f"%{q}%", f"%{norm}%"])
-        where_sql = " AND ".join(where)
+        where_sql = " AND ".join(where) if where else "1=1"
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT c.id, c.name, c.status, c.review_status, "
+                "SELECT c.id, c.name, c.status, c.review_status, c.visible, "
                 "(SELECT COUNT(*) FROM composer_aliases a WHERE a.composer_id = c.id) AS aliases_count, "
                 "(SELECT COUNT(*) FROM works w WHERE w.composer_id = c.id) AS works_count "
                 f"FROM composers c WHERE {where_sql} "
@@ -247,15 +338,21 @@ class SqlComposerRepository(ComposerRepository):
                     name=r["name"],
                     status=r["status"],
                     review_status=r["review_status"] or "not_reviewed",
+                    visible=bool(r.get("visible", 1)),
                     aliases_count=int(r["aliases_count"] or 0),
                     works_count=int(r["works_count"] or 0),
                 )
                 for r in await cur.fetchall()
             ]
 
-    async def count(self, q: str | None = None, review: str | None = None) -> int:
-        where = ["status = %s"]
-        params: list = [ComposerStatus.ACTIVE]
+    async def count(self, q: str | None = None, review: str | None = None,
+                    visible: str = "visible") -> int:
+        where: list[str] = []
+        params: list = []
+        if visible == "visible":
+            where.append("visible = 1")
+        elif visible == "hidden":
+            where.append("visible = 0")
         if review and (review := review.strip()):
             if review == "reviewed":
                 where.append("review_status IN ('correct', 'incorrect')")
@@ -271,7 +368,8 @@ class SqlComposerRepository(ComposerRepository):
             params.extend([f"%{q}%", f"%{norm}%"])
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                f"SELECT COUNT(*) AS total FROM composers WHERE {' AND '.join(where)}", params
+                f"SELECT COUNT(*) AS total FROM composers WHERE {' AND '.join(where) if where else '1=1'}",
+                params,
             )
             return int((await cur.fetchone())["total"])
 
@@ -306,23 +404,45 @@ class SqlComposerRepository(ComposerRepository):
             )
 
     async def set_suspicious(self, composer_id: str, suspicious: bool, reason: str | None = None) -> None:
+        # En el nuevo esquema, "sospechoso" se conserva en review_reason/review_status.
         async with self._db.connection() as conn, conn.cursor() as cur:
-            await cur.execute(
-                "UPDATE composers SET suspicious = %s, suspicious_reason = %s, "
-                "reviewed_at = NOW(6) WHERE id = %s",
-                (1 if suspicious else 0, reason if suspicious else None, composer_id),
-            )
+            if suspicious:
+                await cur.execute(
+                    "UPDATE composers SET review_reason = %s, review_status = 'review_required', "
+                    "reviewed_at = NOW(6) WHERE id = %s",
+                    (reason or "suspicious", composer_id),
+                )
+            else:
+                await cur.execute(
+                    "UPDATE composers SET review_reason = NULL, review_status = 'not_reviewed', "
+                    "reviewed_at = NOW(6) WHERE id = %s",
+                    (composer_id,),
+                )
 
     async def record_resolution(self, resolution: ComposerResolution) -> ComposerResolution:
+        # `composer_resolution` está retirado; la resolución se audita en
+        # composer_evidence (rule='resolution') cuando hay un compositor implicado.
+        import json as _json
+
+        composer_id = resolution.candidate_composer_id or resolution.old_composer_id
+        if composer_id is None:
+            return resolution
+        anchor_value = f"work:{resolution.work_id}"
+        payload = _json.dumps({
+            "work_id": resolution.work_id,
+            "old_composer_id": resolution.old_composer_id,
+            "candidate_composer_id": resolution.candidate_composer_id,
+            "evidence": resolution.evidence,
+            "confidence": resolution.confidence,
+        }, ensure_ascii=False)
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "INSERT INTO composer_resolution "
-                "(work_id, old_composer_id, candidate_composer_id, reason, evidence, "
-                "confidence, resolver_version, decision) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                (resolution.work_id, resolution.old_composer_id, resolution.candidate_composer_id,
-                 resolution.reason, resolution.evidence, resolution.confidence,
-                 resolution.resolver_version, resolution.decision),
+                "INSERT INTO composer_evidence "
+                "(composer_id, rule, decision, reason, anchor_type, anchor_value, "
+                "identifiers_used, matcher_version) "
+                "VALUES (%s, 'resolution', %s, %s, 'resolution', %s, %s, %s)",
+                (composer_id, resolution.decision, resolution.reason, anchor_value,
+                 payload, resolution.resolver_version),
             )
             resolution.id = cur.lastrowid
             return resolution
@@ -330,18 +450,92 @@ class SqlComposerRepository(ComposerRepository):
     async def list_resolutions(self, work_id: int) -> list[ComposerResolution]:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT * FROM composer_resolution WHERE work_id = %s ORDER BY id", (work_id,)
+                "SELECT * FROM composer_evidence "
+                "WHERE rule = 'resolution' AND anchor_value LIKE %s ORDER BY id",
+                (f"work:{work_id}%",),
             )
-            return [
-                ComposerResolution(
-                    id=r["id"], work_id=r["work_id"], old_composer_id=r["old_composer_id"],
-                    candidate_composer_id=r["candidate_composer_id"], reason=r["reason"],
-                    evidence=r["evidence"], confidence=float(r["confidence"] or 0),
-                    resolver_version=r["resolver_version"], decision=r["decision"],
-                    created_at=r["created_at"],
-                )
-                for r in await cur.fetchall()
-            ]
+            rows = await cur.fetchall()
+        result = []
+        for r in rows:
+            payload = _json_obj(r.get("identifiers_used"))
+            result.append(ComposerResolution(
+                id=r["id"],
+                work_id=payload.get("work_id", work_id),
+                old_composer_id=payload.get("old_composer_id"),
+                candidate_composer_id=payload.get("candidate_composer_id"),
+                reason=r["reason"],
+                evidence=payload.get("evidence"),
+                confidence=float(payload.get("confidence") or 0),
+                resolver_version=r["matcher_version"] or "",
+                decision=r["decision"],
+                created_at=r["created_at"],
+            ))
+        return result
+
+    async def find_by_identifier(self, id_type: str, id_value: str) -> list[Composer]:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT c.* FROM composer_identifiers i JOIN composers c ON c.id = i.composer_id "
+                "WHERE i.id_type = %s AND i.id_value = %s ORDER BY c.id",
+                (id_type, id_value),
+            )
+            return [_row_to_composer(row) for row in await cur.fetchall()]
+
+    async def add_identifier(
+        self, composer_id: str, id_type: str, id_value: str, *,
+        is_identity_anchor: bool = False, source: str = "musicbrainz",
+        strength: str | None = None, channels: list[str] | None = None,
+    ) -> None:
+        import json as _json
+
+        ch = _json.dumps(channels) if channels else None
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "INSERT INTO composer_identifiers "
+                "(composer_id, id_type, id_value, is_identity_anchor, source, strength, channels) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s) "
+                "ON DUPLICATE KEY UPDATE is_identity_anchor = "
+                "IF(composer_identifiers.is_identity_anchor = 1 "
+                "OR VALUES(is_identity_anchor) = 1, 1, 0)",
+                (composer_id, id_type, id_value, 1 if is_identity_anchor else 0,
+                 source, strength, ch),
+            )
+
+    async def add_evidence(
+        self, composer_id: str, *, rule: str, decision: str, reason: str,
+        anchor_type: str = "none", anchor_value: str = "none",
+        channels: list | None = None, identifiers_used: list | None = None,
+        matcher_version: str = "",
+    ) -> None:
+        import json as _json
+
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "INSERT INTO composer_evidence "
+                "(composer_id, rule, decision, reason, anchor_type, anchor_value, "
+                "channels, identifiers_used, matcher_version) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+                "ON DUPLICATE KEY UPDATE matcher_version = VALUES(matcher_version)",
+                (composer_id, rule, decision, reason, anchor_type, anchor_value,
+                 _json.dumps(channels or []), _json.dumps(identifiers_used or []),
+                 matcher_version),
+            )
+
+    async def list_identifiers(self, composer_id: str) -> list[ComposerIdentifier]:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT * FROM composer_identifiers WHERE composer_id = %s ORDER BY id",
+                (composer_id,),
+            )
+            return [_row_to_identifier(row) for row in await cur.fetchall()]
+
+    async def list_evidence(self, composer_id: str) -> list[ComposerEvidence]:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT * FROM composer_evidence WHERE composer_id = %s ORDER BY id",
+                (composer_id,),
+            )
+            return [_row_to_evidence(row) for row in await cur.fetchall()]
 
     async def rename_composer(self, composer_id: str, new_name: str) -> None:
         from domain.services.composer_names import normalize_composer_name
@@ -376,9 +570,9 @@ class SqlComposerRepository(ComposerRepository):
     async def list_suspicious(self, *, limit: int, offset: int) -> list[ComposerSummary]:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT id, name, status, review_status, suspicious_reason, "
+                "SELECT id, name, status, review_status, review_reason AS suspicious_reason, "
                 "0 AS aliases_count, 0 AS works_count "
-                "FROM composers WHERE status = %s AND suspicious = 1 "
+                "FROM composers WHERE status = %s AND review_reason IS NOT NULL "
                 "ORDER BY id LIMIT %s OFFSET %s",
                 (ComposerStatus.ACTIVE, limit, offset),
             )
@@ -394,6 +588,7 @@ class SqlComposerRepository(ComposerRepository):
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
                 "SELECT id, name, status, merged_into, merged_at, review_status, reviewed_at, "
+                "visible, birth_year, death_year, cluster_id, review_reason, "
                 "created_at, updated_at FROM composers WHERE id = %s",
                 (composer_id,),
             )
@@ -410,10 +605,16 @@ class SqlComposerRepository(ComposerRepository):
             )
             works_count = int((await cur.fetchone())["total"])
             await cur.execute(
-                "SELECT * FROM composer_creation_evidence WHERE composer_id = %s ORDER BY id",
+                "SELECT * FROM composer_identifiers WHERE composer_id = %s ORDER BY id",
+                (composer_id,),
+            )
+            identifiers = [_row_to_identifier(r) for r in await cur.fetchall()]
+            await cur.execute(
+                "SELECT * FROM composer_evidence WHERE composer_id = %s ORDER BY id",
                 (composer_id,),
             )
             evidence = [_row_to_evidence(r) for r in await cur.fetchall()]
+            creation_evidence = [e for e in evidence if e.rule == "creation"]
             return ComposerDetail(
                 id=row["id"],
                 name=row["name"],
@@ -424,7 +625,14 @@ class SqlComposerRepository(ComposerRepository):
                 merged_at=row["merged_at"],
                 review_status=row.get("review_status") or "not_reviewed",
                 reviewed_at=row.get("reviewed_at"),
-                creation_evidence=evidence,
+                visible=bool(row.get("visible", 1)),
+                birth_year=row.get("birth_year"),
+                death_year=row.get("death_year"),
+                cluster_id=row.get("cluster_id"),
+                review_reason=row.get("review_reason"),
+                identifiers=identifiers,
+                evidence=evidence,
+                creation_evidence=creation_evidence,
             )
 
     async def list_works(
@@ -496,10 +704,35 @@ class SqlComposerRepository(ComposerRepository):
             mph = ", ".join(["%s"] * len(to_merge))
 
             await cur.execute(
-                f"UPDATE composer_aliases SET composer_id = %s WHERE composer_id IN ({mph})",
-                [target_id, *to_merge],
+                f"SELECT COUNT(*) AS n FROM composer_aliases WHERE composer_id IN ({mph})",
+                to_merge,
             )
-            aliases_transferred = cur.rowcount
+            aliases_transferred = int((await cur.fetchone())["n"])
+
+            # Copia aliases al target (ON DUPLICATE evita colisiones por
+            # (composer_id, normalized_alias)); los originales se conservan.
+            for sid in to_merge:
+                await cur.execute(
+                    "INSERT INTO composer_aliases "
+                    "(composer_id, alias, normalized_alias, name_type, language, source) "
+                    "SELECT %s, alias, normalized_alias, name_type, language, source "
+                    "FROM composer_aliases WHERE composer_id = %s "
+                    "ON DUPLICATE KEY UPDATE alias = VALUES(alias)",
+                    (target_id, sid),
+                )
+                # Copia identificadores al target (con ancla si cualquiera lo era).
+                await cur.execute(
+                    "INSERT INTO composer_identifiers "
+                    "(composer_id, id_type, id_value, is_identity_anchor, source, "
+                    "strength, channels) "
+                    "SELECT %s, id_type, id_value, is_identity_anchor, source, "
+                    "strength, channels FROM composer_identifiers src "
+                    "WHERE src.composer_id = %s "
+                    "ON DUPLICATE KEY UPDATE is_identity_anchor = "
+                    "IF(composer_identifiers.is_identity_anchor = 1 "
+                    "OR VALUES(is_identity_anchor) = 1, 1, 0)",
+                    (target_id, sid),
+                )
 
             await cur.execute(
                 f"UPDATE works SET composer_id = %s WHERE composer_id IN ({mph})",
@@ -507,16 +740,11 @@ class SqlComposerRepository(ComposerRepository):
             )
             works_moved = cur.rowcount
 
-            # La evidencia de creación se redirige al target y NO se borra (trazabilidad).
+            # La evidencia del maestro permanece en el compositor origen (no se borra);
+            # el origen conserva también sus aliases e identificadores.
             await cur.execute(
-                f"UPDATE composer_creation_evidence SET composer_id = %s "
-                f"WHERE composer_id IN ({mph})",
-                [target_id, *to_merge],
-            )
-
-            await cur.execute(
-                f"UPDATE composers SET status = %s, merged_into = %s, merged_at = NOW(6) "
-                f"WHERE id IN ({mph})",
+                f"UPDATE composers SET status = %s, merged_into = %s, merged_at = NOW(6), "
+                f"visible = 0 WHERE id IN ({mph})",
                 [ComposerStatus.MERGED, target_id, *to_merge],
             )
 

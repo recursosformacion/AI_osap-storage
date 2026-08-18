@@ -19,16 +19,22 @@ class ComposerListResult:
 
 
 class ListComposers:
-    """Listado administrativo paginado de compositores activos (con búsqueda por nombre/alias)."""
+    """Listado administrativo paginado de compositores (visibilidad + búsqueda por nombre/alias).
+
+    `visible` filtra por visibilidad: visible | hidden | all.
+    """
 
     def __init__(self, composers: ComposerRepository) -> None:
         self._composers = composers
 
     async def execute(
-        self, *, limit: int, offset: int, q: str | None = None, review: str | None = None
+        self, *, limit: int, offset: int, q: str | None = None, review: str | None = None,
+        visible: str = "visible",
     ) -> ComposerListResult:
-        items = await self._composers.list_summaries(limit=limit, offset=offset, q=q, review=review)
-        total = await self._composers.count(q=q, review=review)
+        items = await self._composers.list_summaries(
+            limit=limit, offset=offset, q=q, review=review, visible=visible
+        )
+        total = await self._composers.count(q=q, review=review, visible=visible)
         return ComposerListResult(items=items, total=total)
 
 
