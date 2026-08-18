@@ -329,6 +329,39 @@ class MergeComposersResultRead(Model):
     merge_operation_id: str
 
 
+class AddAliasRequest(BaseModel):
+    alias: str = Field(min_length=1, max_length=1024)
+
+
+class MoveAliasRequest(BaseModel):
+    target_composer_id: str = Field(min_length=1)
+    from_composer_id: str = Field(min_length=1)
+
+
+class AliasRead(Model):
+    id: int
+    alias: str
+    normalized_alias: str
+
+
+class MoveAliasResultRead(Model):
+    alias: AliasRead
+
+
+class PromoteAliasResultRead(Model):
+    composer_id: str
+    name: str
+
+
+class SetAttributionRequest(BaseModel):
+    composer_ids: list[str] = Field(min_length=1)
+    attribution_type: str = Field(min_length=1, max_length=64)
+
+
+class SetAttributionResultRead(Model):
+    works_affected: int
+
+
 class VoteCreate(BaseModel):
     user_id: str = Field(min_length=1, max_length=255)
     vote: int = Field(ge=1, le=5, description="Valoración 1-5")

@@ -9,16 +9,21 @@ from application.use_cases.archives import CountMissingEntries, GetArchive, List
 from application.use_cases.build_works import BuildWorks
 from application.use_cases.catalogues import CatalogueQueries
 from application.use_cases.composer_admin import (
+    AddAlias,
     ClassifyComposers,
     CleanComposerNames,
     ComposerReviewStats,
     CreateComposer,
     GetComposerDetail,
     GetComposerWorks,
+    ListAliases,
     ListComposers,
     MergeComposers,
+    MoveAlias,
+    PromoteAlias,
     PruneComposers,
     ReviewComposer,
+    SetAttribution,
 )
 from application.use_cases.delete_file import DeleteFile
 from application.use_cases.enrich_metadata import EnrichWork
@@ -122,6 +127,11 @@ class Container:
     merge_composers: MergeComposers
     create_composer: CreateComposer
     review_composer: ReviewComposer
+    add_alias: AddAlias
+    list_aliases: ListAliases
+    move_alias: MoveAlias
+    promote_alias: PromoteAlias
+    set_attribution: SetAttribution
     composer_review_stats: ComposerReviewStats
     classify_composers: ClassifyComposers
     clean_composer_names: CleanComposerNames
@@ -269,6 +279,11 @@ def build_container(settings: Settings) -> Container:
     merge_composers = MergeComposers(composer_repo)
     create_composer = CreateComposer(composer_repo)
     review_composer = ReviewComposer(composer_repo)
+    add_alias = AddAlias(composer_repo)
+    list_aliases = ListAliases(composer_repo)
+    move_alias = MoveAlias(composer_repo)
+    promote_alias = PromoteAlias(composer_repo)
+    set_attribution = SetAttribution(composer_repo)
     composer_review_stats = ComposerReviewStats(composer_repo)
     classify_composers = ClassifyComposers(composer_repo)
     clean_composer_names = CleanComposerNames(composer_repo)
@@ -301,6 +316,11 @@ def build_container(settings: Settings) -> Container:
         merge_composers=merge_composers,
         create_composer=create_composer,
         review_composer=review_composer,
+        add_alias=add_alias,
+        list_aliases=list_aliases,
+        move_alias=move_alias,
+        promote_alias=promote_alias,
+        set_attribution=set_attribution,
         composer_review_stats=composer_review_stats,
         classify_composers=classify_composers,
         clean_composer_names=clean_composer_names,

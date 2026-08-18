@@ -146,3 +146,12 @@ class ComposerRepository(Protocol):
         self, target_id: str, source_ids: list[str], *, merged_by: str | None = None
     ) -> MergeComposersResult:
         """Fusiona `source_ids` dentro de `target_id` de forma atómica (transaccional)."""
+
+    async def move_alias(self, alias_id: int, target_id: str, from_composer_id: str) -> ComposerAlias:
+        """Mueve un alias a otro compositor y reasigna las obras que lo aportaron (no se borra)."""
+
+    async def promote_alias(self, alias_id: int, from_composer_id: str) -> Composer:
+        """Promueve un alias a su propio Composer y reasigna las obras que lo aportaron."""
+
+    async def set_attribution(self, composer_ids: list[str], attribution_type: str) -> int:
+        """Convierte compositores a atribución: obras guardan tipo/nota y se retiran."""

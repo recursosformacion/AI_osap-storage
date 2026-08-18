@@ -1,26 +1,38 @@
 from __future__ import annotations
 
 from application.use_cases.composer_admin import (
+    AddAlias,
     ComposerReviewStats,
     CreateComposer,
     GetComposerDetail,
     GetComposerWorks,
+    ListAliases,
     ListComposers,
     MergeComposers,
+    MoveAlias,
+    PromoteAlias,
     ReviewComposer,
+    SetAttribution,
 )
 from fastapi import APIRouter, Depends, Query
 
 from api.dependencies import (
+    AddAliasDep,
     ComposerReviewStatsDep,
     CreateComposerDep,
     GetComposerDetailDep,
     GetComposerWorksDep,
+    ListAliasesDep,
     ListComposersDep,
     MergeComposersDep,
+    MoveAliasDep,
+    PromoteAliasDep,
     ReviewComposerDep,
+    SetAttributionDep,
 )
 from api.schemas import (
+    AddAliasRequest,
+    AliasRead,
     ComposerAdminDetail,
     ComposerAdminListResult,
     ComposerAdminRead,
@@ -30,6 +42,11 @@ from api.schemas import (
     CreateComposerRequest,
     MergeComposersRequest,
     MergeComposersResultRead,
+    MoveAliasRequest,
+    MoveAliasResultRead,
+    PromoteAliasResultRead,
+    SetAttributionRequest,
+    SetAttributionResultRead,
 )
 
 router = APIRouter(prefix="/api/admin/composers", tags=["admin-composers"])
@@ -169,3 +186,80 @@ async def review_composer(
 ) -> ComposerAdminDetail:
     detail = await uc.execute(composer_id, payload.review_status)
     return ComposerAdminDetail.model_validate(detail)
+
+
+@router.post(
+    "/{composer_id}/aliases",
+    response_model=AliasRead,
+    summary="Añadir alias a un compositor",
+    description="Añade un alias (solo mejora el reconocimiento; no toca obras).",
+)
+async def add_alias(
+    composer_id: str,
+    payload: AddAliasRequest,
+    uc: AddAlias = Depends(AddAliasDep),
+) -> AliasRead:
+    alias = await uc.execute(composer_id, payload.alias)
+    return AliasRead(id=alias.id or 0, alias=alias.alias, normalized_alias=alias.normalized_alias)
+
+
+@router.get(
+    "/{composer_id}/aliases",
+    response_model=list[AliasRead],
+    summary="Listar alias de un compositor",
+    description="Devuelve los alias de un compositor (con id, para mover/promover).",
+)
+async def list_aliases(
+    composer_id: str,
+    uc: ListAliases = Depends(ListAliasesDep),
+) -> list[AliasRead]:
+    aliases = await uc.execute(composer_id)
+    return [AliasRead(id=a.id or 0, alias=a.alias, normalized_alias=a.normalized_alias) for a in aliases]
+
+
+@router.post(
+    "/{composer_id}/aliases/{alias_id}/move",
+    response_model=MoveAliasResultRead,
+    summary="Mover un alias a otro compositor",
+    description="Mueve el alias (no se borra) y reasigna las obras que lo aportaron al destino.",
+)
+async def move_alias(
+    composer_id: str,
+    alias_id: int,
+    payload: MoveAliasRequest,
+    uc: MoveAlias = Depends(MoveAliasDep),
+) -> MoveAliasResultRead:
+    alias = await uc.execute(alias_id, payload.from_composer_id, payload.target_composer_id)
+    return MoveAliasResultRead(
+        alias=AliasRead(id=alias.id or 0, alias=alias.alias, normalized_alias=alias.normalized_alias)
+    )
+
+
+@router.post(
+    "/{composer_id}/aliases/{alias_id}/promote",
+    response_model=PromoteAliasResultRead,
+    summary="Promover un alias a su propio Composer",
+    description="Crea un Composer desde el alias y reasigna las obras que lo aportaron.",
+)
+async def promote_alias(
+    composer_id: str,
+    alias_id: int,
+    uc: PromoteAlias = Depends(PromoteAliasDep),
+) -> PromoteAliasResultRead:
+    composer = await uc.execute(alias_id, composer_id)
+    return PromoteAliasResultRead(composer_id=composer.id, name=composer.name)
+
+
+@router.post(
+    "/set-attribution",
+    response_model=SetAttributionResultRead,
+    summary="Convertir compositores a atribución",
+    description="Las obras de los compositores guardan attribution_type + attribution_note "
+    "(= nombre) y se les borra composer_id; los compositores se retiran.",
+)
+async def set_attribution(
+    payload: SetAttributionRequest,
+    uc: SetAttribution = Depends(SetAttributionDep),
+) -> SetAttributionResultRead:
+    affected = await uc.execute(payload.composer_ids, payload.attribution_type)
+    return SetAttributionResultRead(works_affected=affected)

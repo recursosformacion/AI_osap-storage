@@ -468,3 +468,13 @@ pantalla de fusión puede mostrar por qué existe cada registro y detectar error
 
 Este requisito aplica a osap-storage y afecta a la administración de compositores. Queda fuera
 de esta anotación la lógica de osap-api.
+
+## Gestión de alias y atribución
+
+- `GET /api/admin/composers/{composer_id}/aliases` — lista los alias de un compositor (con id).
+- `POST /api/admin/composers/{composer_id}/aliases` — añade un alias (normalizado).
+- `POST /api/admin/composers/{composer_id}/aliases/{alias_id}/move` — mueve el alias a otro compositor y reasigna las obras que lo aportaron (`works.composer` = alias, `composer_id` = origen).
+- `POST /api/admin/composers/{composer_id}/aliases/{alias_id}/promote` — crea un Composer desde el alias y reasigna sus obras.
+- `POST /api/admin/composers/set-attribution` — convierte compositores a atribución: las obras guardan `attribution_type` + `attribution_note` (= nombre), se borra `composer_id`, y el compositor se retira (status merged, invisible, revisión incorrecta).
+
+Reglas: los alias nunca se borran; se mueven o promueven. La fusión ya añade los orígenes como alias del destino y reasigna obras.

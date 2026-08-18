@@ -764,6 +764,99 @@ class SqlComposerRepository(ComposerRepository):
             merge_operation_id=operation_id,
         )
 
+    async def move_alias(self, alias_id: int, target_id: str, from_composer_id: str) -> ComposerAlias:
+        """Mueve un alias a otro compositor y reasigna las obras que lo aportaron.
+
+        El alias nunca se borra: se quita del compositor origen y se añade al destino
+        (si no existe). Las obras cuyo composer_id=origen y composer=alias pasan al destino.
+        """
+        async with self._db.transaction() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT * FROM composer_aliases WHERE id = %s AND composer_id = %s",
+                (alias_id, from_composer_id),
+            )
+            row = await cur.fetchone()
+            if row is None:
+                raise EntityNotFound("composer_alias", alias_id)
+            alias = _row_to_alias(row)
+            await cur.execute(
+                "INSERT IGNORE INTO composer_aliases (composer_id, alias, normalized_alias, "
+                "name_type, language, source) VALUES (%s, %s, %s, %s, %s, %s)",
+                (target_id, alias.alias, alias.normalized_alias,
+                 row.get("name_type"), row.get("language"), row.get("source")),
+            )
+            await cur.execute("DELETE FROM composer_aliases WHERE id = %s", (alias_id,))
+            await cur.execute(
+                "UPDATE works SET composer_id = %s WHERE composer_id = %s AND composer = %s",
+                (target_id, from_composer_id, alias.alias),
+            )
+            return ComposerAlias(
+                composer_id=target_id, alias=alias.alias,
+                normalized_alias=alias.normalized_alias, id=None,
+            )
+
+    async def promote_alias(self, alias_id: int, from_composer_id: str) -> Composer:
+        """Promueve un alias a su propio Composer y reasigna las obras que lo aportaron."""
+        async with self._db.transaction() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT * FROM composer_aliases WHERE id = %s AND composer_id = %s",
+                (alias_id, from_composer_id),
+            )
+            row = await cur.fetchone()
+            if row is None:
+                raise EntityNotFound("composer_alias", alias_id)
+            alias = _row_to_alias(row)
+            cid = str(uuid4())
+            await cur.execute(
+                "INSERT INTO composers (id, name, visible, status, review_status, source_system) "
+                "VALUES (%s, %s, 1, 'active', 'not_reviewed', 'admin')",
+                (cid, alias.alias),
+            )
+            await cur.execute(
+                "INSERT INTO composer_aliases (composer_id, alias, normalized_alias, "
+                "name_type, language, source) VALUES (%s, %s, %s, %s, %s, %s)",
+                (cid, alias.alias, alias.normalized_alias,
+                 row.get("name_type"), row.get("language"), row.get("source")),
+            )
+            await cur.execute("DELETE FROM composer_aliases WHERE id = %s", (alias_id,))
+            await cur.execute(
+                "UPDATE works SET composer_id = %s WHERE composer_id = %s AND composer = %s",
+                (cid, from_composer_id, alias.alias),
+            )
+            composer = await self.get_by_id(cid)
+            if composer is None:
+                raise EntityNotFound("composer", cid)
+            return composer
+
+    async def set_attribution(self, composer_ids: list[str], attribution_type: str) -> int:
+        """Convierte compositores a atribución: sus obras guardan el tipo/nota y se retiran.
+
+        Se borra composer_id de sus obras y se guarda attribution_type + attribution_note
+        (= nombre del compositor). El compositor queda retirado (merged, invisible, revisión incorrecta).
+        """
+        ids = list(dict.fromkeys(composer_ids))
+        if not ids:
+            return 0
+        async with self._db.transaction() as conn, conn.cursor() as cur:
+            mph = ", ".join(["%s"] * len(ids))
+            await cur.execute(f"SELECT id, name FROM composers WHERE id IN ({mph})", ids)
+            composers = {r["id"]: r["name"] for r in await cur.fetchall()}
+            affected = 0
+            for cid, name in composers.items():
+                await cur.execute(
+                    "UPDATE works SET attribution_type = %s, attribution_note = %s, "
+                    "composer_id = NULL, composer = NULL WHERE composer_id = %s",
+                    (attribution_type, (name or "")[:255], cid),
+                )
+                affected += cur.rowcount
+                await cur.execute(
+                    "UPDATE composers SET status = %s, merged_into = NULL, visible = 0, "
+                    "review_status = 'incorrect', suspicious = 1, "
+                    "suspicious_reason = 'convertido a atribución' WHERE id = %s",
+                    (ComposerStatus.MERGED, cid),
+                )
+            return affected
+
     async def _canonical_of(self, conn, composer_id: str, first_row: dict) -> tuple[str, str]:
         canonical = await self._canonical_map([composer_id])
         if composer_id not in canonical:

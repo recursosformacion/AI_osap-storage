@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from domain.entities.composer import (
+    Composer,
+    ComposerAlias,
     ComposerDetail,
     ComposerSummary,
     ComposerWorkRef,
@@ -262,3 +264,64 @@ class CreateComposer:
             aliases_count=0,
             works_count=0,
         )
+
+
+class AddAlias:
+    """Añade un alias a un compositor (solo mejora el reconocimiento; no toca obras)."""
+
+    def __init__(self, composers: ComposerRepository) -> None:
+        self._composers = composers
+
+    async def execute(self, composer_id: str, alias: str) -> ComposerAlias:
+        from domain.services.composer_names import normalize_composer_name
+
+        alias = (alias or "").strip()
+        if not alias:
+            raise ValueError("alias cannot be empty")
+        if await self._composers.get_by_id(composer_id) is None:
+            raise EntityNotFound("composer", composer_id)
+        return await self._composers.add_alias(composer_id, alias, normalize_composer_name(alias))
+
+
+class ListAliases:
+    """Lista los alias de un compositor (con id, para mover/promover)."""
+
+    def __init__(self, composers: ComposerRepository) -> None:
+        self._composers = composers
+
+    async def execute(self, composer_id: str) -> list[ComposerAlias]:
+        if await self._composers.get_by_id(composer_id) is None:
+            raise EntityNotFound("composer", composer_id)
+        return await self._composers.list_aliases(composer_id)
+
+
+class MoveAlias:
+    """Mueve un alias a otro compositor y reasigna las obras que lo aportaron (no se borra)."""
+
+    def __init__(self, composers: ComposerRepository) -> None:
+        self._composers = composers
+
+    async def execute(self, alias_id: int, from_composer_id: str, target_id: str) -> ComposerAlias:
+        if await self._composers.get_by_id(target_id) is None:
+            raise EntityNotFound("composer", target_id)
+        return await self._composers.move_alias(alias_id, target_id, from_composer_id)
+
+
+class PromoteAlias:
+    """Promueve un alias a su propio Composer y reasigna las obras que lo aportaron."""
+
+    def __init__(self, composers: ComposerRepository) -> None:
+        self._composers = composers
+
+    async def execute(self, alias_id: int, from_composer_id: str) -> Composer:
+        return await self._composers.promote_alias(alias_id, from_composer_id)
+
+
+class SetAttribution:
+    """Convierte compositores a atribución: sus obras guardan tipo/nota y se retiran."""
+
+    def __init__(self, composers: ComposerRepository) -> None:
+        self._composers = composers
+
+    async def execute(self, composer_ids: list[str], attribution_type: str) -> int:
+        return await self._composers.set_attribution(composer_ids, attribution_type)
