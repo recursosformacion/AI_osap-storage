@@ -23,7 +23,8 @@ import sys
 import pymysql
 
 _ATTR_PATTERNS = [
-    (re.compile(r"\b(anon|anonymous|anonimo|anónimo|unknown|unbekannt)\b", re.I), "ANONIMA"),
+    (re.compile(r"\b(anon|anonymous|anonimo|anónimo)\b", re.I), "ANONIMA"),
+    (re.compile(r"\b(unknown|unbekannt|desconocido|composer unknown|autor desconocido)\b", re.I), "DESCONOCIDO"),
     (re.compile(r"\b(traditional|trad|tradicional|traditionell|traditionnel|folk)\b", re.I), "TRADICIONAL"),
     (re.compile(r"\b(popular|popular)\b", re.I), "POPULAR"),
     (re.compile(r"\b(attrib|attributed|atribuida|atribuido)\b", re.I), "ATRIBUIDA"),
@@ -61,32 +62,51 @@ def main() -> int:
                 "WHERE composer IS NOT NULL AND TRIM(composer)<>''"
             )
             rows = cur.fetchall()
+            cur.execute(
+                "SELECT id, attribution_type, attribution_note FROM works "
+                "WHERE attribution_type IS NOT NULL AND attribution_note IS NOT NULL"
+            )
+            moved = cur.fetchall()
         by_type: dict[str, int] = {}
         matched = []
         for r in rows:
             tipo, note = _classify(r["composer"])
             if tipo and not r["attribution_type"]:
                 by_type[tipo] = by_type.get(tipo, 0) + 1
-                matched.append((int(r["id"]), tipo, note, r["composer_id"]))
+                matched.append((int(r["id"]), tipo, note))
+        # corrección: re-clasificar las ya movidas por su nota (p.ej. unknown != anónimo)
+        corrected = []
+        for r in moved:
+            tipo, note = _classify(r["attribution_note"])
+            if tipo and tipo != r["attribution_type"]:
+                corrected.append((int(r["id"]), tipo))
 
         print(f"=== BACKFILL ATRIBUCIÓN ({'DRY-RUN' if args.dry_run else 'EJECUTANDO'}) ===")
-        print(f"  obras a mover: {len(matched)}")
+        print(f"  obras a mover: {len(matched)} | a corregir: {len(corrected)}")
         for t, n in sorted(by_type.items()):
             print(f"  {t:12}: {n}")
-        if not args.dry_run and matched:
+        if not args.dry_run:
             with conn.cursor() as cur:
-                for wid, tipo, note, _cid in matched:
+                for wid, tipo, note in matched:
                     cur.execute(
                         "UPDATE works SET attribution_type=%s, attribution_note=%s, "
                         "composer=NULL, composer_id=NULL WHERE id=%s",
                         (tipo, note[:255], wid),
                     )
+                for wid, tipo in corrected:
+                    cur.execute(
+                        "UPDATE works SET attribution_type=%s WHERE id=%s",
+                        (tipo, wid),
+                    )
                 conn.commit()
-            print(f"\n  aplicado a {len(matched)} obras")
+            print(f"\n  aplicado: {len(matched)} movidas + {len(corrected)} corregidas")
         else:
-            print("\n  muestra:")
-            for wid, tipo, note, _cid in matched[:12]:
+            print("\n  muestra (a mover):")
+            for wid, tipo, note in matched[:10]:
                 print(f"     {wid}  {tipo:12}  {note[:50]}")
+            print("  muestra (a corregir):")
+            for wid, tipo in corrected[:10]:
+                print(f"     {wid} -> {tipo}")
     finally:
         conn.close()
     return 0
