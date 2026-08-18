@@ -25,6 +25,8 @@ class Work:
 
     composer: str | None = None
     composer_id: str | None = None
+    attribution_type: str | None = None
+    attribution_note: str | None = None
     title: str | None = None
     subtitle: str | None = None
     artist: str | None = None

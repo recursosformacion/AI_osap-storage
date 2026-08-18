@@ -12,6 +12,8 @@ def _row_to_work(row: dict) -> Work:
         work_key=row["work_key"],
         composer=row["composer"],
         composer_id=row["composer_id"],
+        attribution_type=row["attribution_type"],
+        attribution_note=row["attribution_note"],
         title=row["title"],
         subtitle=row["subtitle"],
         artist=row["artist"],
@@ -46,9 +48,11 @@ class SqlWorkRepository(WorkRepository):
     async def create(self, work: Work) -> Work:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "INSERT INTO works (work_key, relative_path, composer, composer_id, title, tags) "
-                "VALUES (%s, %s, %s, %s, %s, %s)",
-                (work.work_key, work.relative_path, work.composer, work.composer_id, work.title, work.tags),
+                "INSERT INTO works (work_key, relative_path, composer, composer_id, "
+                "attribution_type, attribution_note, title, tags) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                (work.work_key, work.relative_path, work.composer, work.composer_id,
+                 work.attribution_type, work.attribution_note, work.title, work.tags),
             )
             work.id = cur.lastrowid
             return work
@@ -56,7 +60,8 @@ class SqlWorkRepository(WorkRepository):
     async def update(self, work: Work) -> None:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "UPDATE works SET relative_path=%s, composer=%s, composer_id=%s, title=%s, "
+                "UPDATE works SET relative_path=%s, composer=%s, composer_id=%s, "
+                "attribution_type=%s, attribution_note=%s, title=%s, "
                 "subtitle=%s, artist=%s, song_name=%s, genre=%s, opus=%s, catalogue=%s, "
                 "musical_key=%s, year=%s, instrumentation=%s, language=%s, tags=%s, "
                 "duration=%s, measures=%s, pages=%s, parts=%s, complexity=%s, license=%s, "
@@ -65,6 +70,8 @@ class SqlWorkRepository(WorkRepository):
                     work.relative_path,
                     work.composer,
                     work.composer_id,
+                    work.attribution_type,
+                    work.attribution_note,
                     work.title,
                     work.subtitle,
                     work.artist,
@@ -112,12 +119,15 @@ class SqlWorkRepository(WorkRepository):
                 "  WHEN title LIKE %s THEN 90 "
                 "  WHEN title LIKE %s THEN 70 "
                 "  WHEN composer LIKE %s THEN 40 "
+                "  WHEN attribution_type LIKE %s THEN 35 "
+                "  WHEN attribution_note LIKE %s THEN 35 "
                 "  WHEN catalogue LIKE %s THEN 30 "
                 "  ELSE 0 END AS score "
                 "FROM works WHERE composer LIKE %s OR title LIKE %s OR catalogue LIKE %s "
+                "OR attribution_type LIKE %s OR attribution_note LIKE %s "
                 "ORDER BY score DESC, id LIMIT %s OFFSET %s",
-                (query, prefix, pattern, pattern, pattern,
-                 pattern, pattern, pattern, limit, offset),
+                (query, prefix, pattern, pattern, pattern, pattern, pattern,
+                 pattern, pattern, pattern, pattern, pattern, limit, offset),
             )
             return [_row_to_work(row) for row in await cur.fetchall()]
 
