@@ -162,7 +162,13 @@ class ServiceAuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable):
         path = request.url.path
-        if path in EXEMPT_PATHS or path.startswith("/api/v1/health"):
+        # Exento de auth: health, metrics y el endpoint público de descarga de recursos
+        # (/api/download/{id} solo redirige al CDN/R2; no expone rutas ni hashes internos).
+        if (
+            path in EXEMPT_PATHS
+            or path.startswith("/api/v1/health")
+            or path.startswith("/api/download/")
+        ):
             return await call_next(request)
 
         auth_header = request.headers.get("Authorization", "")
