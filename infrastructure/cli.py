@@ -4,9 +4,12 @@ import argparse
 import asyncio
 import csv
 import json
+import os
 from dataclasses import asdict, is_dataclass
+from pathlib import Path
 from typing import Any
 
+import yaml
 from application.use_cases.import_pdmx import PdmxImportResult
 from application.use_cases.materialize_archive import MaterializeArchiveCommand
 from application.use_cases.materialize_file import MaterializeFileCommand
@@ -533,6 +536,18 @@ async def _run(args: argparse.Namespace, container: Container) -> None:
 
 def main() -> None:
     args = build_parser().parse_args()
+    try:
+        from osap.bootstrap.configuration import validate_generic_service_config
+    except ImportError:
+        validate_generic_service_config = None  # type: ignore[assignment]
+
+    if validate_generic_service_config is not None:
+        config_path = Path(os.environ.get("OSAP_CONFIG", Path(__file__).resolve().parent.parent / "config.yaml"))
+        data = {}
+        if config_path.exists():
+            data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        validate_generic_service_config("osap-storage", data, config_path)
+
     container = build_container(Settings())  # type: ignore[call-arg]
     asyncio.run(_run(args, container))
 

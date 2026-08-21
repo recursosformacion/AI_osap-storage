@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import uvicorn
+import yaml
 from fastapi import FastAPI
 from infrastructure.bootstrap import ensure_default_provider
 from infrastructure.config import Settings
@@ -33,8 +36,23 @@ from api.routes import (
 )
 
 
+def _validate_config() -> None:
+    try:
+        from osap.bootstrap.configuration import validate_generic_service_config
+    except ImportError:
+        return
+
+    config_path = Path(os.environ.get("OSAP_CONFIG", Path(__file__).resolve().parent.parent / "config.yaml"))
+    data: dict[str, Any] = {}
+    if config_path.exists():
+        data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+
+    validate_generic_service_config("osap-storage", data, config_path)
+
+
 def create_app() -> FastAPI:
     setup_logging()
+    _validate_config()
     settings = Settings()  # type: ignore[call-arg]
     container: Container = build_container(settings)
     logger = logging.getLogger(__name__)
@@ -108,5 +126,6 @@ app = create_app()
 
 
 def run() -> None:
+    _validate_config()
     settings = Settings()  # type: ignore[call-arg]
     uvicorn.run("api.main:app", host=settings.http_host, port=settings.http_port, reload=True)
