@@ -1,0 +1,15 @@
+{
+  "name": "kilo",
+  "version": "0.0.0",
+  "description": "Async flow control",
+  "main": "kilo.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "mocha -R spec test/test.js"
+  },
+  "repository": "",
+  "author": "stoke",
+  "license": "MIT"
+}
