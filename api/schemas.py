@@ -259,6 +259,9 @@ class WorkDetailRead(Model):
 
 
 class ComposerPublicRead(Model):
+    """Ficha pública de compositor con biografía (desde la entidad ComposerDetail)."""
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     name: str
     biography_summary: str | None = None

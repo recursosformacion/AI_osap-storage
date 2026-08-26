@@ -1204,3 +1204,6 @@ class InMemoryAuthorityIdentifierRepository(AuthorityIdentifierRepository):
 
     async def delete(self, entity_type: str, entity_id: str, scheme: str) -> None:
         self._rows.pop((entity_type, entity_id, scheme), None)
+
+    async def count_by_source(self, source: str) -> int:
+        return sum(1 for r in self._rows.values() if r.source == source)

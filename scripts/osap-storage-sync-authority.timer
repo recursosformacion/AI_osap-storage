@@ -1,0 +1,14 @@
+# osap-storage-sync-authority.timer
+# Dispara el job de sincronización de autoridad cada día a las 03:00 (hora servidor),
+# con una tolerancia de retardo de 10 minutos.
+
+[Unit]
+Description=osap-storage: daily sync of composer authority from Metabrainz
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+RandomizedDelaySec=600
+Persistent=true
+
+[Install]
+WantedBy=timers.target

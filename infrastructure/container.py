@@ -95,6 +95,7 @@ from infrastructure.providers.s3 import S3Backend
 from infrastructure.repositories.sql_archive_entry_repository import SqlArchiveEntryRepository
 from infrastructure.repositories.sql_archive_repository import SqlArchiveRepository
 from infrastructure.repositories.sql_authority_identifier_repository import SqlAuthorityIdentifierRepository
+from infrastructure.repositories.sql_authority_sync_state_repository import SqlAuthoritySyncStateRepository
 from infrastructure.repositories.sql_catalogue_repository import SqlCatalogueRepository
 from infrastructure.repositories.sql_composer_repository import SqlComposerRepository
 from infrastructure.repositories.sql_file_repository import SqlFileRepository
@@ -296,7 +297,11 @@ def build_container(settings: Settings) -> Container:
     move_alias = MoveAlias(composer_repo)
     promote_alias = PromoteAlias(composer_repo)
     set_attribution = SetAttribution(composer_repo)
-    composer_review_stats = ComposerReviewStats(composer_repo)
+    composer_review_stats = ComposerReviewStats(
+        composer_repo,
+        identifiers=authority_identifier_repo,
+        sync_state=SqlAuthoritySyncStateRepository(db),
+    )
     classify_composers = ClassifyComposers(composer_repo)
     update_composer = UpdateComposer(composer_repo)
     get_composer_biography = GetComposerBiography(composer_repo)

@@ -119,6 +119,37 @@ async def _cmd_musicbrainz_enrich(args: argparse.Namespace, container: Container
     return await EnrichComposersMusicBrainz(container.composer_repo, mb).execute(limit=args.limit)
 
 
+async def _cmd_sync_authority(args: argparse.Namespace, container: Container):
+    from application.use_cases.authority_sync import SyncMetabrainzAuthority
+
+    from infrastructure.repositories.sql_authority_identifier_repository import (
+        SqlAuthorityIdentifierRepository,
+    )
+    from infrastructure.repositories.sql_authority_sync_state_repository import (
+        SqlAuthoritySyncStateRepository,
+    )
+    from infrastructure.services.metabrainz_client import MetabrainzClient
+
+    token = container.settings.metabrainz_token
+    if not token:
+        raise SystemExit("No hay metabrainz.token en config (necesario para sincronizar autoridad)")
+    mb = MetabrainzClient(
+        token=token, base_url=container.settings.metabrainz_base_url
+    )
+    tmp_root = (
+        Path(container.settings.metabrainz_tmp_dir)
+        if container.settings.metabrainz_tmp_dir
+        else None
+    )
+    sync = SyncMetabrainzAuthority(
+        mb,
+        SqlAuthorityIdentifierRepository(container.db),
+        SqlAuthoritySyncStateRepository(container.db),
+        tmp_root=tmp_root,
+    )
+    return await sync.execute(max_packets=args.max_packets)
+
+
 async def _cmd_backfill_composer_ids(args: argparse.Namespace, container: Container):
     from domain.entities.composer import UNKNOWN_COMPOSER_ID
     from domain.services.composer_quality import extract_composer_name
@@ -532,6 +563,19 @@ def build_parser() -> argparse.ArgumentParser:
     mb.add_argument("--limit", type=int, default=50, help="Nº de compositores a procesar")
     mb.set_defaults(handler=_cmd_musicbrainz_enrich)
 
+    sync_auth = sub.add_parser(
+        "sync-authority",
+        help="Sincronizar la autoridad de compositores/obras desde Metabrainz "
+        "(replicación por hora, diario; idempotente con checkpoint en authority_sync_state)",
+    )
+    sync_auth.add_argument(
+        "--max-packets",
+        type=int,
+        default=48,
+        help="Nº máximo de paquetes de replicación a procesar por ejecución (default 48)",
+    )
+    sync_auth.set_defaults(handler=_cmd_sync_authority)
+
     seedcat = sub.add_parser(
         "seed-catalogues",
         help="Sembrar la tabla de catálogos musicales (idempotente)",
@@ -582,7 +626,7 @@ def main() -> None:
 
     if validate_generic_service_config is not None:
         config_path = Path(os.environ.get("OSAP_CONFIG", Path(__file__).resolve().parent.parent / "config.yaml"))
-        data = {}
+        data: dict[str, Any] = {}
         if config_path.exists():
             data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
         validate_generic_service_config("osap-storage", data, config_path)

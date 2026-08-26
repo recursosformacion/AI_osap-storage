@@ -96,3 +96,12 @@ class SqlAuthorityIdentifierRepository:
                 "WHERE entity_type = %s AND entity_id = %s AND scheme = %s",
                 (entity_type, entity_id, scheme),
             )
+
+    async def count_by_source(self, source: str) -> int:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT COUNT(*) AS total FROM authority_identifiers WHERE source = %s",
+                (source,),
+            )
+            row = await cur.fetchone()
+        return int(row["total"]) if row else 0

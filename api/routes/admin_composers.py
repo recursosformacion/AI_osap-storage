@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from application.use_cases.composer_admin import (
     AddAlias,
     ComposerReviewStats,
@@ -66,9 +68,10 @@ router = APIRouter(prefix="/api/admin/composers", tags=["admin-composers"])
     "/stats",
     summary="Composer review statistics",
     description="Conteo de compositores activos por review_status (total, correct, "
-    "incorrect, reviewed, not_reviewed).",
+    "incorrect, reviewed, not_reviewed), más el acumulado del índice de autoridad "
+    "(Metabrainz) y la fecha de la última sincronización.",
 )
-async def composer_review_stats(uc: ComposerReviewStats = Depends(ComposerReviewStatsDep)) -> dict[str, int]:
+async def composer_review_stats(uc: ComposerReviewStats = Depends(ComposerReviewStatsDep)) -> dict[str, Any]:
     return await uc.execute()
 
 

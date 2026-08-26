@@ -74,3 +74,10 @@ auth:
 osap_api:
   base_url: https://app.openmusicrepository.com
   # service_token: <token opcional para Authorization: Bearer>
+
+# Metabrainz (replicación MusicBrainz): sincroniza la autoridad de compositores/obras
+# vía `osap-storage sync-authority` (job diario). El token es privado: solo en config.yaml
+# / config.production.yaml, nunca en el repo.
+metabrainz:
+  token: CAMBIAR
+  base_url: https://metabrainz.org/api/musicbrainz/replication-info

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from domain.entities.composer import (
     Composer,
@@ -60,13 +61,37 @@ class ReviewComposer:
 
 
 class ComposerReviewStats:
-    """Conteo de compositores por estado de revisión (para el resumen de admin)."""
+    """Conteo de compositores por estado de revisión (para el resumen de admin).
 
-    def __init__(self, composers: ComposerRepository) -> None:
+    Incluye el acumulado del índice de autoridad (Metabrainz) y la fecha de la última
+    sincronización, para que osap-api los muestre en el resumen de compositores.
+    """
+
+    def __init__(
+        self,
+        composers: ComposerRepository,
+        identifiers: Any | None = None,
+        sync_state: Any | None = None,
+    ) -> None:
         self._composers = composers
+        self._identifiers = identifiers
+        self._sync_state = sync_state
 
-    async def execute(self) -> dict[str, int]:
-        return await self._composers.review_counts()
+    async def execute(self) -> dict[str, Any]:
+        stats: dict[str, Any] = await self._composers.review_counts()
+        if self._identifiers is not None and self._sync_state is not None:
+            state = await self._sync_state.get("metabrainz")
+            stats["authority_total"] = await self._identifiers.count_by_source("metabrainz")
+            stats["authority_updated_at"] = (
+                state.last_success_at.isoformat() if state.last_success_at else None
+            )
+            last_run = (state.metadata or {}).get("last_run") if state.metadata else None
+            stats["authority_last_sync"] = last_run or {}
+        else:
+            stats["authority_total"] = 0
+            stats["authority_updated_at"] = None
+            stats["authority_last_sync"] = {}
+        return stats
 
 
 class ClassifyComposers:

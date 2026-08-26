@@ -1,0 +1,19 @@
+# osap-storage-sync-authority.service
+# Ejecuta el job diario de sincronización de autoridad (Metabrainz/MusicBrainz).
+# Se instala en /etc/systemd/system/ y se activa con:
+#   sudo cp osap-storage-sync-authority.{service,timer} /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now osap-storage-sync-authority.timer
+
+[Unit]
+Description=osap-storage: sync composer authority from Metabrainz (daily)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=ocw
+Group=ocw
+WorkingDirectory=/home/ocw/openmusicrepository.com/osap-storage
+ExecStart=/home/ocw/openmusicrepository.com/osap-storage/scripts/sync_authority_job.sh
+# La ejecución puede durar varios minutos (descargas de paquetes por hora).
+TimeoutStartSec=3600

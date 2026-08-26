@@ -19,6 +19,7 @@ import asyncio
 import contextlib
 import json
 import sys
+import urllib.parse
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -200,7 +201,7 @@ WIKI_SEARCH_URL = "https://en.wikipedia.org/w/api.php"
 WIKI_SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary"
 MUSICBRAINZ_API = "https://musicbrainz.org/ws/2"
 WIKIDATA_API = "https://www.wikidata.org/w/api.php"
-_UA = {"User-Agent": "OSAP-Composer-Review/1.0 (contact@example.com)"}
+_UA = {"User-Agent": "OSAP-Composer-Review/1.0 (https://openmusicrepository.com; admin@openmusicrepository.com)"}
 CACHE_PATH = SCRIPT_DIR / "composer_search_cache.json"
 
 
@@ -419,7 +420,7 @@ async def _search_wikipedia(name: str, delay: float = 1.0) -> dict[str, Any] | N
                 return None
 
             title = results[0]["title"]
-            summary_resp = await client.get(f"{WIKI_SUMMARY_URL}/{httpx.utils.quote(title)}", headers=_UA)
+            summary_resp = await client.get(f"{WIKI_SUMMARY_URL}/{urllib.parse.quote(title)}", headers=_UA)
             summary_resp.raise_for_status()
             summary_data = summary_resp.json()
 
@@ -443,7 +444,7 @@ async def _search_wikipedia(name: str, delay: float = 1.0) -> dict[str, Any] | N
                 "nationality": summary_data.get("description", "N/A") or "N/A",
                 "url": (
                     (summary_data.get("content_urls") or {}).get("desktop") or {}
-                ).get("page") or f"https://en.wikipedia.org/wiki/{httpx.utils.quote(title.replace(' ', '_'))}",
+                ).get("page") or f"https://en.wikipedia.org/wiki/{urllib.parse.quote(title.replace(' ', '_'))}",
                 "key_works": [],
                 "key_fact": description or "",
             }
@@ -839,7 +840,7 @@ async def run_phase2_or_3(db_config: dict[str, Any], phase: str) -> dict[str, An
                     analysis = await analyze_composer_async(c["name"])
                     now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
 
-                    if analysis["is_composer"]:
+                    if analysis["is_composer"] and analysis["biography"]:
                         await update_composer_review(
                             conn,
                             c["id"],
@@ -850,6 +851,17 @@ async def run_phase2_or_3(db_config: dict[str, Any], phase: str) -> dict[str, An
                         await upsert_biography(conn, c["id"], analysis["biography"])
                         await _set_active(conn, c["id"])
                         updated_reviewed += 1
+                    elif analysis["is_composer"]:
+                        # Es compositor pero no se generó biografía (Wikidata sin summary
+                        # o fallback). NO marcar reviewed: sigue pendiente para reintentar.
+                        await update_composer_review(
+                            conn,
+                            c["id"],
+                            "review_required",
+                            "Sin biografía generada (requiere reintento)",
+                            None,
+                        )
+                        updated_review_required += 1
                     else:
                         await update_composer_review(
                             conn,

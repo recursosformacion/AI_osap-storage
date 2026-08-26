@@ -100,6 +100,33 @@ Listado paginado de compositores **activos**.
 }
 ```
 
+### `GET /api/admin/composers/stats`
+
+Conteo de compositores por estado de revisión, más el estado de la sincronización de
+autoridad (Metabrainz/MusicBrainz) para que osap-api lo muestre en el resumen:
+
+```json
+{
+  "total": 2273,
+  "correct": 1200,
+  "incorrect": 85,
+  "reviewed": 1600,
+  "not_reviewed": 660,
+  "authority_total": 123456,
+  "authority_updated_at": "2026-08-26T03:00:00+00:00",
+  "authority_last_sync": {
+    "packets_downloaded": 24,
+    "artists_processed": 150,
+    "works_processed": 80,
+    "identifiers_upserted": 230
+  }
+}
+```
+
+- `authority_total`: acumulado de identificadores de autoridad ingestados desde Metabrainz.
+- `authority_updated_at`: fecha de la última sincronización correcta.
+- `authority_last_sync`: items añadidos/modificados en la última ejecución del job.
+
 ### `POST /api/admin/composers/{id}/review`
 
 Body: `{ "review_status": "correct" | "incorrect" | "reviewed" | "not_reviewed" }`
@@ -578,3 +605,48 @@ de esta anotación la lógica de osap-api.
 - `POST /api/admin/composers/set-attribution` — convierte compositores a atribución: las obras guardan `attribution_type` + `attribution_note` (= nombre), se borra `composer_id`, y el compositor se retira (status merged, invisible, revisión incorrecta).
 
 Reglas: los alias nunca se borran; se mueven o promueven. La fusión ya añade los orígenes como alias del destino y reasigna obras.
+
+## Sincronización de autoridad externa (Metabrainz/MusicBrainz)
+
+`composer_authority`, `composer_authority_names` y `authority_identifiers` fusionan
+identificadores de IMSLP, VIAF, Wikidata y MusicBrainz. Para mantenerlas al día se usa el
+job diario `osap-storage sync-authority`, que consume la replicación de **Metabrainz**
+(espejo de MusicBrainz): metabrainz numera las entregas y permite consultar el último
+número disponible (`replication-info`) y solicitar los paquetes pendientes.
+
+### Tabla `authority_sync_state`
+
+Checkpoint por fuente (`metabrainz`, futuras `viaf`/`imslp`/`wikidata`): guarda el último
+paquete procesado, la fecha de la última sincronización correcta, el último error y un
+`metadata_json` con el `last_run` (items añadidos/modificados). Migración:
+`030_authority_sync_state.sql`.
+
+### Comando
+
+```
+osap-storage sync-authority [--max-packets 48]
+```
+
+- Consulta `replication-info` → `last`; procesa los paquetes `checkpoint+1 .. last`
+  (hasta `--max-packets` por ejecución) descargando los dumps JSON incrementales por hora
+  de `artist` y `work`.
+- Cada `artist` → upsert en `authority_identifiers` (composer→musicbrainz) con metadata
+  (name, sort_name, type, country, gender, life_span).
+- Cada `work` → upsert en `authority_identifiers` (work→musicbrainz) con metadata (title,
+  language, type).
+- Idempotente e interrumpible: el checkpoint se actualiza tras cada paquete; un fallo de
+  red detiene la ejecución y el próximo día continúa desde el mismo punto.
+- Config: `metabrainz.token` (en `config.yaml`/`config.production.yaml`, nunca en el repo).
+
+### Job diario
+
+Timer systemd que ejecuta el comando cada día por la noche (03:00):
+
+- `scripts/sync_authority_job.sh` — wrapper que ejecuta el comando con el venv del proyecto.
+- `osap-storage-sync-authority.service` / `.timer` — unidad systemd (ejecutar como `ocw`).
+
+### Resumen para osap-api
+
+`GET /api/admin/composers/stats` incluye `authority_total` (acumulado), `authority_updated_at`
+(última sincronización) y `authority_last_sync` (items de la última ejecución), para que la
+app muestre el estado del índice de autoridad en su resumen de compositores.

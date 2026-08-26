@@ -87,6 +87,14 @@ def _load_yaml_config(path: Path) -> dict[str, Any]:
     if "service_token" in osap_api:
         cfg["osap_api_service_token"] = osap_api["service_token"]
 
+    metabrainz = data.get("metabrainz") or {}
+    if "token" in metabrainz:
+        cfg["metabrainz_token"] = metabrainz["token"]
+    if "base_url" in metabrainz:
+        cfg["metabrainz_base_url"] = metabrainz["base_url"]
+    if "tmp_dir" in metabrainz:
+        cfg["metabrainz_tmp_dir"] = metabrainz["tmp_dir"]
+
     pdmx = ((data.get("providers") or {}).get("pdmx") or {}).get("source") or {}
     if "csv" in pdmx:
         cfg["pdmx_source_csv"] = pdmx["csv"]
@@ -153,6 +161,12 @@ class Settings(BaseSettings):
     # POST /api/v1/composers/resolve y procesa la respuesta.
     osap_api_base_url: str = "https://app.openmusicrepository.com"
     osap_api_service_token: str | None = None
+
+    # Metabrainz (replicación MusicBrainz) para sincronizar la autoridad de compositores.
+    # El token NO vive en el código: se configura en config.yaml / config.production.yaml.
+    metabrainz_token: str | None = None
+    metabrainz_base_url: str = "https://metabrainz.org/api/musicbrainz/replication-info"
+    metabrainz_tmp_dir: str = ""
 
     @classmethod
     def settings_customise_sources(
