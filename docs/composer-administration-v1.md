@@ -39,6 +39,23 @@ y nunca ejecuta fusiones automáticas.
 | `alias`           | `VARCHAR`      | Nombre original (tal cual lo entregó el proveedor).     |
 | `normalized_alias`| `VARCHAR`      | Forma normalizada. `UNIQUE`: no puede apuntar a dos.    |
 
+### `composer_biographies`
+
+| campo                    | tipo            | descripción                                        |
+|--------------------------|-----------------|----------------------------------------------------|
+| `composer_id`            | `CHAR(36)` (PK/FK) | Biografía de un compositor (1:1).              |
+| `biography_summary`      | `TEXT`          | Resumen biográfico (1-2 párrafos).                 |
+| `biography_era`          | `TEXT`          | Época musical (Barroco, Clásico, Romántico...).    |
+| `biography_nationality`  | `TEXT`          | Nacionalidad legible.                              |
+| `biography_key_works`    | `JSON`          | Obras más conocidas.                               |
+| `biography_key_fact`     | `TEXT`          | Dato destacable.                                   |
+| `biography_references`   | `JSON`          | `[{source, url}]` → Wikipedia, Wikidata, MusicBrainz. |
+| `biography_updated_at`   | `VARCHAR(64)`   | Última actualización.                              |
+
+Migración: `infrastructure/db/migrations/029_composer_biographies.sql`. La puebla
+`scripts/composer_review_ai.py` (phase2 dev / phase3 prod), que amplía las columnas a `TEXT`
+automáticamente si la tabla existía con tamaños menores.
+
 ### `composer_merge_history`
 
 | campo                  | tipo            | descripción                                           |
@@ -237,18 +254,45 @@ El dato original corrupto nunca se destruye: queda como `old_composer_id`/eviden
 
 ### Pantalla web de gestión (osap-storage)
 
-osap-storage sirve una **pantalla web completa** del CRUD en `GET /admin`. Es storage quien
-realiza todas las funciones; osap-api solo necesita un enlace **"Gestión storage"** que apunte a
-esa pantalla:
+osap-storage sirve una **pantalla web completa de mantenimiento** en `GET /admin` con **pestañas**:
+**Compositores** (listado con biografía, detalle editable con identidad + biografía + alias + obras),
+**Obras** (listado y edición de metadatos + tags/genres/instruments/parts) y **Tablas** (CRUD
+genérico). Es storage quien realiza todas las funciones; osap-api solo necesita un enlace
+**"Gestión storage"** que apunte a esa pantalla:
 
 ```
 https://storage.openmusicrepository.com/admin?token=<service-token-storage:admin>
 ```
 
 La página (shell) se sirve sin token (no contiene datos), pero las operaciones las realiza su JS
-llamando a `/api/admin/tables/*` con el service token como `Bearer` (protegido con `storage:admin`).
+llamando a `/api/admin/*` con el service token como `Bearer` (protegido con `storage:admin`).
 Esto mantiene storage ajeno a usuarios: solo autentica el **servicio** (osap-api) que le pasa el
 token.
+
+### `GET /api/v1/composers/{composer_id}` (público)
+
+Ficha pública de compositor con biografía, para que osap-api la muestre:
+
+```json
+{
+  "id": "8f5b3a7e-...",
+  "name": "Wolfgang Amadeus Mozart",
+  "biography_summary": "Wolfgang Amadeus Mozart (1756-1791)...",
+  "biography_era": "Clásico",
+  "biography_nationality": "Austria",
+  "biography_key_works": ["Sinfonía No. 40", "Las bodas de Fígaro", "Requiem"],
+  "biography_key_fact": "Compositor austriaco del Clasicismo.",
+  "biography_references": [{"source": "Wikipedia", "url": "https://en.wikipedia.org/wiki/..."}],
+  "works_count": 264,
+  "aliases": ["W. A. Mozart", "Mozart, W. A."],
+  "birth_year": "1756",
+  "death_year": "1791"
+}
+```
+
+El detalle de obra (`GET /api/v1/works/{id}`) **no** incluye la biografía: el frontend debe
+consultarla aparte en `/api/v1/composers/{composer_id}` cuando la necesite (evita cargar la
+biografía en cada listado de obras).
 
 ### `GET /api/admin/composers/candidates?q=&limit=&offset=`
 
@@ -257,7 +301,7 @@ nombre o alias. **Solo propone**; nunca ejecuta fusiones.
 
 ### `GET /api/admin/composers/{id}`
 
-Detalle de un compositor (activo o merged).
+Detalle de un compositor (activo o merged), incluye la biografía y las referencias bibliográficas.
 
 ```json
 {
@@ -267,11 +311,40 @@ Detalle de un compositor (activo o merged).
   "aliases": ["W. A. Mozart", "Mozart, W. A."],
   "works_count": 264,
   "merged_into": null,
-  "merged_at": null
+  "merged_at": null,
+  "biography_summary": "Wolfgang Amadeus Mozart (1756-1791)...",
+  "biography_era": "Clásico",
+  "biography_nationality": "Austria",
+  "biography_key_works": ["Sinfonía No. 40", "Las bodas de Fígaro"],
+  "biography_key_fact": "Compositor austriaco del Clasicismo.",
+  "biography_references": [
+    {"source": "Wikipedia", "url": "https://en.wikipedia.org/wiki/Wolfgang_Amadeus_Mozart"},
+    {"source": "Wikidata", "url": "https://www.wikidata.org/wiki/Q254"}
+  ]
 }
 ```
 
 Para un compositor `merged`, `status = "merged"` y `merged_into` apunta al target.
+
+### `PUT /api/admin/composers/{id}`
+
+Edita campos de identidad de un compositor. Solo se actualizan los campos enviados.
+
+Body (todos opcionales): `name`, `status` (`active|merged|candidate`), `visible`, `birth_year`,
+`death_year`, `cluster_id`, `review_status`, `review_reason`, `musicbrainz_id`.
+
+### `GET /api/admin/composers/{id}/biography`
+
+Alias de `GET /api/admin/composers/{id}` (devuelve el detalle con la biografía).
+
+### `PUT /api/admin/composers/{id}/biography`
+
+Crea o actualiza la biografía. Solo se actualizan los campos enviados (envía `null` para dejar el
+resto intacto). Body: `summary`, `era`, `nationality`, `key_works`, `key_fact`, `references`.
+
+### `DELETE /api/admin/composers/{id}/identifiers/{identifier_id}`
+
+Elimina un identificador externo de un compositor (status 204).
 
 ### `GET /api/admin/composers/{id}/works?limit=&offset=`
 
@@ -283,6 +356,33 @@ Works asociadas al compositor (paginado), para revisar el impacto de una fusión
     { "work_id": 264, "title": "Contredanse in F, K. 15h", "composer_id": "8f5b3a7e-..." }
   ],
   "total": 1
+}
+```
+
+---
+
+## Mantenimiento de obras (admin)
+
+Endpoints bajo `/api/admin/works` (protegidos con `storage:admin`), para que un responsable dé de
+alta o modifique cualquier dato de una obra:
+
+- `GET /api/admin/works?q=&limit=&offset=` — listado paginado con búsqueda (compositor/título/catálogo);
+  cada ítem incluye `tags`, `genres`, `instruments`, `parts_names`.
+- `GET /api/admin/works/{id}` — detalle con metadatos y listas.
+- `PUT /api/admin/works/{id}` — actualiza metadatos y (si se envían) reemplaza `tags`, `genres`,
+  `instruments`, `parts_names` por completo.
+
+```json
+// PUT /api/admin/works/264
+{
+  "title": "Contredanse in F, K. 15h",
+  "composer": "Wolfgang Amadeus Mozart",
+  "composer_id": "8f5b3a7e-...",
+  "year": 1770,
+  "tags": ["contredanse"],
+  "genres": ["Danza"],
+  "instruments": ["piano"],
+  "parts_names": []
 }
 ```
 

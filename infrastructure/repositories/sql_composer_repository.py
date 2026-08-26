@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from domain.entities.composer import (
@@ -327,8 +329,10 @@ class SqlComposerRepository(ComposerRepository):
             await cur.execute(
                 "SELECT c.id, c.name, c.status, c.review_status, c.visible, "
                 "(SELECT COUNT(*) FROM composer_aliases a WHERE a.composer_id = c.id) AS aliases_count, "
-                "(SELECT COUNT(*) FROM works w WHERE w.composer_id = c.id) AS works_count "
-                f"FROM composers c WHERE {where_sql} "
+                "(SELECT COUNT(*) FROM works w WHERE w.composer_id = c.id) AS works_count, "
+                "b.biography_summary, b.biography_era, b.biography_nationality "
+                f"FROM composers c LEFT JOIN composer_biographies b ON b.composer_id = c.id "
+                f"WHERE {where_sql} "
                 "ORDER BY c.name LIMIT %s OFFSET %s",
                 [*params, limit, offset],
             )
@@ -341,6 +345,9 @@ class SqlComposerRepository(ComposerRepository):
                     visible=bool(r.get("visible", 1)),
                     aliases_count=int(r["aliases_count"] or 0),
                     works_count=int(r["works_count"] or 0),
+                    biography_summary=r.get("biography_summary"),
+                    biography_era=r.get("biography_era"),
+                    biography_nationality=r.get("biography_nationality"),
                 )
                 for r in await cur.fetchall()
             ]
@@ -551,6 +558,117 @@ class SqlComposerRepository(ComposerRepository):
                 (composer_id, new_name, normalize_composer_name(new_name)),
             )
 
+    async def update_composer(
+        self, composer_id: str, *,
+        name: str | None = None,
+        birth_year: str | None = None,
+        death_year: str | None = None,
+        visible: bool | None = None,
+        cluster_id: str | None = None,
+        review_status: str | None = None,
+        review_reason: str | None = None,
+        musicbrainz_id: str | None = None,
+        status: str | None = None,
+    ) -> None:
+        sets: list[str] = []
+        params: list = []
+        if name is not None:
+            sets.append("name = %s")
+            params.append(name)
+        if birth_year is not None:
+            sets.append("birth_year = %s")
+            params.append(birth_year)
+        if death_year is not None:
+            sets.append("death_year = %s")
+            params.append(death_year)
+        if visible is not None:
+            sets.append("visible = %s")
+            params.append(1 if visible else 0)
+        if cluster_id is not None:
+            sets.append("cluster_id = %s")
+            params.append(cluster_id)
+        if review_status is not None:
+            sets.append("review_status = %s")
+            params.append(review_status)
+        if review_reason is not None:
+            sets.append("review_reason = %s")
+            params.append(review_reason)
+        if musicbrainz_id is not None:
+            sets.append("musicbrainz_id = %s")
+            params.append(musicbrainz_id)
+        if status is not None:
+            sets.append("status = %s")
+            params.append(status)
+        if not sets:
+            return
+        sets.append("updated_at = NOW(6)")
+        params.append(composer_id)
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                f"UPDATE composers SET {', '.join(sets)} WHERE id = %s", params
+            )
+            if name is not None:
+                from domain.services.composer_names import normalize_composer_name
+
+                await cur.execute(
+                    "INSERT IGNORE INTO composer_aliases (composer_id, alias, normalized_alias) "
+                    "VALUES (%s, %s, %s)",
+                    (composer_id, name, normalize_composer_name(name)),
+                )
+
+    async def get_biography(self, composer_id: str) -> ComposerDetail | None:
+        return await self.get_detail(composer_id)
+
+    async def upsert_biography(
+        self, composer_id: str, *,
+        summary: str | None = None,
+        era: str | None = None,
+        nationality: str | None = None,
+        key_works: list[str] | None = None,
+        key_fact: str | None = None,
+        references: list[dict[str, str]] | None = None,
+    ) -> None:
+        now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT 1 FROM composer_biographies WHERE composer_id = %s",
+                (composer_id,),
+            )
+            exists = await cur.fetchone() is not None
+            if exists:
+                await cur.execute(
+                    "UPDATE composer_biographies SET "
+                    "biography_summary = COALESCE(%s, biography_summary), "
+                    "biography_era = COALESCE(%s, biography_era), "
+                    "biography_nationality = COALESCE(%s, biography_nationality), "
+                    "biography_key_works = COALESCE(%s, biography_key_works), "
+                    "biography_key_fact = COALESCE(%s, biography_key_fact), "
+                    "biography_references = COALESCE(%s, biography_references), "
+                    "biography_updated_at = %s WHERE composer_id = %s",
+                    (summary, era, nationality,
+                     json.dumps(key_works) if key_works is not None else None,
+                     key_fact,
+                     json.dumps(references) if references is not None else None,
+                     now_str, composer_id),
+                )
+            else:
+                await cur.execute(
+                    "INSERT INTO composer_biographies "
+                    "(composer_id, biography_summary, biography_era, biography_nationality, "
+                    "biography_key_works, biography_key_fact, biography_references, biography_updated_at) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                    (composer_id, summary, era, nationality,
+                     json.dumps(key_works or []), key_fact,
+                     json.dumps(references or []), now_str),
+                )
+
+    async def delete_identifier(self, composer_id: str, identifier_id: int) -> None:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "DELETE FROM composer_identifiers WHERE id = %s AND composer_id = %s",
+                (identifier_id, composer_id),
+            )
+
     async def list_pending_review(self, *, limit: int, offset: int) -> list[ComposerSummary]:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
@@ -587,14 +705,34 @@ class SqlComposerRepository(ComposerRepository):
     async def get_detail(self, composer_id: str) -> ComposerDetail | None:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT id, name, status, merged_into, merged_at, review_status, reviewed_at, "
-                "visible, birth_year, death_year, cluster_id, review_reason, "
-                "created_at, updated_at FROM composers WHERE id = %s",
+                "SELECT c.id, c.name, c.status, c.merged_into, c.merged_at, c.review_status, "
+                "c.reviewed_at, c.visible, c.birth_year, c.death_year, c.cluster_id, c.review_reason, "
+                "c.created_at, c.updated_at, "
+                "b.biography_summary, b.biography_era, b.biography_nationality, "
+                "b.biography_key_works, b.biography_key_fact, b.biography_references "
+                "FROM composers c LEFT JOIN composer_biographies b ON b.composer_id = c.id "
+                "WHERE c.id = %s",
                 (composer_id,),
             )
             row = await cur.fetchone()
             if row is None:
                 return None
+            key_works = row.get("biography_key_works")
+            if isinstance(key_works, str):
+                try:
+                    key_works = json.loads(key_works)
+                except Exception:
+                    key_works = []
+            elif key_works is None:
+                key_works = []
+            references = row.get("biography_references")
+            if isinstance(references, str):
+                try:
+                    references = json.loads(references)
+                except Exception:
+                    references = []
+            elif references is None:
+                references = []
             await cur.execute(
                 "SELECT alias FROM composer_aliases WHERE composer_id = %s ORDER BY id",
                 (composer_id,),
@@ -630,6 +768,12 @@ class SqlComposerRepository(ComposerRepository):
                 death_year=row.get("death_year"),
                 cluster_id=row.get("cluster_id"),
                 review_reason=row.get("review_reason"),
+                biography_summary=row.get("biography_summary"),
+                biography_era=row.get("biography_era"),
+                biography_nationality=row.get("biography_nationality"),
+                biography_key_works=key_works,
+                biography_key_fact=row.get("biography_key_fact"),
+                biography_references=references,
                 identifiers=identifiers,
                 evidence=evidence,
                 creation_evidence=creation_evidence,

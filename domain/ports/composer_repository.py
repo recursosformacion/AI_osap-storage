@@ -128,6 +128,37 @@ class ComposerRepository(Protocol):
     async def rename_composer(self, composer_id: str, new_name: str) -> None:
         """Actualiza el nombre canónico de un compositor y su alias canónico."""
 
+    async def update_composer(
+        self, composer_id: str, *,
+        name: str | None = None,
+        birth_year: str | None = None,
+        death_year: str | None = None,
+        visible: bool | None = None,
+        cluster_id: str | None = None,
+        review_status: str | None = None,
+        review_reason: str | None = None,
+        musicbrainz_id: str | None = None,
+        status: str | None = None,
+    ) -> None:
+        """Edita campos de identidad de un compositor (solo los que no sean None)."""
+
+    async def get_biography(self, composer_id: str) -> ComposerDetail | None:
+        """Devuelve el detalle con la biografía (alias de get_detail)."""
+
+    async def upsert_biography(
+        self, composer_id: str, *,
+        summary: str | None = None,
+        era: str | None = None,
+        nationality: str | None = None,
+        key_works: list[str] | None = None,
+        key_fact: str | None = None,
+        references: list[dict[str, str]] | None = None,
+    ) -> None:
+        """Crea o actualiza la biografía de un compositor en composer_biographies."""
+
+    async def delete_identifier(self, composer_id: str, identifier_id: int) -> None:
+        """Elimina un identificador externo de un compositor."""
+
     async def list_pending_review(self, *, limit: int, offset: int) -> list[ComposerSummary]:
         """Compositores activos pendientes de revisión (para clasificación heurística)."""
 

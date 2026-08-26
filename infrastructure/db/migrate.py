@@ -32,12 +32,38 @@ async def migrate(db: Database) -> None:
     for sql_file in sorted(MIGRATIONS_DIR.glob("*.sql")):
         if sql_file.name in applied:
             continue
-        statements = [stmt.strip() for stmt in sql_file.read_text(encoding="utf-8").split(";") if stmt.strip()]
+        statements = _split_statements(sql_file)
         async with db.connection() as conn, conn.cursor() as cur:
             for stmt in statements:
                 await cur.execute(stmt)
             await cur.execute("INSERT INTO schema_migrations (name) VALUES (%s)", (sql_file.name,))
         logger.info("applied migration %s", sql_file.name)
+
+
+def _split_statements(sql_file: Path) -> list[str]:
+    """Divide un fichero SQL en sentencias, sin partir dentro de comentarios `--`.
+
+    Se procesa línea a línea: los `;` de las líneas comentadas no cuentan.
+    """
+    statements: list[str] = []
+    current: list[str] = []
+    for line in sql_file.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("--"):
+            current.append(line)
+            continue
+        # Separa por `;` (fuera de comentarios en línea).
+        parts = line.split(";")
+        current.append(parts[0])
+        for extra in parts[1:]:
+            stmt = "\n".join(current).strip()
+            if stmt:
+                statements.append(stmt)
+            current = [extra]
+    tail = "\n".join(current).strip()
+    if tail:
+        statements.append(tail)
+    return statements
 
 
 def main() -> None:

@@ -673,6 +673,72 @@ class InMemoryComposerRepository(ComposerRepository):
             ))
             self._by_normalized[norm] = composer_id
 
+    async def update_composer(
+        self, composer_id: str, *,
+        name: str | None = None,
+        birth_year: str | None = None,
+        death_year: str | None = None,
+        visible: bool | None = None,
+        cluster_id: str | None = None,
+        review_status: str | None = None,
+        review_reason: str | None = None,
+        musicbrainz_id: str | None = None,
+        status: str | None = None,
+    ) -> None:
+        composer = self._composers.get(composer_id)
+        if composer is None:
+            return
+        if name is not None:
+            composer.name = name
+        if birth_year is not None:
+            composer.birth_year = birth_year
+        if death_year is not None:
+            composer.death_year = death_year
+        if visible is not None:
+            composer.visible = visible
+        if cluster_id is not None:
+            composer.cluster_id = cluster_id
+        if review_status is not None:
+            composer.review_status = review_status
+        if review_reason is not None:
+            composer.review_reason = review_reason
+        if musicbrainz_id is not None:
+            composer.musicbrainz_id = musicbrainz_id
+        if status is not None:
+            composer.status = status
+
+    async def get_biography(self, composer_id: str):
+        return await self.get_detail(composer_id)
+
+    async def upsert_biography(
+        self, composer_id: str, *,
+        summary: str | None = None,
+        era: str | None = None,
+        nationality: str | None = None,
+        key_works: list[str] | None = None,
+        key_fact: str | None = None,
+        references: list[dict[str, str]] | None = None,
+    ) -> None:
+        if not hasattr(self, "_biographies"):
+            self._biographies: dict[str, dict] = {}
+        bio = self._biographies.setdefault(composer_id, {})
+        if summary is not None:
+            bio["summary"] = summary
+        if era is not None:
+            bio["era"] = era
+        if nationality is not None:
+            bio["nationality"] = nationality
+        if key_works is not None:
+            bio["key_works"] = key_works
+        if key_fact is not None:
+            bio["key_fact"] = key_fact
+        if references is not None:
+            bio["references"] = references
+
+    async def delete_identifier(self, composer_id: str, identifier_id: int) -> None:
+        rows = self._identifiers.get(composer_id, [])
+        self._identifiers[composer_id] = [i for i in rows if i.id != identifier_id]
+
     async def list_pending_review(self, *, limit: int, offset: int) -> list[ComposerSummary]:
         pending = [c for c in self._composers.values()
                    if c.status == "active" and c.review_status == "not_reviewed"]
@@ -693,6 +759,7 @@ class InMemoryComposerRepository(ComposerRepository):
         composer = self._composers.get(composer_id)
         if composer is None:
             return None
+        bio = getattr(self, "_biographies", {}).get(composer_id, {})
         return ComposerDetail(
             id=composer.id,
             name=composer.name,
@@ -703,6 +770,16 @@ class InMemoryComposerRepository(ComposerRepository):
             merged_at=composer.merged_at,
             review_status=composer.review_status or "not_reviewed",
             reviewed_at=composer.reviewed_at,
+            birth_year=composer.birth_year,
+            death_year=composer.death_year,
+            cluster_id=composer.cluster_id,
+            review_reason=composer.review_reason,
+            biography_summary=bio.get("summary"),
+            biography_era=bio.get("era"),
+            biography_nationality=bio.get("nationality"),
+            biography_key_works=list(bio.get("key_works") or []),
+            biography_key_fact=bio.get("key_fact"),
+            biography_references=list(bio.get("references") or []),
             creation_evidence=list(self._evidence.get(composer_id, [])),
         )
 

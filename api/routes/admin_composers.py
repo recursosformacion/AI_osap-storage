@@ -4,6 +4,8 @@ from application.use_cases.composer_admin import (
     AddAlias,
     ComposerReviewStats,
     CreateComposer,
+    DeleteComposerIdentifier,
+    GetComposerBiography,
     GetComposerDetail,
     GetComposerWorks,
     ListAliases,
@@ -13,6 +15,8 @@ from application.use_cases.composer_admin import (
     PromoteAlias,
     ReviewComposer,
     SetAttribution,
+    UpdateComposer,
+    UpdateComposerBiography,
 )
 from fastapi import APIRouter, Depends, Query
 
@@ -20,6 +24,8 @@ from api.dependencies import (
     AddAliasDep,
     ComposerReviewStatsDep,
     CreateComposerDep,
+    DeleteComposerIdentifierDep,
+    GetComposerBiographyDep,
     GetComposerDetailDep,
     GetComposerWorksDep,
     ListAliasesDep,
@@ -29,14 +35,18 @@ from api.dependencies import (
     PromoteAliasDep,
     ReviewComposerDep,
     SetAttributionDep,
+    UpdateComposerBiographyDep,
+    UpdateComposerDep,
 )
 from api.schemas import (
     AddAliasRequest,
     AliasRead,
+    BiographyUpdateRequest,
     ComposerAdminDetail,
     ComposerAdminListResult,
     ComposerAdminRead,
     ComposerReviewRequest,
+    ComposerUpdateRequest,
     ComposerWorkRefRead,
     ComposerWorksResult,
     CreateComposerRequest,
@@ -136,6 +146,85 @@ async def get_composer(
     uc: GetComposerDetail = Depends(GetComposerDetailDep),
 ) -> ComposerAdminDetail:
     return ComposerAdminDetail.model_validate(await uc.execute(composer_id))
+
+
+@router.put(
+    "/{composer_id}",
+    response_model=ComposerAdminDetail,
+    summary="Editar identidad de un compositor",
+    description="Edita campos de identidad (name, status, visible, fechas, cluster, "
+    "review_status, review_reason, musicbrainz_id). Solo se actualizan los campos enviados.",
+)
+async def update_composer(
+    composer_id: str,
+    payload: ComposerUpdateRequest,
+    uc: UpdateComposer = Depends(UpdateComposerDep),
+) -> ComposerAdminDetail:
+    detail = await uc.execute(
+        composer_id,
+        name=payload.name,
+        status=payload.status,
+        visible=payload.visible,
+        birth_year=payload.birth_year,
+        death_year=payload.death_year,
+        cluster_id=payload.cluster_id,
+        review_status=payload.review_status,
+        review_reason=payload.review_reason,
+        musicbrainz_id=payload.musicbrainz_id,
+    )
+    return ComposerAdminDetail.model_validate(detail)
+
+
+@router.get(
+    "/{composer_id}/biography",
+    response_model=ComposerAdminDetail,
+    summary="Biografía de un compositor",
+    description="Devuelve el detalle del compositor con su biografía (summary, era, "
+    "nationality, key_works, key_fact).",
+)
+async def get_composer_biography(
+    composer_id: str,
+    uc: GetComposerBiography = Depends(GetComposerBiographyDep),
+) -> ComposerAdminDetail:
+    return ComposerAdminDetail.model_validate(await uc.execute(composer_id))
+
+
+@router.put(
+    "/{composer_id}/biography",
+    response_model=ComposerAdminDetail,
+    summary="Actualizar biografía de un compositor",
+    description="Crea o actualiza la biografía en composer_biographies. Solo se "
+    "actualizan los campos enviados; envía el resto como null para dejarlos intactos.",
+)
+async def update_composer_biography(
+    composer_id: str,
+    payload: BiographyUpdateRequest,
+    uc: UpdateComposerBiography = Depends(UpdateComposerBiographyDep),
+) -> ComposerAdminDetail:
+    detail = await uc.execute(
+        composer_id,
+        summary=payload.summary,
+        era=payload.era,
+        nationality=payload.nationality,
+        key_works=payload.key_works,
+        key_fact=payload.key_fact,
+        references=payload.references,
+    )
+    return ComposerAdminDetail.model_validate(detail)
+
+
+@router.delete(
+    "/{composer_id}/identifiers/{identifier_id}",
+    status_code=204,
+    summary="Eliminar un identificador de un compositor",
+    description="Elimina un identificador externo (composer_identifiers) de un compositor.",
+)
+async def delete_composer_identifier(
+    composer_id: str,
+    identifier_id: int,
+    uc: DeleteComposerIdentifier = Depends(DeleteComposerIdentifierDep),
+) -> None:
+    await uc.execute(composer_id, identifier_id)
 
 
 @router.get(

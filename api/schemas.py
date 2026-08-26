@@ -160,11 +160,89 @@ class WorkRead(Model):
     description: str | None = None
     thumbnails: str | None = None
     work_key: str | None = None
+    relative_path: str | None = None
+    attribution_type: str | None = None
+    attribution_note: str | None = None
     genres: list[str] = []
     instruments: list[str] = []
     parts_names: list[str] = []
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+class WorkAdminDetail(Model):
+    id: int
+    composer: str | None = None
+    composer_id: str | None = None
+    title: str | None = None
+    subtitle: str | None = None
+    artist: str | None = None
+    song_name: str | None = None
+    genre: str | None = None
+    opus: str | None = None
+    catalogue: str | None = None
+    musical_key: str | None = None
+    year: int | None = None
+    instrumentation: str | None = None
+    language: str | None = None
+    tags_csv: str | None = None
+    duration: str | None = None
+    measures: int | None = None
+    pages: int | None = None
+    parts: int | None = None
+    complexity: int | None = None
+    license: str | None = None
+    public_domain: bool = False
+    description: str | None = None
+    thumbnails: str | None = None
+    work_key: str | None = None
+    relative_path: str | None = None
+    attribution_type: str | None = None
+    attribution_note: str | None = None
+    tags: list[str] = []
+    genres: list[str] = []
+    instruments: list[str] = []
+    parts_names: list[str] = []
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class WorkAdminListResult(Model):
+    items: list[WorkAdminDetail]
+    total: int
+
+
+class WorkAdminUpdateRequest(Model):
+    composer: str | None = None
+    composer_id: str | None = None
+    title: str | None = None
+    subtitle: str | None = None
+    artist: str | None = None
+    song_name: str | None = None
+    genre: str | None = None
+    opus: str | None = None
+    catalogue: str | None = None
+    musical_key: str | None = None
+    year: int | None = None
+    instrumentation: str | None = None
+    language: str | None = None
+    duration: str | None = None
+    measures: int | None = None
+    pages: int | None = None
+    parts: int | None = None
+    complexity: int | None = None
+    license: str | None = None
+    public_domain: bool | None = None
+    description: str | None = None
+    thumbnails: str | None = None
+    work_key: str | None = None
+    relative_path: str | None = None
+    attribution_type: str | None = None
+    attribution_note: str | None = None
+    tags: list[str] | None = None
+    genres: list[str] | None = None
+    instruments: list[str] | None = None
+    parts_names: list[str] | None = None
 
 
 class ResourceRead(Model):
@@ -178,6 +256,21 @@ class ResourceRead(Model):
 class WorkDetailRead(Model):
     work: WorkRead
     resources: list[ResourceRead]
+
+
+class ComposerPublicRead(Model):
+    id: str
+    name: str
+    biography_summary: str | None = None
+    biography_era: str | None = None
+    biography_nationality: str | None = None
+    biography_key_works: list[str] = []
+    biography_key_fact: str | None = None
+    biography_references: list[dict[str, str]] = []
+    works_count: int = 0
+    aliases: list[str] = []
+    birth_year: str | None = None
+    death_year: str | None = None
 
 
 class ProviderResourceDTO(Model):
@@ -236,6 +329,9 @@ class ComposerAdminRead(Model):
     visible: bool = True
     birth_year: str | None = None
     death_year: str | None = None
+    biography_summary: str | None = None
+    biography_era: str | None = None
+    biography_nationality: str | None = None
 
 
 class ComposerAdminListResult(Model):
@@ -293,6 +389,12 @@ class ComposerAdminDetail(Model):
     death_year: str | None = None
     cluster_id: str | None = None
     review_reason: str | None = None
+    biography_summary: str | None = None
+    biography_era: str | None = None
+    biography_nationality: str | None = None
+    biography_key_works: list[str] = []
+    biography_key_fact: str | None = None
+    biography_references: list[dict[str, str]] = []
     identifiers: list[ComposerIdentifierRead] = []
     evidence: list[ComposerEvidenceRead] = []
     creation_evidence: list[ComposerCreationEvidenceRead] = []
@@ -300,6 +402,29 @@ class ComposerAdminDetail(Model):
 
 class ComposerReviewRequest(BaseModel):
     review_status: str = Field(pattern="^(correct|incorrect|reviewed|not_reviewed)$")
+
+
+class ComposerUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=1024)
+    status: str | None = Field(default=None, pattern="^(active|merged|candidate)$")
+    visible: bool | None = None
+    birth_year: str | None = None
+    death_year: str | None = None
+    cluster_id: str | None = None
+    review_status: str | None = Field(
+        default=None, pattern="^(correct|incorrect|reviewed|not_reviewed|review_required)$"
+    )
+    review_reason: str | None = None
+    musicbrainz_id: str | None = None
+
+
+class BiographyUpdateRequest(BaseModel):
+    summary: str | None = None
+    era: str | None = None
+    nationality: str | None = None
+    key_works: list[str] | None = None
+    key_fact: str | None = None
+    references: list[dict[str, str]] | None = None
 
 
 class ComposerWorkRefRead(Model):

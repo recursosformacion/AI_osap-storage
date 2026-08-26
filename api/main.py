@@ -4,6 +4,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 import uvicorn
 import yaml
@@ -20,8 +21,10 @@ from api.metrics import router as metrics_router
 from api.routes import (
     admin_composers,
     admin_tables,
+    admin_works,
     archives,
     catalogues,
+    composers,
     downloads,
     entries,
     files,
@@ -115,9 +118,11 @@ def create_app() -> FastAPI:
     app.include_router(works.router)
     app.include_router(provider.router)
     app.include_router(admin_composers.router)
+    app.include_router(admin_works.router)
     app.include_router(admin_tables.router)
     app.include_router(voting.router)
     app.include_router(catalogues.router)
+    app.include_router(composers.router)
     app.include_router(metrics_router)
     return app
 

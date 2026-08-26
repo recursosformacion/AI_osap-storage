@@ -78,6 +78,13 @@ def _container(settings, composer_repo) -> Container:
         promote_alias=object(),  # type: ignore[arg-type]
         set_attribution=object(),  # type: ignore[arg-type]
         composer_review_stats=object(),  # type: ignore[arg-type]
+        update_composer=object(),  # type: ignore[arg-type]
+        get_composer_biography=object(),  # type: ignore[arg-type]
+        update_composer_biography=object(),  # type: ignore[arg-type]
+        delete_composer_identifier=object(),  # type: ignore[arg-type]
+        list_works_admin=object(),  # type: ignore[arg-type]
+        get_work_admin=object(),  # type: ignore[arg-type]
+        update_work_admin=object(),  # type: ignore[arg-type]
         voting_repo=object(),  # type: ignore[arg-type]
         catalogue_repo=object(),  # type: ignore[arg-type]
         catalogue_queries=object(),  # type: ignore[arg-type]
@@ -162,6 +169,7 @@ def test_list_composers_paginated(client):
     assert set(body["items"][0].keys()) == {
         "id", "name", "status", "aliases_count", "works_count", "review_status",
         "visible", "birth_year", "death_year",
+        "biography_summary", "biography_era", "biography_nationality",
     }
 
 

@@ -166,6 +166,9 @@ class ComposerSummary:
     works_count: int = 0
     review_status: str = "not_reviewed"
     visible: bool = True
+    biography_summary: str | None = None
+    biography_era: str | None = None
+    biography_nationality: str | None = None
 
 
 @dataclass(frozen=True)
@@ -186,6 +189,12 @@ class ComposerDetail:
     death_year: str | None = None
     cluster_id: str | None = None
     review_reason: str | None = None
+    biography_summary: str | None = None
+    biography_era: str | None = None
+    biography_nationality: str | None = None
+    biography_key_works: list[str] = field(default_factory=list)
+    biography_key_fact: str | None = None
+    biography_references: list[dict[str, str]] = field(default_factory=list)
     identifiers: list[ComposerIdentifier] = field(default_factory=list)
     evidence: list[ComposerEvidence] = field(default_factory=list)
     creation_evidence: list[ComposerCreationEvidence] = field(default_factory=list)

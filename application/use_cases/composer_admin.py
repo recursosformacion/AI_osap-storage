@@ -325,3 +325,96 @@ class SetAttribution:
 
     async def execute(self, composer_ids: list[str], attribution_type: str) -> int:
         return await self._composers.set_attribution(composer_ids, attribution_type)
+
+
+class UpdateComposer:
+    """Edita campos de identidad de un compositor (alta/modificación por responsable)."""
+
+    def __init__(self, composers: ComposerRepository) -> None:
+        self._composers = composers
+
+    async def execute(
+        self, composer_id: str, *,
+        name: str | None = None,
+        birth_year: str | None = None,
+        death_year: str | None = None,
+        visible: bool | None = None,
+        cluster_id: str | None = None,
+        review_status: str | None = None,
+        review_reason: str | None = None,
+        musicbrainz_id: str | None = None,
+        status: str | None = None,
+    ) -> ComposerDetail:
+        if await self._composers.get_detail(composer_id) is None:
+            raise EntityNotFound("composer", composer_id)
+        await self._composers.update_composer(
+            composer_id,
+            name=name,
+            birth_year=birth_year,
+            death_year=death_year,
+            visible=visible,
+            cluster_id=cluster_id,
+            review_status=review_status,
+            review_reason=review_reason,
+            musicbrainz_id=musicbrainz_id,
+            status=status,
+        )
+        detail = await self._composers.get_detail(composer_id)
+        assert detail is not None
+        return detail
+
+
+class GetComposerBiography:
+    """Devuelve el detalle del compositor con su biografía."""
+
+    def __init__(self, composers: ComposerRepository) -> None:
+        self._composers = composers
+
+    async def execute(self, composer_id: str) -> ComposerDetail:
+        detail = await self._composers.get_biography(composer_id)
+        if detail is None:
+            raise EntityNotFound("composer", composer_id)
+        return detail
+
+
+class UpdateComposerBiography:
+    """Crea o actualiza la biografía de un compositor."""
+
+    def __init__(self, composers: ComposerRepository) -> None:
+        self._composers = composers
+
+    async def execute(
+        self, composer_id: str, *,
+        summary: str | None = None,
+        era: str | None = None,
+        nationality: str | None = None,
+        key_works: list[str] | None = None,
+        key_fact: str | None = None,
+        references: list[dict[str, str]] | None = None,
+    ) -> ComposerDetail:
+        if await self._composers.get_detail(composer_id) is None:
+            raise EntityNotFound("composer", composer_id)
+        await self._composers.upsert_biography(
+            composer_id,
+            summary=summary,
+            era=era,
+            nationality=nationality,
+            key_works=key_works,
+            key_fact=key_fact,
+            references=references,
+        )
+        detail = await self._composers.get_detail(composer_id)
+        assert detail is not None
+        return detail
+
+
+class DeleteComposerIdentifier:
+    """Elimina un identificador externo de un compositor."""
+
+    def __init__(self, composers: ComposerRepository) -> None:
+        self._composers = composers
+
+    async def execute(self, composer_id: str, identifier_id: int) -> None:
+        if await self._composers.get_detail(composer_id) is None:
+            raise EntityNotFound("composer", composer_id)
+        await self._composers.delete_identifier(composer_id, identifier_id)

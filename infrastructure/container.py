@@ -14,6 +14,8 @@ from application.use_cases.composer_admin import (
     CleanComposerNames,
     ComposerReviewStats,
     CreateComposer,
+    DeleteComposerIdentifier,
+    GetComposerBiography,
     GetComposerDetail,
     GetComposerWorks,
     ListAliases,
@@ -24,6 +26,8 @@ from application.use_cases.composer_admin import (
     PruneComposers,
     ReviewComposer,
     SetAttribution,
+    UpdateComposer,
+    UpdateComposerBiography,
 )
 from application.use_cases.delete_file import DeleteFile
 from application.use_cases.enrich_metadata import EnrichWork
@@ -51,6 +55,7 @@ from application.use_cases.voting import (
     RecordVote,
     RefreshVotingStatistics,
 )
+from application.use_cases.work_admin import GetWorkAdmin, ListWorksAdmin, UpdateWorkAdmin
 from application.use_cases.works import GetWork, SearchWorks, SearchWorksFull
 from domain.entities.storage_provider import ProviderType
 from domain.ports.archive_repositories import ArchiveEntryRepository, ArchiveRepository
@@ -134,6 +139,13 @@ class Container:
     set_attribution: SetAttribution
     composer_review_stats: ComposerReviewStats
     classify_composers: ClassifyComposers
+    update_composer: UpdateComposer
+    get_composer_biography: GetComposerBiography
+    update_composer_biography: UpdateComposerBiography
+    delete_composer_identifier: DeleteComposerIdentifier
+    list_works_admin: ListWorksAdmin
+    get_work_admin: GetWorkAdmin
+    update_work_admin: UpdateWorkAdmin
     clean_composer_names: CleanComposerNames
     prune_composers: PruneComposers
     record_vote: RecordVote
@@ -286,6 +298,13 @@ def build_container(settings: Settings) -> Container:
     set_attribution = SetAttribution(composer_repo)
     composer_review_stats = ComposerReviewStats(composer_repo)
     classify_composers = ClassifyComposers(composer_repo)
+    update_composer = UpdateComposer(composer_repo)
+    get_composer_biography = GetComposerBiography(composer_repo)
+    update_composer_biography = UpdateComposerBiography(composer_repo)
+    delete_composer_identifier = DeleteComposerIdentifier(composer_repo)
+    list_works_admin = ListWorksAdmin(work_repo)
+    get_work_admin = GetWorkAdmin(work_repo)
+    update_work_admin = UpdateWorkAdmin(work_repo)
     clean_composer_names = CleanComposerNames(composer_repo)
     prune_composers = PruneComposers(composer_repo)
     record_vote = RecordVote(voting_repo, work_repo)
@@ -323,6 +342,13 @@ def build_container(settings: Settings) -> Container:
         set_attribution=set_attribution,
         composer_review_stats=composer_review_stats,
         classify_composers=classify_composers,
+        update_composer=update_composer,
+        get_composer_biography=get_composer_biography,
+        update_composer_biography=update_composer_biography,
+        delete_composer_identifier=delete_composer_identifier,
+        list_works_admin=list_works_admin,
+        get_work_admin=get_work_admin,
+        update_work_admin=update_work_admin,
         clean_composer_names=clean_composer_names,
         prune_composers=prune_composers,
         record_vote=record_vote,

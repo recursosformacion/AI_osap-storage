@@ -82,7 +82,12 @@ def test_extract_composer_name_after_marker():
 
 
 def test_extract_composer_name_with_ner():
-    # NER recupera el nombre dentro de texto ruidoso (si el modelo está disponible).
+    # NER recupera el nombre dentro de texto ruidoso (solo si el modelo está disponible).
+    try:
+        import spacy  # noqa: F401
+        spacy.load("en_core_web_md")
+    except Exception:
+        pytest.skip("modelo spaCy en_core_web_md no está disponible")
     assert extract_composer_name("A bluegrass song gone haywire David Ladue") == "David Ladue"
     assert extract_composer_name("Wolfgang Amadeus Mozart") == "Wolfgang Amadeus Mozart"
     assert extract_composer_name("Mozart") == "Mozart"
