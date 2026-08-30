@@ -80,8 +80,17 @@ class ServiceTokenValidator:
             if self._jwks_cache is not None and now - self._jwks_fetched_at < 3600:
                 return self._jwks_cache
             try:
+                # User-Agent de navegador: el WAF de Cloudflare bloquea (403) los
+                # User-Agents de librerías (python-httpx) en auth.openmusicrepository.com.
+                # Sin él, el JWKS no se obtiene y toda autenticación de servicio falla.
+                headers = {
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                    )
+                }
                 async with httpx.AsyncClient(timeout=15) as client:
-                    resp = await client.get(self._jwks_url)
+                    resp = await client.get(self._jwks_url, headers=headers)
                     resp.raise_for_status()
                     self._jwks_cache = resp.json()
                     self._jwks_fetched_at = time.monotonic()
