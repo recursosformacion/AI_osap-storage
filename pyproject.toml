@@ -27,7 +27,6 @@ dev = [
     "pytest-asyncio>=0.23",
     "ruff>=0.4",
     "mypy>=1.10",
-    'osap-api @ file:///F:/DiscoD/Proyectos/AI_OSAP/osap-api',
 ]
 
 [project.scripts]
