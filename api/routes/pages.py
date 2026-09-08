@@ -19,6 +19,7 @@ from api.dependencies import (
 from api.web import about as about_view
 from api.web import admin_composers_crud as admin_composers_crud_view
 from api.web import admin_maintenance as admin_view
+from api.web import admin_works_crud as admin_works_crud_view
 from api.web import api_doc, landing, search, statistics, works
 
 router = APIRouter(tags=["pages"])
@@ -139,3 +140,15 @@ async def admin_page(token: str = Query(default="")) -> HTMLResponse:
 )
 async def admin_maestros_page(token: str = Query(default="")) -> HTMLResponse:
     return HTMLResponse(admin_composers_crud_view.admin_composers_crud_page(token=token))
+
+
+@router.get(
+    "/admin/obras",
+    response_class=HTMLResponse,
+    summary="Mantenimiento de obras (CRUD convencional)",
+    description="Página standalone con el listado de obras a 30/página y detalle "
+    "Ver/Editar (metadatos + tags/genres/instruments/parts). Requiere service token "
+    "storage:admin por ?token=...; el API /api/admin/works sí exige el Bearer.",
+)
+async def admin_obras_page(token: str = Query(default="")) -> HTMLResponse:
+    return HTMLResponse(admin_works_crud_view.admin_works_crud_page(token=token))
