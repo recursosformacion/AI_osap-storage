@@ -678,6 +678,7 @@ class InMemoryComposerRepository(ComposerRepository):
         name: str | None = None,
         birth_year: str | None = None,
         death_year: str | None = None,
+        homepage: str | None = None,
         visible: bool | None = None,
         cluster_id: str | None = None,
         review_status: str | None = None,
@@ -694,6 +695,8 @@ class InMemoryComposerRepository(ComposerRepository):
             composer.birth_year = birth_year
         if death_year is not None:
             composer.death_year = death_year
+        if homepage is not None:
+            composer.homepage = homepage
         if visible is not None:
             composer.visible = visible
         if cluster_id is not None:

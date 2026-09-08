@@ -17,6 +17,7 @@ from api.dependencies import (
     get_settings,
 )
 from api.web import about as about_view
+from api.web import admin_composers_crud as admin_composers_crud_view
 from api.web import admin_maintenance as admin_view
 from api.web import api_doc, landing, search, statistics, works
 
@@ -125,3 +126,16 @@ async def work_detail(
 )
 async def admin_page(token: str = Query(default="")) -> HTMLResponse:
     return HTMLResponse(admin_view.admin_maintenance_page(token=token))
+
+
+@router.get(
+    "/admin/maestros",
+    response_class=HTMLResponse,
+    summary="Mantenimiento compositores (CRUD convencional)",
+    description="Página standalone (fuera del multimantenimiento) con el listado de "
+    "composers a 30/página y detalle Ver/Editar. Si llega ?id=...&mode=view|edit, abre "
+    "directamente ese compositor en el modo indicado (lo usa la pantalla de "
+    "correcciones de osap-app). Requiere service token storage:admin por ?token=...",
+)
+async def admin_maestros_page(token: str = Query(default="")) -> HTMLResponse:
+    return HTMLResponse(admin_composers_crud_view.admin_composers_crud_page(token=token))

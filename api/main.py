@@ -20,11 +20,13 @@ from api.metrics import MetricsMiddleware
 from api.metrics import router as metrics_router
 from api.routes import (
     admin_composers,
+    admin_epochs,
     admin_tables,
     admin_works,
     archives,
     catalogues,
     composers,
+    cpdl,
     downloads,
     entries,
     files,
@@ -108,7 +110,9 @@ def create_app() -> FastAPI:
         )
     app.include_router(pages.router)
     app.include_router(search.router)
+    app.include_router(cpdl.router)
     app.include_router(health.router)
+    app.include_router(admin_epochs.router)
     app.include_router(providers.router)
     app.include_router(files.router)
     app.include_router(downloads.router)

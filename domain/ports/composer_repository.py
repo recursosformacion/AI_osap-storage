@@ -133,6 +133,7 @@ class ComposerRepository(Protocol):
         name: str | None = None,
         birth_year: str | None = None,
         death_year: str | None = None,
+        homepage: str | None = None,
         visible: bool | None = None,
         cluster_id: str | None = None,
         review_status: str | None = None,

@@ -60,6 +60,7 @@ class Composer:
     id: str
     name: str
     musicbrainz_id: str | None = None
+    homepage: str | None = None
     status: str = ComposerStatus.ACTIVE
     visible: bool = True
     birth_year: str | None = None
@@ -187,6 +188,7 @@ class ComposerDetail:
     visible: bool = True
     birth_year: str | None = None
     death_year: str | None = None
+    homepage: str | None = None
     cluster_id: str | None = None
     review_reason: str | None = None
     biography_summary: str | None = None

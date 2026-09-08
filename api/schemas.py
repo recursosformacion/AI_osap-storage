@@ -390,6 +390,7 @@ class ComposerAdminDetail(Model):
     visible: bool = True
     birth_year: str | None = None
     death_year: str | None = None
+    homepage: str | None = None
     cluster_id: str | None = None
     review_reason: str | None = None
     biography_summary: str | None = None
@@ -409,6 +410,7 @@ class ComposerReviewRequest(BaseModel):
 
 class ComposerUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=1024)
+    homepage: str | None = Field(default=None, max_length=1024)
     status: str | None = Field(default=None, pattern="^(active|merged|candidate)$")
     visible: bool | None = None
     birth_year: str | None = None

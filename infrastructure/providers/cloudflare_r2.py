@@ -1,11 +1,22 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from collections.abc import AsyncIterator
 from typing import Any
 
 from domain.entities.storage_provider import ProviderType
 from domain.exceptions import UnsupportedProvider
+
+
+def _ensure_boto_env() -> None:
+    """Evita que botocore lea ~/.aws/config (que puede no tener perfil `default`).
+
+    Si no hay AWS_CONFIG_FILE explícito, se apunta a un fichero inexistente: botocore
+    lo trata como configuración vacía (sin ProfileNotFound).
+    """
+    os.environ.setdefault("AWS_CONFIG_FILE", os.path.join(os.path.dirname(__file__), "_no_aws_config"))
+    os.environ.setdefault("AWS_SHARED_CREDENTIALS_FILE", os.environ["AWS_CONFIG_FILE"])
 
 
 class CloudflareR2Backend:
@@ -18,6 +29,7 @@ class CloudflareR2Backend:
     provider_type = ProviderType.CLOUDFLARE_R2
 
     def __init__(self, config: dict[str, Any]) -> None:
+        _ensure_boto_env()
         try:
             import boto3
         except ImportError as exc:

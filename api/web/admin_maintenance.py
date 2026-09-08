@@ -54,7 +54,7 @@ _PAGE = """<!doctype html>
   <h1>osap-storage · Mantenimiento</h1>
   <p class="sub">Compositores, obras y CRUD de tablas. Protegido: requiere un <b>service token</b> con scope <code>storage:admin</code>.</p>
 
-  <div class="card">
+  <div class="card" id="tokenCard">
     <label>Service token (Bearer)</label>
     <div class="row">
       <input class="grow" type="text" id="token" placeholder="pega el service token (o usa ?token=...)" />
@@ -171,12 +171,14 @@ function api(url, opts) {
 }
 
 // ---------- Pestañas ----------
+function activateTab(name) {
+  document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
+  const tab = document.querySelector('.tab[data-tab="' + name + '"]');
+  if (tab) tab.classList.add("active");
+  ["composers","works","tables"].forEach((n) => $("tab-" + n).classList.toggle("hidden", n !== name));
+}
 document.querySelectorAll(".tab").forEach((t) => {
-  t.onclick = () => {
-    document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
-    t.classList.add("active");
-    ["composers","works","tables"].forEach((n) => $("tab-" + n).classList.toggle("hidden", n !== t.dataset.tab));
-  };
+  t.onclick = () => activateTab(t.dataset.tab);
 });
 
 // ---------- Compositores ----------
@@ -573,7 +575,13 @@ window.createRow = () => {
 // ---------- Init ----------
 function init() {
   const q = new URLSearchParams(location.search).get("token");
-  if (q) $("token").value = q;
+  if (q) {
+    // El token ya llega por URL: no se muestra la caja ni hay que pulsar Aplicar.
+    $("token").value = q;
+    $("tokenCard").classList.add("hidden");
+    loadComposers();
+    loadTables();
+  }
   $("btnApply").onclick = () => { loadComposers(); loadTables(); };
   $("cSearch").onclick = () => { state.composers.offset = 0; loadComposers(); };
   $("cQ").onkeydown = (e) => { if (e.key === "Enter") { state.composers.offset = 0; loadComposers(); } };
@@ -592,6 +600,9 @@ function init() {
   $("tNext").onclick = () => { state.tables.offset += state.tables.limit; viewRows(); };
   $("tLimit").onchange = () => { state.tables.limit = parseInt($("tLimit").value, 10); state.tables.offset = 0; viewRows(); };
   $("token").onkeydown = (e) => { if (e.key === "Enter") { loadComposers(); loadTables(); } };
+  // Deep link: /admin?token=...&tab=works abre directamente esa pestaña.
+  const tabParam = new URLSearchParams(location.search).get("tab");
+  if (tabParam === "composers" || tabParam === "works" || tabParam === "tables") activateTab(tabParam);
 }
 init();
 </script>

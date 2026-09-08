@@ -170,6 +170,7 @@ async def update_composer(
         visible=payload.visible,
         birth_year=payload.birth_year,
         death_year=payload.death_year,
+        homepage=payload.homepage,
         cluster_id=payload.cluster_id,
         review_status=payload.review_status,
         review_reason=payload.review_reason,

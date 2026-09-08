@@ -30,6 +30,7 @@ def _row_to_composer(row: dict) -> Composer:
         id=row["id"],
         name=row["name"],
         musicbrainz_id=row.get("musicbrainz_id"),
+        homepage=row.get("homepage"),
         status=row.get("status") or ComposerStatus.ACTIVE,
         visible=bool(row.get("visible", 1)),
         birth_year=row.get("birth_year"),
@@ -563,6 +564,7 @@ class SqlComposerRepository(ComposerRepository):
         name: str | None = None,
         birth_year: str | None = None,
         death_year: str | None = None,
+        homepage: str | None = None,
         visible: bool | None = None,
         cluster_id: str | None = None,
         review_status: str | None = None,
@@ -581,6 +583,9 @@ class SqlComposerRepository(ComposerRepository):
         if death_year is not None:
             sets.append("death_year = %s")
             params.append(death_year)
+        if homepage is not None:
+            sets.append("homepage = %s")
+            params.append(homepage)
         if visible is not None:
             sets.append("visible = %s")
             params.append(1 if visible else 0)
@@ -706,7 +711,7 @@ class SqlComposerRepository(ComposerRepository):
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
                 "SELECT c.id, c.name, c.status, c.merged_into, c.merged_at, c.review_status, "
-                "c.reviewed_at, c.visible, c.birth_year, c.death_year, c.cluster_id, c.review_reason, "
+                "c.reviewed_at, c.visible, c.birth_year, c.death_year, c.homepage, c.cluster_id, c.review_reason, "
                 "c.created_at, c.updated_at, "
                 "b.biography_summary, b.biography_era, b.biography_nationality, "
                 "b.biography_key_works, b.biography_key_fact, b.biography_references "
@@ -766,6 +771,7 @@ class SqlComposerRepository(ComposerRepository):
                 visible=bool(row.get("visible", 1)),
                 birth_year=row.get("birth_year"),
                 death_year=row.get("death_year"),
+                homepage=row.get("homepage"),
                 cluster_id=row.get("cluster_id"),
                 review_reason=row.get("review_reason"),
                 biography_summary=row.get("biography_summary"),
