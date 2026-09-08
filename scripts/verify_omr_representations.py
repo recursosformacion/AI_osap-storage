@@ -158,10 +158,17 @@ def main() -> None:
                     processed_files += 1
                 with args.checkpoint.open("a", encoding="utf-8") as fh:
                     fh.write("\n".join(lines) + "\n")
-                print(f"  ... {processed_files} ficheros verificados (total reps OK={ok_reps}, malas={bad_reps})", flush=True)
+                print(
+                    f"  ... {processed_files} ficheros verificados "
+                    f"(total reps OK={ok_reps}, malas={bad_reps})",
+                    flush=True,
+                )
 
     print("=" * 60)
-    print(f"representaciones OMR evaluadas: {len(reps)} (nuevas {ok_reps + bad_reps - sum(n for n, _ in stored.values())})")
+    print(
+        f"representaciones OMR evaluadas: {len(reps)} "
+        f"(nuevas {ok_reps + bad_reps - sum(n for n, _ in stored.values())})"
+    )
     print(f"ficheros únicos verificados: {len(stored) + len(seen_files)} | sin location (esta pasada): {missing_loc}")
     print(f"reps OK: {ok_reps} | reps rotas/incorrectas: {bad_reps}")
     bad_files = [v for v in seen_files.values() if not v["ok"]]

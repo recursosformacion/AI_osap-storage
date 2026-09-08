@@ -23,9 +23,9 @@ import re
 from pathlib import Path
 from xml.etree import ElementTree
 
+from application.services.cpdl_voicing import voicing_terms
 from infrastructure.config import Settings
 from infrastructure.db.connection import Database
-from application.services.cpdl_voicing import voicing_terms
 
 NS = "{http://www.mediawiki.org/xml/export-0.11/}"
 
@@ -41,12 +41,12 @@ def _clean(s: str) -> str:
 
 
 def _tmpl(text: str, name: str) -> str:
-    m = re.search(r"\{\{\s*%s\|([^}]*)\}\}" % name, text)
+    m = re.search(r"\{\{\s*" + re.escape(name) + r"\|([^}]*)\}\}", text)
     return _clean(m.group(1).split("|")[0]) if m else ""
 
 
 def _tmpl_multi(text: str, name: str) -> list[str]:
-    m = re.search(r"\{\{\s*%s\|([^}]*)\}\}" % name, text)
+    m = re.search(r"\{\{\s*" + re.escape(name) + r"\|([^}]*)\}\}", text)
     return [_clean(p) for p in m.group(1).split("|") if _clean(p)] if m else []
 
 
@@ -102,7 +102,7 @@ async def _ingest_files(paths: list[Path]) -> None:
     pages_seen = set()
     async with db.connection() as conn, conn.cursor() as cur:
         for path in paths:
-            for event, elem in ElementTree.iterparse(path, events=("end",)):
+            for _event, elem in ElementTree.iterparse(path, events=("end",)):
                 if elem.tag != NS + "page":
                     continue
                 title = (elem.findtext(NS + "title") or "").strip()
