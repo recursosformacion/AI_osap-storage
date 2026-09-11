@@ -39,6 +39,8 @@ class LocalDiskBackend:
 
     async def open_stream(self, object_key: str) -> AsyncIterator[bytes]:
         path = self._root / object_key
+        if not path.is_file():
+            raise FileNotFoundError(str(path))
 
         async def _gen() -> AsyncIterator[bytes]:
             with open(path, "rb") as fh:

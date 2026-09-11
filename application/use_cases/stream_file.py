@@ -9,6 +9,7 @@ from domain.entities.archive_entry import ArchiveEntry
 from domain.entities.file import File
 from domain.entities.storage_location import StorageLocation
 from domain.entities.storage_provider import StorageProvider
+from domain.exceptions import EntityNotFound
 from domain.ports.archive_repositories import ArchiveEntryRepository
 from domain.ports.storage import StorageBackendRegistry
 
@@ -53,7 +54,12 @@ class StreamFile:
 
     async def execute(self, file_id: int, provider_id: int | None = None) -> FileStream:
         target = await self._resolver.execute(file_id, provider_id)
-        content = await self._registry.backend_for(target.provider).open_stream(target.location.object_key)
+        backend = self._registry.backend_for(target.provider)
+        # Verificar la existencia física ANTES de responder: si falta la copia, debe ser un
+        # 404 claro y no un 200 con 0 bytes (el stream fallaría al abrir tras enviar cabeceras).
+        if not await backend.exists(target.location.object_key):
+            raise EntityNotFound("file copy", file_id)
+        content = await backend.open_stream(target.location.object_key)
         entry = await self._entries.get_by_file_id(file_id)
         return FileStream(
             file=target.file,
