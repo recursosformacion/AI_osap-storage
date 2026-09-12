@@ -10,13 +10,22 @@ from domain.exceptions import UnsupportedProvider
 
 
 def _ensure_boto_env() -> None:
-    """Evita que botocore lea ~/.aws/config (que puede no tener perfil `default`).
+    """Aísla botocore de la configuración AWS de la máquina.
 
-    Si no hay AWS_CONFIG_FILE explícito, se apunta a un fichero inexistente: botocore
-    lo trata como configuración vacía (sin ProfileNotFound).
+    El backend recibe las credenciales de R2 explícitamente, así que no debe depender de
+    `~/.aws`. Dos problemas reales que esto evita:
+
+    - Sin `AWS_CONFIG_FILE`, botocore lee `~/.aws/config` (puede no tener perfil `default`).
+    - Si el shell trae `AWS_PROFILE`/`AWS_DEFAULT_PROFILE` (p. ej. `default`) y no hay
+      `~/.aws/config`, botocore lanza `ProfileNotFound`. `exists()` lo traga y devolvería
+      **404 en todos los ficheros** servidos desde R2.
+
+    Se apunta la config a un fichero inexistente y se neutralizan las variables de perfil.
     """
     os.environ.setdefault("AWS_CONFIG_FILE", os.path.join(os.path.dirname(__file__), "_no_aws_config"))
     os.environ.setdefault("AWS_SHARED_CREDENTIALS_FILE", os.environ["AWS_CONFIG_FILE"])
+    os.environ.pop("AWS_PROFILE", None)
+    os.environ.pop("AWS_DEFAULT_PROFILE", None)
 
 
 class CloudflareR2Backend:
