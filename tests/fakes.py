@@ -974,6 +974,16 @@ class InMemoryTableCrudRepository(TableCrudRepository):
     async def columns(self, table: str) -> list[str]:
         return self._cols.get(table, [])
 
+    async def schema(self, table: str) -> list[dict]:
+        return [
+            {"name": c, "type": "text", "nullable": "YES", "key": "PRI" if c == self._pk.get(table) else "",
+             "default": None, "extra": ""}
+            for c in self._cols.get(table, [])
+        ]
+
+    async def relations(self, table: str) -> list[dict]:
+        return self._relations.get(table, []) if hasattr(self, "_relations") else []
+
     async def pk_column(self, table: str) -> str:
         from domain.exceptions import InvalidTableCrud
 

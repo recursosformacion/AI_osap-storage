@@ -77,6 +77,32 @@ class SqlTableCrudRepository(TableCrudRepository):
             raise InvalidTableCrud(f"tabla no permitida: {table}")
         return TABLES[table]
 
+    async def schema(self, table: str) -> list[dict]:
+        self._require_table(table)
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT column_name AS name, column_type AS type, is_nullable AS nullable, "
+                "column_key AS `key`, column_default AS `default`, extra "
+                "FROM information_schema.columns "
+                "WHERE table_schema = DATABASE() AND table_name = %s "
+                "ORDER BY ordinal_position",
+                (table,),
+            )
+            return [dict(r) for r in await cur.fetchall()]
+
+    async def relations(self, table: str) -> list[dict]:
+        self._require_table(table)
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT column_name AS `column`, referenced_table_name AS ref_table, "
+                "referenced_column_name AS ref_column, constraint_name AS name "
+                "FROM information_schema.key_column_usage "
+                "WHERE table_schema = DATABASE() AND table_name = %s "
+                "AND referenced_table_name IS NOT NULL ORDER BY column_name",
+                (table,),
+            )
+            return [dict(r) for r in await cur.fetchall()]
+
     async def read(self, table: str, *, limit: int, offset: int) -> list[dict]:
         self._require_table(table)
         async with self._db.connection() as conn, conn.cursor() as cur:

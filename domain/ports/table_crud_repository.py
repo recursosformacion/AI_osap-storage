@@ -18,6 +18,12 @@ class TableCrudRepository(Protocol):
     async def pk_column(self, table: str) -> str:
         """Columna clave primaria de la tabla."""
 
+    async def schema(self, table: str) -> list[dict]:
+        """Columnas reales con tipo, nulabilidad, clave y valor por defecto."""
+
+    async def relations(self, table: str) -> list[dict]:
+        """Claves foráneas: columna, tabla/columna referenciada y nombre de la FK."""
+
     async def read(self, table: str, *, limit: int, offset: int) -> list[dict]:
         """Lee filas (paginado)."""
 

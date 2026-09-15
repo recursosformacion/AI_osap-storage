@@ -6,7 +6,7 @@ from application.use_cases.table_crud import TableCrud
 from fastapi import APIRouter, Body, Depends, Query
 
 from api.dependencies import TableCrudDep
-from api.schemas import TableCrudRow, TableCrudRows, TableCrudTables
+from api.schemas import TableCrudRow, TableCrudRows, TableCrudSchema, TableCrudTables
 
 router = APIRouter(
     prefix="/api/admin/tables",
@@ -38,6 +38,17 @@ async def read_rows(
 ) -> TableCrudRows:
     rows = await uc.read(table, limit=limit, offset=offset)
     return TableCrudRows(table=table, total=len(rows), rows=rows)
+
+
+@router.get(
+    "/{table}/schema",
+    response_model=TableCrudSchema,
+    summary="Esquema de la tabla",
+    description="Columnas (tipo, nulabilidad, clave, default) y claves foráneas, para "
+    "generar listados y formularios sin hardcodear.",
+)
+async def table_schema(table: str, uc: TableCrud = Depends(TableCrudDep)) -> TableCrudSchema:
+    return TableCrudSchema(**await uc.schema(table))
 
 
 @router.get(

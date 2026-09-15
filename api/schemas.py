@@ -549,3 +549,10 @@ class TableCrudRows(Model):
 
 class TableCrudTables(Model):
     tables: list[str] = []
+
+
+class TableCrudSchema(Model):
+    table: str
+    pk: str
+    columns: list[dict[str, Any]] = []
+    relations: list[dict[str, Any]] = []

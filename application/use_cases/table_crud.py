@@ -12,6 +12,14 @@ class TableCrud:
     async def list_tables(self) -> list[str]:
         return await self._repo.list_tables()
 
+    async def schema(self, table: str) -> dict:
+        return {
+            "table": table,
+            "pk": await self._repo.pk_column(table),
+            "columns": await self._repo.schema(table),
+            "relations": await self._repo.relations(table),
+        }
+
     async def read(self, table: str, *, limit: int, offset: int) -> list[dict]:
         return await self._repo.read(table, limit=limit, offset=offset)
 
