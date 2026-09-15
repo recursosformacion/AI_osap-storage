@@ -98,12 +98,13 @@ Equivalencias:
 1. Retirar/archivar `infrastructure/db/migrations/001..041` (esquema viejo) y definir el runner del fork sobre el esquema actual (¿baseline + futuras?).
 2. `bootstrap` (provider por defecto) y health checks contra el nuevo esquema.
 
-### Fase 7 — CRUD genérico (al final, como pediste)
-1. `sql_table_crud_repository.py`: whitelist del esquema nuevo (tablas reales, sin las eliminadas) + invariantes + auditoría.
-2. `api/routes/admin_tables*` y web de mantenimiento.
+### Fase 7 — CRUDs completos (al final, como pediste)
+1. **Un CRUD completo por tabla** (no el CRUD genérico): listado, ficha, búsqueda/filtros, paginación, enlaces entre tablas relacionadas, controles de alta/edición/borrado y validación.
+2. Cubrir las 45 tablas del esquema nuevo (las uniones N:N con PK compuesta, con su propia UI: p. ej. `work_instruments` con cantidad, `work_voices` con contexto, `work_ensembles`).
+3. `sql_table_crud_repository.py` (whitelist ya actualizada al esquema real) queda como base para listados genéricos, no como producto final.
 
 ### Fase 8 — Validación
-1. Tests de integración contra la BBDD real (hoy los tests usan fakes → no validan SQL).
+1. Tests de integración contra la BBDD real: **ya creados** en `tests/integration/test_sql_repositories.py` (se activan con `OSAP_TEST_DB=1`; validan la whitelist contra `information_schema`, works, personas con rol 1, estadísticas y catálogo).
 2. Contrato del provider (v1.3) end-to-end con datos reales.
 3. Comprobaciones de recuento (obras/compositor, listados, descargas).
 
@@ -122,12 +123,12 @@ Equivalencias:
 
 ## 5. Orden recomendado y criterio de "hecho"
 
-1. Fase 1 (bloquea todo lo demás) → `ruff` + `pytest` verdes y sin refs a `composer_*` en infraestructura.
+1. Fase 1 (bloquea todo lo demás) → `ruff` + `pytest` verdes y sin refs a `composer_*` en infraestructura. **HECHA** (2026-09-15): repositorios adaptados, flujos abandonados retirados (`authority_identifiers`, `musicbrainz_cache`, `authority_sync`, `ingest_authority`), `authority_sync_state` creada, whitelist del CRUD actualizada, tests de integración añadidos (7 pasan contra la BBDD real).
 2. Fase 3 (ingesta) para poder reconstruir datos con el fork.
-3. Fase 2 (personas/compositor) y retirada de flujos muertos.
+3. Fase 2 (personas/compositor) y retirada de flujos muertos. **En curso**: `scripts/link_works_person_import.py` (normaliza/compacta `works_person_import` y enlaza con `persons`/`persons_aliases` **sin crear personas**; 42.066 filas casadas de 136.888, 91.819 sin coincidencia, 3.003 ruido).
 4. Fase 4 (API/web) + contrato.
 5. Fases 5-6 (CLI/migraciones).
-6. Fase 7 (CRUD genérico).
-7. Fase 8 (validación end-to-end contra la BBDD real).
+6. Fase 7 (un CRUD completo por tabla).
+7. Fase 8 (validación end-to-end contra la BBDD real; ya hay base de integración).
 
 Riesgo principal: los tests actuales usan fakes, así que **no detectan errores de SQL**; conviene montar cuanto antes un test de integración contra `osap-storage` para validar cada repositorio adaptado.
