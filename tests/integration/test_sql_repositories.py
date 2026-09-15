@@ -15,7 +15,6 @@ from __future__ import annotations
 import os
 
 import pytest
-
 from infrastructure.config import Settings
 from infrastructure.db.connection import Database
 from infrastructure.repositories.sql_catalogue_repository import SqlCatalogueRepository
