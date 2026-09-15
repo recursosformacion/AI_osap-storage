@@ -128,6 +128,14 @@ def create_app() -> FastAPI:
     app.include_router(catalogues.router)
     app.include_router(composers.router)
     app.include_router(metrics_router)
+
+    # Frontend de mantenimiento (React): se sirve el build si existe (frontend/dist).
+    # En desarrollo se usa el servidor de Vite (proxy /api); en producción, este mount.
+    _dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+    if _dist.is_dir():
+        from fastapi.staticfiles import StaticFiles
+
+        app.mount("/admin", StaticFiles(directory=str(_dist), html=True), name="admin")
     return app
 
 
