@@ -5,40 +5,100 @@ from domain.ports.work_repository import WorkRepository
 
 from infrastructure.db.connection import Database
 
+# Roles de `works_person_roles`: 1 = Composer, 10 = Intérprete/Solista (ver tabla `roles`).
+ROLE_COMPOSER = 1
+ROLE_PERFORMER = 10
+
+# Campos derivados de las relaciones del esquema nuevo (compositor, artista, género,
+# instrumentación, tags e idioma ya no viven en `works`).
+_DERIVED = """
+    (SELECT p.persons_name FROM works_person_roles r
+       JOIN persons p ON p.persons_id = r.works_person_roles_person_id
+      WHERE r.works_person_roles_work_id = w.id AND r.works_person_roles_role_id = %(composer_role)s
+      ORDER BY r.works_person_roles_order, r.works_person_roles_id LIMIT 1) AS composer,
+    (SELECT r.works_person_roles_person_id FROM works_person_roles r
+      WHERE r.works_person_roles_work_id = w.id AND r.works_person_roles_role_id = %(composer_role)s
+      ORDER BY r.works_person_roles_order, r.works_person_roles_id LIMIT 1) AS composer_id,
+    (SELECT GROUP_CONCAT(DISTINCT p.persons_name ORDER BY p.persons_name SEPARATOR ', ')
+       FROM works_person_roles r
+       JOIN persons p ON p.persons_id = r.works_person_roles_person_id
+      WHERE r.works_person_roles_work_id = w.id AND r.works_person_roles_role_id = %(performer_role)s) AS artist,
+    (SELECT GROUP_CONCAT(DISTINCT g.name ORDER BY g.name SEPARATOR ', ')
+       FROM work_genres wg JOIN genres g ON g.id = wg.genres_id
+      WHERE wg.works_id = w.id) AS genre,
+    (SELECT GROUP_CONCAT(DISTINCT i.name_en ORDER BY i.name_en SEPARATOR ', ')
+       FROM work_instruments wi JOIN instruments i ON i.id = wi.instruments_id
+      WHERE wi.works_id = w.id) AS instrumentation,
+    (SELECT GROUP_CONCAT(DISTINCT tg.tag_texto ORDER BY tg.tag_texto SEPARATOR ', ')
+       FROM work_tag wt JOIN tag_work tg ON tg.id = wt.tag_id
+      WHERE wt.works_id = w.id) AS tags,
+    (SELECT GROUP_CONCAT(DISTINCT l.languages_code ORDER BY l.languages_code SEPARATOR ', ')
+       FROM work_language wl JOIN languages l ON l.id = wl.languages_id
+      WHERE wl.works_id = w.id) AS language
+"""
+
+_SELECT_ONE = f"SELECT w.*, {_DERIVED} FROM works w"
+_SELECT_PARAMS = {"composer_role": ROLE_COMPOSER, "performer_role": ROLE_PERFORMER}
+
 
 def _row_to_work(row: dict) -> Work:
     return Work(
         id=row["id"],
-        work_key=row["work_key"],
-        composer=row["composer"],
-        composer_id=row["composer_id"],
-        attribution_type=row["attribution_type"],
-        attribution_note=row["attribution_note"],
-        title=row["title"],
-        subtitle=row["subtitle"],
-        artist=row["artist"],
-        song_name=row["song_name"],
-        genre=row["genre"],
-        opus=row["opus"],
-        catalogue=row["catalogue"],
-        musical_key=row["musical_key"],
-        year=row["year"],
-        instrumentation=row["instrumentation"],
-        language=row["language"],
-        tags=row["tags"],
-        duration=row["duration"],
-        measures=row["measures"],
-        pages=row["pages"],
-        parts=row["parts"],
-        complexity=row["complexity"],
-        license=row["license"],
-        public_domain=bool(row["public_domain"]),
-        description=row["description"],
-        thumbnails=row["thumbnails"],
-        relative_path=row["relative_path"],
-        created_at=row["created_at"],
-        updated_at=row["updated_at"],
+        work_key=row.get("works_key"),
+        composer=row.get("composer"),
+        composer_id=row.get("composer_id"),
+        attribution_type=row.get("works_attr_type"),
+        attribution_note=row.get("works_attribution_note"),
+        title=row.get("works_title"),
+        subtitle=row.get("works_subtitle"),
+        artist=row.get("artist"),
+        song_name=row.get("works_song_name"),
+        genre=row.get("genre"),
+        opus=row.get("works_opus"),
+        catalogue=row.get("works_catalogue"),
+        musical_key=row.get("works_musical_key"),
+        year=row.get("works_year"),
+        instrumentation=row.get("instrumentation"),
+        language=row.get("language"),
+        tags=row.get("tags"),
+        duration=row.get("works_duration"),
+        measures=row.get("works_measures"),
+        pages=row.get("works_pages"),
+        parts=row.get("works_parts"),
+        complexity=row.get("works_complexity"),
+        license=row.get("works_license"),
+        public_domain=bool(row.get("works_public_domain")),
+        description=row.get("works_description"),
+        relative_path=row.get("works_relative_path"),
+        created_at=row.get("works_created_at"),
+        updated_at=row.get("works_updated_at"),
     )
+
+
+async def _resolve_genre(cur, name: str) -> int | None:
+    code = (name or "").strip()
+    if not code:
+        return None
+    await cur.execute("SELECT genre_id FROM genre_mappings WHERE code = %s LIMIT 1", (code,))
+    row = await cur.fetchone()
+    if row:
+        return int(row["genre_id"])
+    await cur.execute("SELECT id FROM genres WHERE name = %s LIMIT 1", (code,))
+    row = await cur.fetchone()
+    return int(row["id"]) if row else None
+
+
+async def _resolve_instrument(cur, name: str) -> int | None:
+    key = (name or "").strip()
+    if not key:
+        return None
+    await cur.execute(
+        "SELECT id FROM instruments WHERE code = %s OR name_en = %s OR name_es = %s "
+        "OR JSON_CONTAINS(COALESCE(aliases, '[]'), JSON_QUOTE(%s)) LIMIT 1",
+        (key, key, key, key),
+    )
+    row = await cur.fetchone()
+    return int(row["id"]) if row else None
 
 
 class SqlWorkRepository(WorkRepository):
@@ -48,11 +108,20 @@ class SqlWorkRepository(WorkRepository):
     async def create(self, work: Work) -> Work:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "INSERT INTO works (work_key, relative_path, composer, composer_id, "
-                "attribution_type, attribution_note, title, tags) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                (work.work_key, work.relative_path, work.composer, work.composer_id,
-                 work.attribution_type, work.attribution_note, work.title, work.tags),
+                "INSERT INTO works (works_key, works_relative_path, works_attr_type, "
+                "works_attribution_note, works_title, works_song_name, works_subtitle, "
+                "works_opus, works_catalogue, works_musical_key, works_year, works_duration, "
+                "works_measures, works_pages, works_parts, works_complexity, works_description, "
+                "works_license, works_public_domain, works_origin, works_origin_id) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
+                "%s, %s, %s, %s)",
+                (
+                    work.work_key, work.relative_path, work.attribution_type,
+                    work.attribution_note, work.title, work.song_name, work.subtitle,
+                    work.opus, work.catalogue, work.musical_key, work.year, work.duration,
+                    work.measures, work.pages, work.parts, work.complexity, work.description,
+                    work.license, int(work.public_domain), None, None,
+                ),
             )
             work.id = cur.lastrowid
             return work
@@ -60,74 +129,63 @@ class SqlWorkRepository(WorkRepository):
     async def update(self, work: Work) -> None:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "UPDATE works SET relative_path=%s, composer=%s, composer_id=%s, "
-                "attribution_type=%s, attribution_note=%s, title=%s, "
-                "subtitle=%s, artist=%s, song_name=%s, genre=%s, opus=%s, catalogue=%s, "
-                "musical_key=%s, year=%s, instrumentation=%s, language=%s, tags=%s, "
-                "duration=%s, measures=%s, pages=%s, parts=%s, complexity=%s, license=%s, "
-                "public_domain=%s, description=%s, thumbnails=%s WHERE id=%s",
+                "UPDATE works SET works_relative_path=%s, works_attr_type=%s, "
+                "works_attribution_note=%s, works_title=%s, works_song_name=%s, "
+                "works_subtitle=%s, works_opus=%s, works_catalogue=%s, works_musical_key=%s, "
+                "works_year=%s, works_duration=%s, works_measures=%s, works_pages=%s, "
+                "works_parts=%s, works_complexity=%s, works_description=%s, works_license=%s, "
+                "works_public_domain=%s WHERE id=%s",
                 (
-                    work.relative_path,
-                    work.composer,
-                    work.composer_id,
-                    work.attribution_type,
-                    work.attribution_note,
-                    work.title,
-                    work.subtitle,
-                    work.artist,
-                    work.song_name,
-                    work.genre,
-                    work.opus,
-                    work.catalogue,
-                    work.musical_key,
-                    work.year,
-                    work.instrumentation,
-                    work.language,
-                    work.tags,
-                    work.duration,
-                    work.measures,
-                    work.pages,
-                    work.parts,
-                    work.complexity,
-                    work.license,
-                    int(work.public_domain),
-                    work.description,
-                    work.thumbnails,
-                    work.id,
+                    work.relative_path, work.attribution_type, work.attribution_note,
+                    work.title, work.song_name, work.subtitle, work.opus, work.catalogue,
+                    work.musical_key, work.year, work.duration, work.measures, work.pages,
+                    work.parts, work.complexity, work.description, work.license,
+                    int(work.public_domain), work.id,
                 ),
             )
 
     async def get_by_id(self, work_id: int) -> Work | None:
         async with self._db.connection() as conn, conn.cursor() as cur:
-            await cur.execute("SELECT * FROM works WHERE id = %s", (work_id,))
+            await cur.execute(f"{_SELECT_ONE} WHERE w.id = %(id)s", {**_SELECT_PARAMS, "id": work_id})
             row = await cur.fetchone()
             return _row_to_work(row) if row else None
 
     async def get_by_work_key(self, work_key: str) -> Work | None:
         async with self._db.connection() as conn, conn.cursor() as cur:
-            await cur.execute("SELECT * FROM works WHERE work_key = %s", (work_key,))
+            await cur.execute(
+                f"{_SELECT_ONE} WHERE w.works_key = %(key)s", {**_SELECT_PARAMS, "key": work_key}
+            )
             row = await cur.fetchone()
             return _row_to_work(row) if row else None
 
     async def search(self, query: str, *, limit: int = 50, offset: int = 0) -> list[Work]:
         pattern = f"%{query}%"
         prefix = f"{query}%"
+        params = {
+            **_SELECT_PARAMS,
+            "query": query,
+            "prefix": prefix,
+            "pattern": pattern,
+            "limit": limit,
+            "offset": offset,
+        }
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT *, CASE "
-                "  WHEN title = %s THEN 100 "
-                "  WHEN title LIKE %s THEN 90 "
-                "  WHEN title LIKE %s THEN 70 "
-                "  WHEN composer LIKE %s THEN 40 "
-                "  WHEN attribution_type LIKE %s THEN 35 "
-                "  WHEN attribution_note LIKE %s THEN 35 "
-                "  WHEN catalogue LIKE %s THEN 30 "
-                "  ELSE 0 END AS score "
-                "FROM works WHERE composer LIKE %s OR title LIKE %s OR catalogue LIKE %s "
-                "OR attribution_type LIKE %s OR attribution_note LIKE %s "
-                "ORDER BY score DESC, id LIMIT %s OFFSET %s",
-                (query, prefix, pattern, pattern, pattern, pattern, pattern,
-                 pattern, pattern, pattern, pattern, pattern, limit, offset),
+                f"{_SELECT_ONE} WHERE "
+                "w.works_title = %(query)s OR w.works_title LIKE %(prefix)s "
+                "OR w.works_title LIKE %(pattern)s "
+                "OR w.works_catalogue LIKE %(pattern)s "
+                "OR w.works_attr_type LIKE %(pattern)s "
+                "OR w.works_attribution_note LIKE %(pattern)s "
+                "OR EXISTS (SELECT 1 FROM works_person_roles r JOIN persons p "
+                "  ON p.persons_id = r.works_person_roles_person_id "
+                "  WHERE r.works_person_roles_work_id = w.id AND p.persons_name LIKE %(pattern)s) "
+                "ORDER BY (CASE WHEN w.works_title = %(query)s THEN 100 "
+                "  WHEN w.works_title LIKE %(prefix)s THEN 90 "
+                "  WHEN w.works_title LIKE %(pattern)s THEN 70 "
+                "  ELSE 40 END) DESC, w.id "
+                "LIMIT %(limit)s OFFSET %(offset)s",
+                params,
             )
             return [_row_to_work(row) for row in await cur.fetchall()]
 
@@ -137,8 +195,8 @@ class SqlWorkRepository(WorkRepository):
     async def list_all(self, *, limit: int = 1000, offset: int = 0) -> list[Work]:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT * FROM works ORDER BY id LIMIT %s OFFSET %s",
-                (limit, offset),
+                f"{_SELECT_ONE} ORDER BY w.id LIMIT %(limit)s OFFSET %(offset)s",
+                {**_SELECT_PARAMS, "limit": limit, "offset": offset},
             )
             return [_row_to_work(row) for row in await cur.fetchall()]
 
@@ -147,8 +205,12 @@ class SqlWorkRepository(WorkRepository):
     ) -> list[Work]:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT * FROM works WHERE composer_id = %s ORDER BY id LIMIT %s OFFSET %s",
-                (composer_id, limit, offset),
+                f"{_SELECT_ONE} WHERE EXISTS (SELECT 1 FROM works_person_roles r "
+                "  WHERE r.works_person_roles_work_id = w.id AND "
+                "        r.works_person_roles_person_id = %(cid)s AND "
+                "        r.works_person_roles_role_id = %(composer_role)s) "
+                "ORDER BY w.id LIMIT %(limit)s OFFSET %(offset)s",
+                {**_SELECT_PARAMS, "cid": composer_id, "limit": limit, "offset": offset},
             )
             return [_row_to_work(row) for row in await cur.fetchall()]
 
@@ -157,68 +219,125 @@ class SqlWorkRepository(WorkRepository):
             await cur.execute("SELECT COUNT(*) AS total FROM works")
             return int((await cur.fetchone())["total"])
 
-    async def _replace(self, table: str, column: str, work_id: int, values: list[str]) -> None:
-        unique = list(dict.fromkeys(v.strip() for v in values if v and v.strip()))
+    # ------------------------------------------------------------------ listas
+    async def replace_tags(self, work_id: int, tags: list[str]) -> None:
+        unique = list(dict.fromkeys(t.strip() for t in tags if t and t.strip()))
         async with self._db.connection() as conn, conn.cursor() as cur:
-            await cur.execute(f"DELETE FROM {table} WHERE work_id = %s", (work_id,))
-            if unique:
-                placeholders = ", ".join(["(%s, %s)"] * len(unique))
-                params: list = []
-                for value in unique:
-                    params.extend([work_id, value])
+            await cur.execute("DELETE FROM work_tag WHERE works_id = %s", (work_id,))
+            for tag in unique:
+                await cur.execute("INSERT IGNORE INTO tag_work (tag_texto) VALUES (%s)", (tag,))
+                await cur.execute("SELECT id FROM tag_work WHERE tag_texto = %s", (tag,))
+                row = await cur.fetchone()
                 await cur.execute(
-                    f"INSERT INTO {table} (work_id, {column}) VALUES {placeholders}",
-                    params,
+                    "INSERT IGNORE INTO work_tag (works_id, tag_id) VALUES (%s, %s)",
+                    (work_id, row["id"]),
                 )
 
-    async def replace_tags(self, work_id: int, tags: list[str]) -> None:
-        await self._replace("work_tags", "tag", work_id, tags)
-
     async def replace_genres(self, work_id: int, genres: list[str]) -> None:
-        await self._replace("work_genres", "genre", work_id, genres)
+        unique = list(dict.fromkeys(g.strip() for g in genres if g and g.strip()))
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute("DELETE FROM work_genres WHERE works_id = %s", (work_id,))
+            for name in unique:
+                gid = await _resolve_genre(cur, name)
+                if gid is not None:
+                    await cur.execute(
+                        "INSERT IGNORE INTO work_genres (works_id, genres_id) VALUES (%s, %s)",
+                        (work_id, gid),
+                    )
 
     async def replace_instruments(self, work_id: int, instruments: list[str]) -> None:
-        await self._replace("work_instruments", "instrument", work_id, instruments)
+        unique = list(dict.fromkeys(i.strip() for i in instruments if i and i.strip()))
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute("DELETE FROM work_instruments WHERE works_id = %s", (work_id,))
+            for name in unique:
+                iid = await _resolve_instrument(cur, name)
+                if iid is not None:
+                    await cur.execute(
+                        "INSERT IGNORE INTO work_instruments (works_id, instruments_id) "
+                        "VALUES (%s, %s)",
+                        (work_id, iid),
+                    )
 
     async def replace_parts(self, work_id: int, parts: list[str]) -> None:
-        await self._replace("work_parts", "part_name", work_id, parts)
-
-    async def _get_list(self, table: str, column: str, work_id: int) -> list[str]:
+        unique = list(dict.fromkeys(p.strip() for p in parts if p and p.strip()))
         async with self._db.connection() as conn, conn.cursor() as cur:
-            await cur.execute(
-                f"SELECT {column} FROM {table} WHERE work_id = %s ORDER BY id",
-                (work_id,),
-            )
-            return [row[column] for row in await cur.fetchall()]
+            await cur.execute("DELETE FROM work_parts WHERE works_id = %s", (work_id,))
+            if unique:
+                await cur.executemany(
+                    "INSERT INTO work_parts (works_id, work_parts_name) VALUES (%s, %s)",
+                    [(work_id, p) for p in unique],
+                )
 
     async def get_tags(self, work_id: int) -> list[str]:
-        return await self._get_list("work_tags", "tag", work_id)
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT t.tag_texto AS v FROM work_tag wt JOIN tag_work t ON t.id = wt.tag_id "
+                "WHERE wt.works_id = %s ORDER BY t.tag_texto",
+                (work_id,),
+            )
+            return [row["v"] for row in await cur.fetchall()]
 
     async def get_genres(self, work_id: int) -> list[str]:
-        return await self._get_list("work_genres", "genre", work_id)
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT g.name AS v FROM work_genres wg JOIN genres g ON g.id = wg.genres_id "
+                "WHERE wg.works_id = %s ORDER BY g.name",
+                (work_id,),
+            )
+            return [row["v"] for row in await cur.fetchall()]
 
     async def get_instruments(self, work_id: int) -> list[str]:
-        return await self._get_list("work_instruments", "instrument", work_id)
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT i.name_en AS v FROM work_instruments wi "
+                "JOIN instruments i ON i.id = wi.instruments_id "
+                "WHERE wi.works_id = %s ORDER BY i.name_en",
+                (work_id,),
+            )
+            return [row["v"] for row in await cur.fetchall()]
 
     async def get_parts(self, work_id: int) -> list[str]:
-        return await self._get_list("work_parts", "part_name", work_id)
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT work_parts_name AS v FROM work_parts WHERE works_id = %s "
+                "ORDER BY id",
+                (work_id,),
+            )
+            return [row["v"] for row in await cur.fetchall()]
 
     async def get_lists_bulk(self, work_ids: list[int]) -> dict[int, WorkLists]:
         if not work_ids:
             return {}
         result: dict[int, WorkLists] = {wid: WorkLists() for wid in work_ids}
         placeholders = ", ".join(["%s"] * len(work_ids))
-        for table, column, attr in (
-            ("work_tags", "tag", "tags"),
-            ("work_genres", "genre", "genres"),
-            ("work_instruments", "instrument", "instruments"),
-            ("work_parts", "part_name", "parts_names"),
-        ):
+        queries = (
+            (
+                f"SELECT wt.works_id AS wid, t.tag_texto AS v FROM work_tag wt "
+                f"JOIN tag_work t ON t.id = wt.tag_id WHERE wt.works_id IN ({placeholders}) "
+                "ORDER BY t.tag_texto",
+                "tags",
+            ),
+            (
+                f"SELECT wg.works_id AS wid, g.name AS v FROM work_genres wg "
+                f"JOIN genres g ON g.id = wg.genres_id WHERE wg.works_id IN ({placeholders}) "
+                "ORDER BY g.name",
+                "genres",
+            ),
+            (
+                f"SELECT wi.works_id AS wid, i.name_en AS v FROM work_instruments wi "
+                f"JOIN instruments i ON i.id = wi.instruments_id "
+                f"WHERE wi.works_id IN ({placeholders}) ORDER BY i.name_en",
+                "instruments",
+            ),
+            (
+                f"SELECT works_id AS wid, work_parts_name AS v FROM work_parts "
+                f"WHERE works_id IN ({placeholders}) ORDER BY id",
+                "parts_names",
+            ),
+        )
+        for sql, attr in queries:
             async with self._db.connection() as conn, conn.cursor() as cur:
-                await cur.execute(
-                    f"SELECT work_id, {column} AS v FROM {table} WHERE work_id IN ({placeholders}) ORDER BY id",
-                    work_ids,
-                )
+                await cur.execute(sql, work_ids)
                 for row in await cur.fetchall():
-                    getattr(result[row["work_id"]], attr).append(row["v"])
+                    getattr(result[row["wid"]], attr).append(row["v"])
         return result
