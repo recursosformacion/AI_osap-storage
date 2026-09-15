@@ -70,6 +70,9 @@ def _row_to_work(row: dict) -> Work:
         public_domain=bool(row.get("works_public_domain")),
         description=row.get("works_description"),
         relative_path=row.get("works_relative_path"),
+        origin=row.get("works_origin"),
+        origin_id=row.get("works_origin_id"),
+        voicing=row.get("works_voicing"),
         created_at=row.get("works_created_at"),
         updated_at=row.get("works_updated_at"),
     )
@@ -319,6 +322,26 @@ class SqlWorkRepository(WorkRepository):
             )
             return [row["v"] for row in await cur.fetchall()]
 
+    async def get_voices(self, work_id: int) -> list[str]:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT v.voices_name AS v FROM work_voices wv "
+                "JOIN voices v ON v.id = wv.voices_id WHERE wv.works_id = %s "
+                "ORDER BY v.voices_sort, v.voices_name",
+                (work_id,),
+            )
+            return [row["v"] for row in await cur.fetchall()]
+
+    async def get_ensembles(self, work_id: int) -> list[str]:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT e.ensembles_code AS v FROM work_ensembles we "
+                "JOIN ensembles e ON e.id = we.ensembles_id WHERE we.works_id = %s "
+                "ORDER BY e.ensembles_code",
+                (work_id,),
+            )
+            return [row["v"] for row in await cur.fetchall()]
+
     async def get_lists_bulk(self, work_ids: list[int]) -> dict[int, WorkLists]:
         if not work_ids:
             return {}
@@ -347,6 +370,18 @@ class SqlWorkRepository(WorkRepository):
                 f"SELECT works_id AS wid, work_parts_name AS v FROM work_parts "
                 f"WHERE works_id IN ({placeholders}) ORDER BY id",
                 "parts_names",
+            ),
+            (
+                f"SELECT wv.works_id AS wid, v.voices_name AS v FROM work_voices wv "
+                f"JOIN voices v ON v.id = wv.voices_id WHERE wv.works_id IN ({placeholders}) "
+                "ORDER BY v.voices_sort, v.voices_name",
+                "voices",
+            ),
+            (
+                f"SELECT we.works_id AS wid, e.ensembles_code AS v FROM work_ensembles we "
+                f"JOIN ensembles e ON e.id = we.ensembles_id "
+                f"WHERE we.works_id IN ({placeholders}) ORDER BY e.ensembles_code",
+                "ensembles",
             ),
         )
         for sql, attr in queries:

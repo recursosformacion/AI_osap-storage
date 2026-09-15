@@ -67,6 +67,11 @@ def _metadata(detail: WorkDetail) -> dict:
         "tags": tags,
         "instruments": detail.instruments,
         "parts_names": detail.parts_names,
+        "voices": detail.voices,
+        "ensembles": detail.ensembles,
+        "origin": w.origin,
+        "origin_id": w.origin_id,
+        "voicing": w.voicing,
     }
 
 

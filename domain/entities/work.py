@@ -17,6 +17,8 @@ class WorkLists:
     genres: list[str] = field(default_factory=list)
     instruments: list[str] = field(default_factory=list)
     parts_names: list[str] = field(default_factory=list)
+    voices: list[str] = field(default_factory=list)
+    ensembles: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -50,6 +52,9 @@ class Work:
     thumbnails: str | None = None
     work_key: str | None = None
     relative_path: str | None = None
+    origin: str | None = None
+    origin_id: str | None = None
+    voicing: str | None = None
     id: int | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None

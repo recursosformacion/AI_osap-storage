@@ -1158,6 +1158,12 @@ class InMemoryWorkRepository(WorkRepository):
     async def get_parts(self, work_id: int) -> list[str]:
         return self._lists["parts"].get(work_id, [])
 
+    async def get_voices(self, work_id: int) -> list[str]:
+        return self._lists.get("voices", {}).get(work_id, [])
+
+    async def get_ensembles(self, work_id: int) -> list[str]:
+        return self._lists.get("ensembles", {}).get(work_id, [])
+
     async def get_lists_bulk(self, work_ids: list[int]) -> dict[int, WorkLists]:
         return {
             wid: WorkLists(

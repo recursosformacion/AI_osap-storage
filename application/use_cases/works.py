@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from domain.entities.work import Work, WorkLists
 from domain.exceptions import EntityNotFound
@@ -26,6 +26,8 @@ class WorkDetail:
     genres: list[str]
     instruments: list[str]
     parts_names: list[str]
+    voices: list[str] = field(default_factory=list)
+    ensembles: list[str] = field(default_factory=list)
 
 
 _FORMAT_NAMES = {
@@ -114,6 +116,8 @@ class GetWork:
             genres=genres,
             instruments=instruments,
             parts_names=parts_names,
+            voices=await self._works.get_voices(work_id),
+            ensembles=await self._works.get_ensembles(work_id),
         )
 
 
@@ -178,6 +182,8 @@ class SearchWorksFull:
                     genres=wl.genres,
                     instruments=wl.instruments,
                     parts_names=wl.parts_names,
+                    voices=wl.voices,
+                    ensembles=wl.ensembles,
                 )
             )
         return details
