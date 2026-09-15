@@ -5,10 +5,11 @@ versionado todavía.
 
 - Las migraciones **001–041 pertenecen al esquema viejo** (`osap-storage_v1`) y están
   archivadas en `../migrations_v1/`. **No deben aplicarse** sobre la nueva.
-- Este directorio queda vacío a propósito: el siguiente paso de la Fase 6 es **generar el
-  baseline** del esquema actual y empezar de nuevo desde `001_...`.
+- `001_baseline_schema.sql` es el **baseline del esquema nuevo** (45 tablas, sin vistas ni
+  rutinas), generado con `mysqldump --no-data` desde `osap-storage`. Las migraciones
+  futuras continúan desde `002_...`.
 
-Cómo generar el baseline (solo estructura, sin datos):
+Regenerar el baseline si cambia el esquema (solo estructura):
 
 ```powershell
 mysqldump -h 127.0.0.1 -u osap2027 -p --no-data --skip-comments --routines=false `
