@@ -68,6 +68,7 @@ async def run(
     dry_run: bool,
     review_csv: Path,
     delay: float,
+    max_minutes: float | None = None,
 ) -> None:
     base = Settings()  # type: ignore[call-arg]
     db = Database(base.model_copy(update={"db_name": db_name}))
@@ -142,7 +143,11 @@ async def run(
     stats = {"aceptadas": 0, "multiples": 0, "sin_pista": 0, "error_red": 0}
 
     async with httpx.AsyncClient(follow_redirects=True) as client:
+        started = asyncio.get_event_loop().time()
         for i, r in enumerate(rows, 1):
+            if max_minutes and (asyncio.get_event_loop().time() - started) > max_minutes * 60:
+                print(f"  ... límite de {max_minutes} min alcanzado en {i - 1}/{len(rows)}")
+                break
             title = str(r["title"]).strip()
             raw_name = clean_raw(str(r["name"]))
             query = f'"{title}" composer'
@@ -260,11 +265,15 @@ def main() -> None:
     ap.add_argument("--roles", default="composer")
     ap.add_argument("--limit", type=int, default=50)
     ap.add_argument("--delay", type=float, default=2.0, help="segundos entre búsquedas")
+    ap.add_argument("--max-minutes", type=float, default=None, help="corta tras N minutos")
     ap.add_argument("--review-csv", type=Path, default=Path("web_review.csv"))
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     roles = [r.strip() for r in args.roles.split(",") if r.strip()]
-    asyncio.run(run(args.db, roles, args.limit, args.dry_run, args.review_csv, args.delay))
+    asyncio.run(
+        run(args.db, roles, args.limit, args.dry_run, args.review_csv, args.delay,
+            args.max_minutes)
+    )
 
 
 if __name__ == "__main__":
