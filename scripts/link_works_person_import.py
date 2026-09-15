@@ -58,6 +58,34 @@ def clean_raw(raw: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+_ANON = {
+    "anon", "anon.", "anonymous", "trad", "trad.", "traditional", "attrib.", "attributed",
+    "attrib", "unknown", "author unknown", "urheber unbekannt", "urheber unbek.",
+}
+
+
+def composer_key(raw: str) -> str:
+    """Clave canónica (iniciales + apellido), igual que la de la autoridad."""
+    text = clean_raw(raw)
+    if not text:
+        return ""
+    low = text.lower().replace("'", "").replace("\u2019", "")
+    if low in _ANON or low.startswith("urheber unbekannt"):
+        return "anonymous"
+    text = re.sub(r"\s+\d{3,4}\s*$", "", text)
+    text = re.sub(r"\([^)]*\)", "", text)
+    tokens = re.findall(r"[a-z\u00e0-\u00ff]+", low)
+    if not tokens:
+        return ""
+    if len(tokens) > 1 and tokens[-2] == "o":
+        surname = "o" + tokens[-1]
+        given = tokens[:-2]
+    else:
+        surname = tokens[-1]
+        given = tokens[:-1]
+    return f"{''.join(t[0] for t in given)} {surname}".strip()
+
+
 async def run(db_name: str, roles: list[str], dry_run: bool) -> None:
     base = Settings()  # type: ignore[call-arg]
     db = Database(base.model_copy(update={"db_name": db_name}))
@@ -86,6 +114,27 @@ async def run(db_name: str, roles: list[str], dry_run: bool) -> None:
         )
         work_count = {str(r["pid"]): int(r["n"]) for r in await cur.fetchall()}
 
+        # Autoridad de compositores (candidatos a incorporar más adelante): clave canónica
+        # -> nombre canónico de la autoridad.
+        await cur.execute(
+            "SELECT n.persons_authority_name_normalized_name AS k, "
+            "a.persons_authority_canonical_name AS name "
+            "FROM persons_authority_name n "
+            "JOIN persons_authority a ON a.authority_id = n.authority_id"
+        )
+        authority_by_key = {str(r["k"]): str(r["name"]) for r in await cur.fetchall()}
+        await cur.execute(
+            "SELECT persons_authority_canonical_name AS name FROM persons_authority"
+        )
+        authority_full = {
+            normalize_composer_name(r["name"]) for r in await cur.fetchall()
+        }
+        await cur.execute(
+            "SELECT persons_authority_name_normalized_name AS k, "
+            "COUNT(DISTINCT authority_id) AS n FROM persons_authority_name GROUP BY 1"
+        )
+        key_collisions = {str(r["k"]) for r in await cur.fetchall() if int(r["n"]) > 1}
+
         roles_ph = ", ".join(["%s"] * len(roles))
         await cur.execute(
             f"SELECT id, works_id, works_person_import_name AS name, "
@@ -99,8 +148,14 @@ async def run(db_name: str, roles: list[str], dry_run: bool) -> None:
     matches: list[tuple[int, str, int]] = []  # (works_id, person_id, role_id)
     resolved_ids: list[int] = []
     unmatched: dict[str, int] = {}
+    in_authority: dict[str, int] = {}
     ambiguous: dict[str, int] = {}
-    stats = {"rows": len(rows), "casadas": 0, "ambiguas": 0, "sin_match": 0, "ruido": 0}
+    stats = {
+        "rows": len(rows), "casadas": 0, "ambiguas": 0, "en_autoridad": 0,
+        "autoridad_colision": 0, "sin_match": 0, "ruido": 0,
+    }
+    stats_exact = 0
+    stats_key = 0
     cache: dict[str, str | None] = {}
 
     for r in rows:
@@ -135,10 +190,31 @@ async def run(db_name: str, roles: list[str], dry_run: bool) -> None:
             resolved_ids.append(int(r["id"]))
             stats["casadas"] += 1
         else:
-            unmatched[raw] = unmatched.get(raw, 0) + 1
-            stats["sin_match"] += 1
+            # No hay persona en el catálogo: ¿existe en la autoridad de compositores?
+            if key in authority_full:
+                stats_exact += 1
+                in_authority[raw] = in_authority.get(raw, 0) + 1
+                stats["en_autoridad"] += 1
+            elif composer_key(raw) in authority_by_key and composer_key(raw) not in key_collisions:
+                stats_key += 1
+                in_authority[raw] = in_authority.get(raw, 0) + 1
+                stats["en_autoridad"] += 1
+            else:
+                if composer_key(raw) in key_collisions:
+                    stats["autoridad_colision"] += 1
+                unmatched[raw] = unmatched.get(raw, 0) + 1
+                stats["sin_match"] += 1
 
     print(stats)
+    print(f"  -> autoridad por nombre completo (seguro): {stats_exact} filas")
+    print(f"  -> autoridad por clave única (revisar):    {stats_key} filas")
+    if in_authority:
+        top = sorted(in_authority.items(), key=lambda x: -x[1])
+        total = sum(in_authority.values())
+        print(f"EN AUTORIDAD (candidatos a incorporar): {len(in_authority)} nombres, "
+              f"{total} filas; top:")
+        for k, v in top[:20]:
+            print(f"  {v:>6}  {k}  ->  {authority_by_key.get(composer_key(k), '')}")
     if ambiguous:
         print(f"ambiguas (distintas): {len(ambiguous)}; top:")
         for k, v in sorted(ambiguous.items(), key=lambda x: -x[1])[:10]:
