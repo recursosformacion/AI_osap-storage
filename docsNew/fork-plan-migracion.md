@@ -132,3 +132,32 @@ Equivalencias:
 7. Fase 8 (validación end-to-end contra la BBDD real; ya hay base de integración).
 
 Riesgo principal: los tests actuales usan fakes, así que **no detectan errores de SQL**; conviene montar cuanto antes un test de integración contra `osap-storage` para validar cada repositorio adaptado.
+
+---
+
+## 6. Estado de datos (2026-09-15)
+
+**`works_person_import`: CERRADO de momento.**
+
+| Concepto | Valor |
+|---|---|
+| Personas (`persons`) | 38.492 (35.508 `source_system='pdmx'`, 706 `'authority'`) |
+| Personas con rol 1 (compositor) | 26.881 — **todas con ≥1 obra** |
+| Personas con rol 10 (intérprete) | 17.789 |
+| Relaciones rol 1 / rol 10 | 122.381 / 74.669 |
+| Obras con compositor | 117.189 |
+| `works_person_import` resueltas | 187.554 |
+| Pendientes **composer** | 19.909 (placeholders: `Misc`, `after X`, mojibake…) |
+| Pendientes **artist** | 163.963 (placeholder `Misc tunes` = 142.879, más single-token/odd) |
+| Personas sin ninguna obra | 485 → **`persons_visible = 0`** |
+
+**PENDIENTE IMPORTANTE: localizar el compositor de 193.266 obras** (de 310.455, el 62%).
+Son las obras que quedan sin relación de compositor (PDMX con texto `NA`/no-persona y CPDL sin compositor). Las vías ensayadas: autoridad (agotada), búsqueda web (lenta: ~16 filas/min), `works_person_import` (agotado). Siguiente vía razonable: metadata de MuseScore (`data.score.composer_name`, local) y APIs Wikipedia/IMSLP.
+
+### Pasos siguientes (fases)
+- **Fase 2 (en curso)**: use cases de personas/compositor (`composer_admin.py`, `populate_composers.py`, `composer_recovery.py`) y rutas `admin_composers`/`composers`.
+- **Fase 3**: ingesta (`build_works`, `import_pdmx`, `enrich_metadata`, CPDL).
+- **Fase 4**: contrato del provider + DTOs.
+- **Fase 5-6**: CLI/scripts y migraciones.
+- **Fase 7**: un CRUD completo por tabla.
+- **Fase 8**: validación (ya hay 8 tests de integración en verde).
