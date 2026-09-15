@@ -23,7 +23,8 @@ Prioridad: **proceso** (ingesta/lectura pública) antes que **CRUD genérico** (
 
 ### Fase 1 — Persistencia base (hecho parcialmente)
 - [x] `infrastructure/repositories/sql_work_repository.py` adaptado: lectura (`get_by_id`, `get_by_work_key`, `search`, `list_all`, `list_by_composer`, `count`), `create`/`update` con columnas `works_*`, `replace_tags/genres/instruments/parts` y `get_lists_bulk` contra las tablas nuevas.
-- [ ] `sql_composer_repository.py` → `persons_*` (y roles).
+- [x] `sql_composer_repository.py` (camino de lectura del admin): `list_summaries`, `count`, `review_counts`, `list_suspicious`, `get_detail` y `list_works` sobre `persons` + `works_person_roles` **filtrando rol 1** (el listado de compositores son las personas con rol compositor).
+- [ ] Resto de métodos de `sql_composer_repository.py` (aún con `composer_*`/`composer_id`): `create`, `get_by_id`, `get_by_name`, `find_by_identifier`, `list_aliases`/`add_alias`/`move_alias`/`promote_alias`, `rename_composer`, `update_composer`, `set_review_status`, `set_suspicious`, `set_musicbrainz_id`, `list_identifiers`/`add_identifier`/`delete_identifier`, `list_evidence`/`add_evidence`/`list_creation_evidence`/`add_creation_evidence`, `get_biography`/`upsert_biography`, `merge`, `set_attribution`, `resolve_by_normalized`/`resolve_many_by_normalized`, `list_pending_review`, `list_resolutions`/`record_resolution`, `backfill_creation_evidence`, `prune_zero_work_composers`, `ensure_unknown_composer`.
 - [ ] `sql_voting_repository.py`, `sql_catalogue_repository.py` (catálogos → `catalog`), `sql_authority_*` (`authority_*`), `sql_job_repository`, `sql_statistics_repository`.
 - [ ] `domain/entities/work.py`: valorar exponer `origin`, `origin_id`, `voicing`, `voices`/`ensembles` (hoy no están en la entidad).
 
@@ -46,3 +47,6 @@ Prioridad: **proceso** (ingesta/lectura pública) antes que **CRUD genérico** (
 ## Estado
 - Rama `fork-new-db` creada. `scripts/import_cpdl_pages.py` retirado.
 - `sql_work_repository.py` adaptado y validado (`ruff` OK, `tests/api/test_provider_contract.py` 7/7 con fakes).
+- **BBDD (2026-09-15)**: renombradas → `osap-storage` = nueva (44 tablas, 310.455 works), `osap-storage_v1` = antigua (42 tablas), `osap-storage_new` eliminada. `config.yaml` sigue apuntando a `osap-storage`, así que la API usa ya la nueva al reiniciar.
+- **Personas creadas revertidas**: se borraron las 33.919 `persons` con `persons_source_system='resolved'`. `persons` = 2.278; `works_person_roles` = 52.182 (1.771 personas con rol 1). La resolución de nombres queda pendiente con el fichero bajo estudio.
+- **Pendiente**: listar compositores es "personas con rol 1 en `works_person_roles`" (ya aplicado en el camino de lectura); completar el resto de repositorios y use cases.

@@ -304,37 +304,48 @@ class SqlComposerRepository(ComposerRepository):
         self, *, limit: int, offset: int, q: str | None = None, review: str | None = None,
         visible: str = "visible",
     ) -> list[ComposerSummary]:
-        where: list[str] = []
+        where: list[str] = [
+            "EXISTS (SELECT 1 FROM works_person_roles r "
+            "WHERE r.works_person_roles_person_id = c.persons_id "
+            "AND r.works_person_roles_role_id = 1)"
+        ]
         params: list = []
         if visible == "visible":
-            where.append("c.visible = 1")
+            where.append("c.persons_visible = 1")
         elif visible == "hidden":
-            where.append("c.visible = 0")
-        # 'all' → sin filtro de visibilidad (incluye candidate y merged)
+            where.append("c.persons_visible = 0")
+        # 'all' → sin filtro de visibilidad
         if review and (review := review.strip()):
             # "revisados" = correctos o incorrectos (correct + incorrect).
             if review == "reviewed":
-                where.append("c.review_status IN ('correct', 'incorrect')")
+                where.append("c.persons_review_status IN ('correct', 'incorrect')")
             else:
-                where.append("c.review_status = %s")
+                where.append("c.persons_review_status = %s")
                 params.append(review)
         if q and (q := q.strip()):
             norm = normalize_composer_name(q)
             where.append(
-                "(c.name LIKE %s OR EXISTS ("
-                "SELECT 1 FROM composer_aliases a WHERE a.composer_id = c.id AND a.normalized_alias LIKE %s))"
+                "(c.persons_name LIKE %s OR EXISTS ("
+                "SELECT 1 FROM persons_aliases a WHERE a.person_id = c.persons_id "
+                "AND a.person_aliases_normalized_alias LIKE %s))"
             )
             params.extend([f"%{q}%", f"%{norm}%"])
         where_sql = " AND ".join(where) if where else "1=1"
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT c.id, c.name, c.status, c.review_status, c.visible, "
-                "(SELECT COUNT(*) FROM composer_aliases a WHERE a.composer_id = c.id) AS aliases_count, "
-                "(SELECT COUNT(*) FROM works w WHERE w.composer_id = c.id) AS works_count, "
-                "b.biography_summary, b.biography_era, b.biography_nationality "
-                f"FROM composers c LEFT JOIN composer_biographies b ON b.composer_id = c.id "
+                "SELECT c.persons_id AS id, c.persons_name AS name, "
+                "c.persons_status AS status, c.persons_review_status AS review_status, "
+                "c.persons_visible AS visible, "
+                "(SELECT COUNT(*) FROM persons_aliases a WHERE a.person_id = c.persons_id) AS aliases_count, "
+                "(SELECT COUNT(*) FROM works_person_roles r "
+                " WHERE r.works_person_roles_person_id = c.persons_id "
+                " AND r.works_person_roles_role_id = 1) AS works_count, "
+                "c.persons_biography_summary AS biography_summary, "
+                "c.persons_biography_era AS biography_era, "
+                "c.persons_biography_nationality AS biography_nationality "
+                "FROM persons c "
                 f"WHERE {where_sql} "
-                "ORDER BY c.name LIMIT %s OFFSET %s",
+                "ORDER BY c.persons_name LIMIT %s OFFSET %s",
                 [*params, limit, offset],
             )
             return [
@@ -355,28 +366,33 @@ class SqlComposerRepository(ComposerRepository):
 
     async def count(self, q: str | None = None, review: str | None = None,
                     visible: str = "visible") -> int:
-        where: list[str] = []
+        where: list[str] = [
+            "EXISTS (SELECT 1 FROM works_person_roles r "
+            "WHERE r.works_person_roles_person_id = c.persons_id "
+            "AND r.works_person_roles_role_id = 1)"
+        ]
         params: list = []
         if visible == "visible":
-            where.append("visible = 1")
+            where.append("c.persons_visible = 1")
         elif visible == "hidden":
-            where.append("visible = 0")
+            where.append("c.persons_visible = 0")
         if review and (review := review.strip()):
             if review == "reviewed":
-                where.append("review_status IN ('correct', 'incorrect')")
+                where.append("c.persons_review_status IN ('correct', 'incorrect')")
             else:
-                where.append("review_status = %s")
+                where.append("c.persons_review_status = %s")
                 params.append(review)
         if q and (q := q.strip()):
             norm = normalize_composer_name(q)
             where.append(
-                "(name LIKE %s OR EXISTS ("
-                "SELECT 1 FROM composer_aliases a WHERE a.composer_id = composers.id AND a.normalized_alias LIKE %s))"
+                "(c.persons_name LIKE %s OR EXISTS ("
+                "SELECT 1 FROM persons_aliases a WHERE a.person_id = c.persons_id "
+                "AND a.person_aliases_normalized_alias LIKE %s))"
             )
             params.extend([f"%{q}%", f"%{norm}%"])
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                f"SELECT COUNT(*) AS total FROM composers WHERE {' AND '.join(where) if where else '1=1'}",
+                f"SELECT COUNT(*) AS total FROM persons c WHERE {' AND '.join(where)}",
                 params,
             )
             return int((await cur.fetchone())["total"])
@@ -384,8 +400,12 @@ class SqlComposerRepository(ComposerRepository):
     async def review_counts(self) -> dict[str, int]:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT review_status, COUNT(*) AS total FROM composers "
-                "WHERE status = %s GROUP BY review_status",
+                "SELECT c.persons_review_status AS review_status, COUNT(*) AS total "
+                "FROM persons c WHERE c.persons_status = %s "
+                "AND EXISTS (SELECT 1 FROM works_person_roles r "
+                "  WHERE r.works_person_roles_person_id = c.persons_id "
+                "  AND r.works_person_roles_role_id = 1) "
+                "GROUP BY c.persons_review_status",
                 (ComposerStatus.ACTIVE,),
             )
             rows = await cur.fetchall()
@@ -693,10 +713,16 @@ class SqlComposerRepository(ComposerRepository):
     async def list_suspicious(self, *, limit: int, offset: int) -> list[ComposerSummary]:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT id, name, status, review_status, review_reason AS suspicious_reason, "
+                "SELECT c.persons_id AS id, c.persons_name AS name, "
+                "c.persons_status AS status, c.persons_review_status AS review_status, "
+                "c.persons_review_reason AS suspicious_reason, "
                 "0 AS aliases_count, 0 AS works_count "
-                "FROM composers WHERE status = %s AND review_reason IS NOT NULL "
-                "ORDER BY id LIMIT %s OFFSET %s",
+                "FROM persons c WHERE c.persons_status = %s "
+                "AND c.persons_review_reason IS NOT NULL "
+                "AND EXISTS (SELECT 1 FROM works_person_roles r "
+                "  WHERE r.works_person_roles_person_id = c.persons_id "
+                "  AND r.works_person_roles_role_id = 1) "
+                "ORDER BY c.persons_id LIMIT %s OFFSET %s",
                 (ComposerStatus.ACTIVE, limit, offset),
             )
             return [
@@ -710,13 +736,20 @@ class SqlComposerRepository(ComposerRepository):
     async def get_detail(self, composer_id: str) -> ComposerDetail | None:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT c.id, c.name, c.status, c.merged_into, c.merged_at, c.review_status, "
-                "c.reviewed_at, c.visible, c.birth_year, c.death_year, c.homepage, c.cluster_id, c.review_reason, "
-                "c.created_at, c.updated_at, "
-                "b.biography_summary, b.biography_era, b.biography_nationality, "
-                "b.biography_key_works, b.biography_key_fact, b.biography_references "
-                "FROM composers c LEFT JOIN composer_biographies b ON b.composer_id = c.id "
-                "WHERE c.id = %s",
+                "SELECT c.persons_id AS id, c.persons_name AS name, c.persons_status AS status, "
+                "c.persons_merged_into AS merged_into, c.persons_merged_at AS merged_at, "
+                "c.persons_review_status AS review_status, c.persons_reviewed_at AS reviewed_at, "
+                "c.persons_visible AS visible, c.persons_birth_year AS birth_year, "
+                "c.persons_death_year AS death_year, NULL AS homepage, NULL AS cluster_id, "
+                "c.persons_review_reason AS review_reason, c.persons_created_at AS created_at, "
+                "c.persons_updated_at AS updated_at, "
+                "c.persons_biography_summary AS biography_summary, "
+                "c.persons_biography_era AS biography_era, "
+                "c.persons_biography_nationality AS biography_nationality, "
+                "c.persons_biography_key_works AS biography_key_works, "
+                "c.persons_biography_key_fact AS biography_key_fact, "
+                "c.persons_biography_references AS biography_references "
+                "FROM persons c WHERE c.persons_id = %s",
                 (composer_id,),
             )
             row = await cur.fetchone()
@@ -739,21 +772,36 @@ class SqlComposerRepository(ComposerRepository):
             elif references is None:
                 references = []
             await cur.execute(
-                "SELECT alias FROM composer_aliases WHERE composer_id = %s ORDER BY id",
+                "SELECT person_aliases_alias AS alias FROM persons_aliases "
+                "WHERE person_id = %s ORDER BY id",
                 (composer_id,),
             )
             aliases = [r["alias"] for r in await cur.fetchall()]
             await cur.execute(
-                "SELECT COUNT(*) AS total FROM works WHERE composer_id = %s", (composer_id,)
+                "SELECT COUNT(*) AS total FROM works_person_roles "
+                "WHERE works_person_roles_person_id = %s AND works_person_roles_role_id = 1",
+                (composer_id,),
             )
             works_count = int((await cur.fetchone())["total"])
             await cur.execute(
-                "SELECT * FROM composer_identifiers WHERE composer_id = %s ORDER BY id",
+                "SELECT id, persons_id AS composer_id, persons_identifiers_type AS id_type, "
+                "persons_identifiers_value AS id_value, persons_identifiers_source AS source, "
+                "persons_identifiers_is_identity_anchor AS is_identity_anchor, "
+                "persons_identifiers_strength AS strength, persons_identifiers_channels AS channels "
+                "FROM persons_identifiers WHERE persons_id = %s ORDER BY id",
                 (composer_id,),
             )
             identifiers = [_row_to_identifier(r) for r in await cur.fetchall()]
             await cur.execute(
-                "SELECT * FROM composer_evidence WHERE composer_id = %s ORDER BY id",
+                "SELECT id, persons_id AS composer_id, persons_evidence_rule AS rule, "
+                "persons_evidence_decision AS decision, persons_evidence_reason AS reason, "
+                "persons_evidence_anchor_type AS anchor_type, "
+                "persons_evidence_anchor_value AS anchor_value, "
+                "persons_evidence_channels AS channels, "
+                "persons_evidence_identifiers_used AS identifiers_used, "
+                "persons_evidence_matcher_version AS matcher_version, "
+                "persons_evidence_created_at AS created_at "
+                "FROM persons_evidence WHERE persons_id = %s ORDER BY id",
                 (composer_id,),
             )
             evidence = [_row_to_evidence(r) for r in await cur.fetchall()]
@@ -790,8 +838,12 @@ class SqlComposerRepository(ComposerRepository):
     ) -> list[ComposerWorkRef]:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT id AS work_id, title, composer_id FROM works "
-                "WHERE composer_id = %s ORDER BY id LIMIT %s OFFSET %s",
+                "SELECT w.id AS work_id, w.works_title AS title, "
+                "r.works_person_roles_person_id AS composer_id "
+                "FROM works_person_roles r JOIN works w ON w.id = r.works_person_roles_work_id "
+                "WHERE r.works_person_roles_person_id = %s "
+                "AND r.works_person_roles_role_id = 1 "
+                "ORDER BY w.id LIMIT %s OFFSET %s",
                 (composer_id, limit, offset),
             )
             return [
