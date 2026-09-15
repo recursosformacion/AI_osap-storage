@@ -48,7 +48,8 @@ _NOISE_TOKEN = re.compile(
     r"\b(urheber|unbekannt|unknown|anonymous|anonimo|trad|traditional|datum|quelle|"
     r"page|band|choir|chorus|group|ensemble|orchestra|tome|transkribierten|schriftlichen|"
     r"nach|after|attrib|attributed|arranged|arr|edition|editor|volume|vol|book|"
-    r"various|composer)\b"
+    r"misc|tunes|tune|game|games|cartoon|cartoons|soundtrack|christmas|praise|"
+    r"various|composer|user)\b"
 )
 _EMPTY = {
     "na", "n a", "nan", "null", "none", "unknown", "desconocido", "anon", "anonimo",
@@ -68,6 +69,9 @@ def is_personlike(name: str) -> bool:
     tokens = key.split()
     if len(tokens) > 6:
         return False
+    # Una sola palabra muy larga suele ser un usuario/handle (p. ej. "yoheikatowwc").
+    if len(tokens) == 1:
+        return 4 <= len(key) <= 10 and bool(re.fullmatch(r"[a-z][a-z'\-]*", key))
     # Todas las palabras deben ser alfabéticas (con apóstrofo/guion) y al menos una 3+ letras.
     if not all(re.fullmatch(r"[a-z][a-z'\-]*", t) for t in tokens):
         return False
