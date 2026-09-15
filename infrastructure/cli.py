@@ -5,6 +5,7 @@ import asyncio
 import csv
 import json
 import os
+import sys
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
@@ -568,6 +569,11 @@ async def _run(args: argparse.Namespace, container: Container) -> None:
 
 
 def main() -> None:
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
     args = build_parser().parse_args()
     try:
         from osap.bootstrap.configuration import validate_generic_service_config

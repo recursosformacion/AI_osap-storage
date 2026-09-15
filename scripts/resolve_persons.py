@@ -12,7 +12,7 @@ Estrategia de resolución, por nombre:
 Los artistas (rol `artist`) NO se resuelven aquí: se quedan en staging.
 
 Uso:
-    .venv\\Scripts\\python.exe scripts/resolve_persons.py --db osap-storage_new [--dry-run]
+    .venv\\Scripts\\python.exe scripts/resolve_persons.py --db osap-storage [--dry-run]
 """
 
 from __future__ import annotations
@@ -180,7 +180,7 @@ async def run(db_name: str, dry_run: bool) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--db", default="osap-storage_new")
+    ap.add_argument("--db", default="osap-storage")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     asyncio.run(run(args.db, args.dry_run))

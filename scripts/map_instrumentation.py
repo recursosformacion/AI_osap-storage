@@ -3,11 +3,11 @@
 
 Fuentes:
 - `osap-storage`.`work_instruments` (textos enriquecidos, cantidad embebida "(N)")
-- `osap-storage_new`.`works`.`works_voicing` (CPDL)
-- `osap-storage_new`.`works`.`works_instrumentation` (CPDL)
+- `osap-storage`.`works`.`works_voicing` (CPDL)
+- `osap-storage`.`works`.`works_instrumentation` (CPDL)
 
 Uso:
-    .venv\\Scripts\\python.exe scripts/map_instrumentation.py --db osap-storage_new [--dry-run]
+    .venv\\Scripts\\python.exe scripts/map_instrumentation.py --db osap-storage [--dry-run]
 """
 
 from __future__ import annotations
@@ -318,7 +318,7 @@ async def run(db_name: str, dry_run: bool) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--db", default="osap-storage_new")
+    ap.add_argument("--db", default="osap-storage")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     asyncio.run(run(args.db, args.dry_run))

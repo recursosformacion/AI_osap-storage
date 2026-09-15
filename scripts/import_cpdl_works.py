@@ -18,7 +18,7 @@ Solo importa páginas que parezcan obras (tienen `{{CPDLno|...}}` o `{{Voicing|.
 
 Uso:
     .venv\\Scripts\\python.exe scripts/import_cpdl_works.py --dir G:\\cpdl_chunks
-    .venv\\Scripts\\python.exe scripts/import_cpdl_works.py --files G:\\x.xml --db osap-storage_new --dry-run
+    .venv\\Scripts\\python.exe scripts/import_cpdl_works.py --files G:\\x.xml --db osap-storage --dry-run
 """
 
 from __future__ import annotations
@@ -270,7 +270,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--files", nargs="*", type=Path, default=[])
     ap.add_argument("--dir", type=Path, default=None)
-    ap.add_argument("--db", default="osap-storage_new")
+    ap.add_argument("--db", default="osap-storage")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     paths = list(args.files)
