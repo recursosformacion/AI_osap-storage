@@ -109,6 +109,20 @@ async def test_composer_detail_and_works(db: Database) -> None:
     assert all(w.title for w in works)
 
 
+async def test_every_composer_has_at_least_one_work(db: Database) -> None:
+    """Invariante: no puede haber un compositor (rol 1) sin obras."""
+    async with db.connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "SELECT MIN(n) AS minimo, COUNT(*) AS compositores FROM ("
+            " SELECT COUNT(*) AS n FROM works_person_roles "
+            " WHERE works_person_roles_role_id = 1 "
+            " GROUP BY works_person_roles_person_id) t"
+        )
+        row = await cur.fetchone()
+    assert int(row["compositores"]) > 0
+    assert int(row["minimo"]) >= 1, "hay compositores con 0 obras"
+
+
 async def test_voting_statistics_absent_for_unvoted_work(db: Database) -> None:
     repo = SqlVotingRepository(db)
     stats = await repo.get_work_statistics(1)
