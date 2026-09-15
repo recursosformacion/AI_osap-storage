@@ -124,6 +124,13 @@ class SqlWorkRepository(WorkRepository):
                 ),
             )
             work.id = cur.lastrowid
+            if work.composer_id:
+                await cur.execute(
+                    "INSERT IGNORE INTO works_person_roles (works_person_roles_work_id, "
+                    "works_person_roles_person_id, works_person_roles_role_id) "
+                    "VALUES (%s, %s, %s)",
+                    (work.id, work.composer_id, ROLE_COMPOSER),
+                )
             return work
 
     async def update(self, work: Work) -> None:
@@ -143,6 +150,13 @@ class SqlWorkRepository(WorkRepository):
                     int(work.public_domain), work.id,
                 ),
             )
+            if work.composer_id:
+                await cur.execute(
+                    "INSERT IGNORE INTO works_person_roles (works_person_roles_work_id, "
+                    "works_person_roles_person_id, works_person_roles_role_id) "
+                    "VALUES (%s, %s, %s)",
+                    (work.id, work.composer_id, ROLE_COMPOSER),
+                )
 
     async def get_by_id(self, work_id: int) -> Work | None:
         async with self._db.connection() as conn, conn.cursor() as cur:
