@@ -84,8 +84,11 @@ class SqlVotingRepository(VotingRepository):
     async def get_work_statistics(self, work_id: int) -> WorkStatistics | None:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT work_id, rating, adjusted_rating, vote_count, work_count, "
-                "confidence, calculated_at FROM work_statistics WHERE work_id = %s",
+                "SELECT works_id AS work_id, wksta_rating AS rating, "
+                "wksta_adjusted_rating AS adjusted_rating, wksta_vote_count AS vote_count, "
+                "wksta_work_count AS work_count, wksta_confidence AS confidence, "
+                "wksta_calculated_at AS calculated_at "
+                "FROM work_statistics WHERE works_id = %s",
                 (work_id,),
             )
             row = await cur.fetchone()
@@ -97,31 +100,36 @@ class SqlVotingRepository(VotingRepository):
         placeholders = ", ".join(["%s"] * len(work_ids))
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                f"SELECT work_id, rating, adjusted_rating, vote_count, work_count, "
-                f"confidence, calculated_at FROM work_statistics WHERE work_id IN ({placeholders})",
+                f"SELECT works_id AS work_id, wksta_rating AS rating, "
+                f"wksta_adjusted_rating AS adjusted_rating, wksta_vote_count AS vote_count, "
+                f"wksta_work_count AS work_count, wksta_confidence AS confidence, "
+                f"wksta_calculated_at AS calculated_at "
+                f"FROM work_statistics WHERE works_id IN ({placeholders})",
                 work_ids,
             )
             return {r["work_id"]: _row_to_work_stats(r) for r in await cur.fetchall()}
 
     async def get_composer_statistics(self, composer_id: str) -> ComposerStatistics | None:
         # `composer_statistics` está retirado: se calcula en vivo desde
-        # work_statistics + works (solo compositores activos del maestro).
+        # work_statistics + works_person_roles (solo personas activas).
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT w.composer_id, "
-                "SUM(ws.adjusted_rating * SQRT(ws.vote_count)) / NULLIF(SUM(SQRT(ws.vote_count)), 0) "
-                "    AS rating, "
-                "SUM(ws.adjusted_rating * SQRT(ws.vote_count)) / NULLIF(SUM(SQRT(ws.vote_count)), 0) "
-                "    AS adjusted_rating, "
-                "COALESCE(SUM(ws.vote_count), 0) AS vote_count, "
+                "SELECT r.works_person_roles_person_id AS composer_id, "
+                "SUM(ws.wksta_adjusted_rating * SQRT(ws.wksta_vote_count)) "
+                "    / NULLIF(SUM(SQRT(ws.wksta_vote_count)), 0) AS rating, "
+                "SUM(ws.wksta_adjusted_rating * SQRT(ws.wksta_vote_count)) "
+                "    / NULLIF(SUM(SQRT(ws.wksta_vote_count)), 0) AS adjusted_rating, "
+                "COALESCE(SUM(ws.wksta_vote_count), 0) AS vote_count, "
                 "COUNT(DISTINCT w.id) AS work_count, "
-                "LEAST(1.0, COALESCE(SUM(ws.vote_count), 0) / %s) AS confidence, "
+                "LEAST(1.0, COALESCE(SUM(ws.wksta_vote_count), 0) / %s) AS confidence, "
                 "NOW(6) AS calculated_at "
-                "FROM works w "
-                "JOIN composers c ON c.id = w.composer_id AND c.status = 'active' "
-                "LEFT JOIN work_statistics ws ON ws.work_id = w.id "
-                "WHERE w.composer_id = %s "
-                "GROUP BY w.composer_id",
+                "FROM persons c "
+                "JOIN works_person_roles r ON r.works_person_roles_person_id = c.persons_id "
+                "  AND r.works_person_roles_role_id = 1 "
+                "JOIN works w ON w.id = r.works_person_roles_work_id "
+                "LEFT JOIN work_statistics ws ON ws.works_id = w.id "
+                "WHERE c.persons_id = %s AND c.persons_status = 'active' "
+                "GROUP BY r.works_person_roles_person_id",
                 (ADJUSTMENT_MIN_VOTES, composer_id),
             )
             row = await cur.fetchone()
@@ -138,22 +146,25 @@ class SqlVotingRepository(VotingRepository):
             # Work: media, suavizada hacia la media global, confidence.
             await cur.execute(
                 "INSERT INTO work_statistics "
-                "(work_id, rating, adjusted_rating, vote_count, work_count, confidence, calculated_at) "
+                "(works_id, wksta_rating, wksta_adjusted_rating, wksta_vote_count, "
+                " wksta_work_count, wksta_confidence, wksta_calculated_at) "
                 "SELECT v.work_id, AVG(v.vote), "
                 "(COUNT(*) * AVG(v.vote) + %s * %s) / (COUNT(*) + %s), "
                 "COUNT(*), 1, LEAST(1.0, COUNT(*) / %s), NOW(6) "
                 "FROM votes v GROUP BY v.work_id "
                 "ON DUPLICATE KEY UPDATE "
-                "rating = VALUES(rating), adjusted_rating = VALUES(adjusted_rating), "
-                "vote_count = VALUES(vote_count), confidence = VALUES(confidence), "
-                "calculated_at = VALUES(calculated_at)",
+                "wksta_rating = VALUES(wksta_rating), "
+                "wksta_adjusted_rating = VALUES(wksta_adjusted_rating), "
+                "wksta_vote_count = VALUES(wksta_vote_count), "
+                "wksta_confidence = VALUES(wksta_confidence), "
+                "wksta_calculated_at = VALUES(wksta_calculated_at)",
                 (m, global_mean, m, m),
             )
             works_updated = cur.rowcount
             # Limpia filas de obras que ya no tienen votos (idempotencia).
             await cur.execute(
-                "DELETE ws FROM work_statistics ws LEFT JOIN votes v ON v.work_id = ws.work_id "
-                "WHERE v.id IS NULL"
+                "DELETE ws FROM work_statistics ws "
+                "LEFT JOIN votes v ON v.work_id = ws.works_id WHERE v.id IS NULL"
             )
 
             # Estadísticas por compositor se calculan en vivo (composer_statistics

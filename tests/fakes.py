@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 from domain.entities.archive import Archive
 from domain.entities.archive_entry import ArchiveEntry, ArchiveEntryStatus
-from domain.entities.authority_identifier import AuthorityIdentifier
 from domain.entities.catalogue import Catalogue
 from domain.entities.composer import (
     Composer,
@@ -36,11 +34,9 @@ from domain.entities.voting import (
 from domain.entities.work import Work, WorkLists
 from domain.exceptions import DownloadFailed
 from domain.ports.archive_repositories import ArchiveEntryRepository, ArchiveRepository
-from domain.ports.authority_identifier_repository import AuthorityIdentifierRepository
 from domain.ports.catalogue_repository import CatalogueRepository
 from domain.ports.composer_repository import ComposerRepository
 from domain.ports.import_source_repository import ImportSourceRepository
-from domain.ports.musicbrainz_cache_repository import MusicBrainzCacheRepository
 from domain.ports.repositories import (
     DownloadJobRepository,
     FileRepository,
@@ -950,15 +946,6 @@ class InMemoryVotingRepository(VotingRepository):
                              composers_updated=len(self._composer_stats))
 
 
-class InMemoryMusicBrainzCacheRepository(MusicBrainzCacheRepository):
-    def __init__(self) -> None:
-        self._items: dict[str, str] = {}
-
-    async def get(self, query: str) -> str | None:
-        return self._items.get(query)
-
-    async def set(self, query: str, payload: str) -> None:
-        self._items[query] = payload
 
 
 class InMemoryTableCrudRepository(TableCrudRepository):
@@ -1182,31 +1169,3 @@ class InMemoryWorkRepository(WorkRepository):
             for wid in work_ids
         }
 
-class InMemoryAuthorityIdentifierRepository(AuthorityIdentifierRepository):
-    def __init__(self) -> None:
-        self._rows: dict[tuple[str, str, str], AuthorityIdentifier] = {}
-        self._next_id = 1
-
-    async def upsert(self, identifier: AuthorityIdentifier) -> AuthorityIdentifier:
-        key = (identifier.entity_type, identifier.entity_id, identifier.scheme)
-        existing = self._rows.get(key)
-        if existing is None:
-            identifier = replace(identifier, id=self._next_id)
-            self._next_id += 1
-        self._rows[key] = identifier
-        return identifier
-
-    async def get(self, entity_type: str, entity_id: str, scheme: str) -> AuthorityIdentifier | None:
-        return self._rows.get((entity_type, entity_id, scheme))
-
-    async def list_for_entity(self, entity_type: str, entity_id: str) -> list[AuthorityIdentifier]:
-        return [r for (t, e, _s), r in self._rows.items() if t == entity_type and e == entity_id]
-
-    async def find_by_scheme_value(self, scheme: str, value: str) -> list[AuthorityIdentifier]:
-        return [r for (_t, _e, s), r in self._rows.items() if s == scheme and r.value == value]
-
-    async def delete(self, entity_type: str, entity_id: str, scheme: str) -> None:
-        self._rows.pop((entity_type, entity_id, scheme), None)
-
-    async def count_by_source(self, source: str) -> int:
-        return sum(1 for r in self._rows.values() if r.source == source)

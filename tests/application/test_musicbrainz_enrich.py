@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import json
 
 from application.use_cases.musicbrainz_enrich import EnrichComposersMusicBrainz
 from domain.entities.composer import Composer
-from infrastructure.services.musicbrainz_client import CachedMusicBrainzClient
-from tests.fakes import InMemoryComposerRepository, InMemoryMusicBrainzCacheRepository
+from tests.fakes import InMemoryComposerRepository
 
 
 class FakeMusicBrainz:
@@ -74,24 +72,3 @@ def test_only_person_type_accepted():
     assert counts["no_match"] == 1
 
 
-def test_cache_avoids_second_api_call():
-    repo = InMemoryComposerRepository()
-    asyncio.run(repo.create(Composer(id="c", name="W A Mozart")))
-    cache = InMemoryMusicBrainzCacheRepository()
-    # Pre-carga la caché: la segunda ejecución NO debe llamar al API.
-    artists = [_person("Wolfgang Amadeus Mozart", "mbid-1")]
-    asyncio.run(cache.set("W A Mozart", json.dumps(artists)))
-    mb = FakeMusicBrainz({})
-    cached = CachedMusicBrainzClient(mb, cache)
-    counts = asyncio.run(EnrichComposersMusicBrainz(repo, cached).execute(limit=10))
-    assert counts["renamed"] == 1
-    assert mb.calls == []  # no se llamó al API (usó caché)
-
-
-def test_cached_client_populates_cache_on_miss():
-    cache = InMemoryMusicBrainzCacheRepository()
-    mb = FakeMusicBrainz({"Mozart": [_person("Wolfgang Amadeus Mozart", "mbid-9")]})
-    cached = CachedMusicBrainzClient(mb, cache)
-    asyncio.run(cached.search_artists("Mozart"))
-    assert "Mozart" in cache._items
-    assert mb.calls == ["Mozart"]

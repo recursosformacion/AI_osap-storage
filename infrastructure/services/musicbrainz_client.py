@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import json
 
 import httpx
-from domain.ports.musicbrainz_cache_repository import MusicBrainzCacheRepository
 
 _USER_AGENT = "osap-storage/0.1 (contacto: admin@osap.local)"
 
@@ -57,26 +55,3 @@ class MusicBrainzClient:
             resp.raise_for_status()
             data = resp.json()
             return data.get("works", [])
-
-
-class CachedMusicBrainzClient:
-    """Envuelve MusicBrainzClient con una caché en BD.
-
-    La primera consulta de un nombre llama al API y guarda el resultado; las siguientes
-    usan la caché, por lo que se puede procesar sin repetir peticiones ni rate limit.
-    """
-
-    def __init__(self, real: MusicBrainzClient, cache: MusicBrainzCacheRepository) -> None:
-        self._real = real
-        self._cache = cache
-
-    async def search_artists(self, name: str) -> list[dict]:
-        cached = await self._cache.get(name)
-        if cached is not None:
-            try:
-                return json.loads(cached)
-            except json.JSONDecodeError:
-                pass
-        artists = await self._real.search_artists(name)
-        await self._cache.set(name, json.dumps(artists))
-        return artists

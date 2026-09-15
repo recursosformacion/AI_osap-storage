@@ -770,6 +770,17 @@ class SqlComposerRepository(ComposerRepository):
                 (identifier_id, composer_id),
             )
 
+    async def count_by_source(self, source: str) -> int:
+        """Nº de identificadores de persona por fuente (sustituye a authority_identifiers)."""
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT COUNT(*) AS total FROM persons_identifiers "
+                "WHERE persons_identifiers_source = %s",
+                (source,),
+            )
+            row = await cur.fetchone()
+        return int(row["total"]) if row else 0
+
     async def list_pending_review(self, *, limit: int, offset: int) -> list[ComposerSummary]:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
