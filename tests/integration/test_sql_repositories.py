@@ -92,7 +92,8 @@ async def test_composer_repository_lists_only_composers(db: Database) -> None:
     assert all(s.works_count >= 1 for s in summaries), "el listado es solo de quien tiene obras"
 
     total = await repo.count()
-    assert total == len(await repo.list_summaries(limit=10_000, offset=0))
+    page = await repo.list_summaries(limit=10_000, offset=0)
+    assert len(page) == min(total, 10_000)
 
 
 async def test_composer_detail_and_works(db: Database) -> None:
