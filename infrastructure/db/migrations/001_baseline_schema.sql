@@ -9,7 +9,6 @@
 /*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
-DROP TABLE IF EXISTS `archive_entries`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `archive_entries` (
@@ -36,7 +35,6 @@ CREATE TABLE `archive_entries` (
   CONSTRAINT `fk_archive_entries_file` FOREIGN KEY (`file_id`) REFERENCES `files` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=254082 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `archives`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `archives` (
@@ -58,7 +56,6 @@ CREATE TABLE `archives` (
   CONSTRAINT `fk_archives_provider` FOREIGN KEY (`provider_id`) REFERENCES `storage_providers` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `authority_sync_state`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `authority_sync_state` (
@@ -70,7 +67,6 @@ CREATE TABLE `authority_sync_state` (
   PRIMARY KEY (`source`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `catalog`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `catalog` (
@@ -83,7 +79,6 @@ CREATE TABLE `catalog` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Solo define las reglas de reconocimiento y formato del catál';
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `category`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `category` (
@@ -92,7 +87,6 @@ CREATE TABLE `category` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `categoryrol`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `categoryrol` (
@@ -101,7 +95,6 @@ CREATE TABLE `categoryrol` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `download_jobs`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `download_jobs` (
@@ -121,7 +114,6 @@ CREATE TABLE `download_jobs` (
   CONSTRAINT `fk_download_jobs_provider` FOREIGN KEY (`provider_id`) REFERENCES `storage_providers` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `ensemble_voices`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `ensemble_voices` (
@@ -135,7 +127,6 @@ CREATE TABLE `ensemble_voices` (
   CONSTRAINT `fk_ensemble_voices_voice` FOREIGN KEY (`voices_id`) REFERENCES `voices` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `ensembles`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `ensembles` (
@@ -147,7 +138,6 @@ CREATE TABLE `ensembles` (
   UNIQUE KEY `uq_ensembles_code` (`ensembles_code`)
 ) ENGINE=InnoDB AUTO_INCREMENT=393 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `epochs`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `epochs` (
@@ -160,7 +150,6 @@ CREATE TABLE `epochs` (
   UNIQUE KEY `uq_epoch_title` (`title`)
 ) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `files`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `files` (
@@ -177,7 +166,6 @@ CREATE TABLE `files` (
   KEY `idx_files_status` (`status`)
 ) ENGINE=InnoDB AUTO_INCREMENT=254659 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `genre_mappings`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `genre_mappings` (
@@ -187,7 +175,6 @@ CREATE TABLE `genre_mappings` (
   KEY `fk_genre_mapping_genre` (`genre_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `genres`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `genres` (
@@ -198,7 +185,6 @@ CREATE TABLE `genres` (
   UNIQUE KEY `uq_genre_name` (`name`)
 ) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `import_sources`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `import_sources` (
@@ -214,7 +200,6 @@ CREATE TABLE `import_sources` (
   KEY `idx_import_sources_provider` (`provider`)
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `instrument_categories`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `instrument_categories` (
@@ -229,7 +214,6 @@ CREATE TABLE `instrument_categories` (
   KEY `fk_inst_cat_parent` (`parent_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=109 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `instruments`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `instruments` (
@@ -248,7 +232,6 @@ CREATE TABLE `instruments` (
   KEY `fk_instrument_cat` (`category_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=182 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `languages`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `languages` (
@@ -261,7 +244,6 @@ CREATE TABLE `languages` (
   UNIQUE KEY `uq_languages_code` (`languages_code`)
 ) ENGINE=InnoDB AUTO_INCREMENT=246 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `persons`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `persons` (
@@ -297,7 +279,6 @@ CREATE TABLE `persons` (
   KEY `idx_persons_merged_into` (`persons_merged_into`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `persons_aliases`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `persons_aliases` (
@@ -314,7 +295,6 @@ CREATE TABLE `persons_aliases` (
   KEY `idx_composer_aliases_composer` (`person_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=39778 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `persons_authority`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `persons_authority` (
@@ -334,7 +314,6 @@ CREATE TABLE `persons_authority` (
   CONSTRAINT `fk_persons_authority_person` FOREIGN KEY (`persons_id`) REFERENCES `persons` (`persons_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=34479 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `persons_authority_name`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `persons_authority_name` (
@@ -350,7 +329,6 @@ CREATE TABLE `persons_authority_name` (
   CONSTRAINT `fk_persons_authority_name_authority` FOREIGN KEY (`authority_id`) REFERENCES `persons_authority` (`authority_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=30149 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `persons_evidence`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `persons_evidence` (
@@ -370,7 +348,6 @@ CREATE TABLE `persons_evidence` (
   CONSTRAINT `fk_persons_evidence_person` FOREIGN KEY (`persons_id`) REFERENCES `persons` (`persons_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=2937 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `persons_identifiers`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `persons_identifiers` (
@@ -389,7 +366,6 @@ CREATE TABLE `persons_identifiers` (
   CONSTRAINT `fk_persons_identifiers_person` FOREIGN KEY (`persons_id`) REFERENCES `persons` (`persons_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=11961 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `persons_merge_history`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `persons_merge_history` (
@@ -404,7 +380,6 @@ CREATE TABLE `persons_merge_history` (
   KEY `idx_persons_merge_target` (`target_person_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `roles`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `roles` (
@@ -414,7 +389,6 @@ CREATE TABLE `roles` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `roles_categoria`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `roles_categoria` (
@@ -426,7 +400,6 @@ CREATE TABLE `roles_categoria` (
   CONSTRAINT `fk_roles_categoria_role` FOREIGN KEY (`roles_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `schema_migrations`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `schema_migrations` (
@@ -435,9 +408,8 @@ CREATE TABLE `schema_migrations` (
   `applied_at` datetime(6) NOT NULL DEFAULT current_timestamp(6),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_schema_migrations_name` (`name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `statistics`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `statistics` (
@@ -453,9 +425,8 @@ CREATE TABLE `statistics` (
   `created_at` datetime(6) NOT NULL DEFAULT current_timestamp(6),
   `updated_at` datetime(6) NOT NULL DEFAULT current_timestamp(6) ON UPDATE current_timestamp(6),
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `statistics_runs`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `statistics_runs` (
@@ -465,9 +436,8 @@ CREATE TABLE `statistics_runs` (
   `works_updated` int(11) NOT NULL DEFAULT 0,
   `composers_updated` int(11) NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=72 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=73 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `storage_locations`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `storage_locations` (
@@ -485,7 +455,6 @@ CREATE TABLE `storage_locations` (
   CONSTRAINT `fk_storage_locations_provider` FOREIGN KEY (`provider_id`) REFERENCES `storage_providers` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=254658 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `storage_providers`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `storage_providers` (
@@ -498,9 +467,8 @@ CREATE TABLE `storage_providers` (
   `updated_at` datetime(6) NOT NULL DEFAULT current_timestamp(6) ON UPDATE current_timestamp(6),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_storage_providers_name` (`name`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `tag_work`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `tag_work` (
@@ -512,7 +480,6 @@ CREATE TABLE `tag_work` (
   UNIQUE KEY `uq_tag_work_texto` (`tag_texto`)
 ) ENGINE=InnoDB AUTO_INCREMENT=32768 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `voices`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `voices` (
@@ -523,7 +490,6 @@ CREATE TABLE `voices` (
   UNIQUE KEY `uq_voices_name` (`voices_name`)
 ) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `votes`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `votes` (
@@ -540,7 +506,6 @@ CREATE TABLE `votes` (
   CONSTRAINT `chk_votes_range` CHECK (`vote` between 1 and 5)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `work_ensembles`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `work_ensembles` (
@@ -553,7 +518,6 @@ CREATE TABLE `work_ensembles` (
   CONSTRAINT `fk_work_ensembles_work` FOREIGN KEY (`works_id`) REFERENCES `works` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `work_genres`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `work_genres` (
@@ -566,7 +530,6 @@ CREATE TABLE `work_genres` (
   CONSTRAINT `fk_work_genres_work` FOREIGN KEY (`works_id`) REFERENCES `works` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `work_instruments`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `work_instruments` (
@@ -580,7 +543,6 @@ CREATE TABLE `work_instruments` (
   CONSTRAINT `fk_work_instruments_work` FOREIGN KEY (`works_id`) REFERENCES `works` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `work_language`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `work_language` (
@@ -593,7 +555,6 @@ CREATE TABLE `work_language` (
   CONSTRAINT `fk_work_language_work` FOREIGN KEY (`works_id`) REFERENCES `works` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `work_parts`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `work_parts` (
@@ -606,7 +567,6 @@ CREATE TABLE `work_parts` (
   CONSTRAINT `fk_work_parts_work` FOREIGN KEY (`works_id`) REFERENCES `works` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=458746 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `work_statistics`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `work_statistics` (
@@ -621,7 +581,6 @@ CREATE TABLE `work_statistics` (
   CONSTRAINT `fk_work_statistics_work` FOREIGN KEY (`works_id`) REFERENCES `works` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `work_tag`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `work_tag` (
@@ -634,7 +593,6 @@ CREATE TABLE `work_tag` (
   CONSTRAINT `fk_work_tag_work` FOREIGN KEY (`works_id`) REFERENCES `works` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `work_voices`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `work_voices` (
@@ -648,7 +606,6 @@ CREATE TABLE `work_voices` (
   CONSTRAINT `fk_work_voices_work` FOREIGN KEY (`works_id`) REFERENCES `works` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `works`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `works` (
@@ -690,7 +647,6 @@ CREATE TABLE `works` (
   CONSTRAINT `fk_works_obra_iden` FOREIGN KEY (`works_obra_iden`) REFERENCES `works` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=366876 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `works_person_import`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `works_person_import` (
@@ -708,7 +664,6 @@ CREATE TABLE `works_person_import` (
   CONSTRAINT `fk_wpi_work` FOREIGN KEY (`works_id`) REFERENCES `works` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=506019 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `works_person_roles`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `works_person_roles` (
