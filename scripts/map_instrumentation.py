@@ -108,9 +108,9 @@ def split_qty(text: str) -> tuple[str, int]:
     return m.group("name").strip(), int(m.group("qty"))
 
 
-async def run(db_name: str, dry_run: bool) -> None:
+async def run(db_name: str, dry_run: bool, source_db: str = "osap-storage_v1") -> None:
     base = Settings()  # type: ignore[call-arg]
-    src = Database(base)
+    src = Database(base.model_copy(update={"db_name": source_db}))
     tgt = Database(base.model_copy(update={"db_name": db_name}))
     await src.connect()
     await tgt.connect()
@@ -319,9 +319,10 @@ async def run(db_name: str, dry_run: bool) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--db", default="osap-storage")
+    ap.add_argument("--source-db", default="osap-storage_v1", help="BBDD con los textos enriquecidos (work_instruments)")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
-    asyncio.run(run(args.db, args.dry_run))
+    asyncio.run(run(args.db, args.dry_run, args.source_db))
 
 
 if __name__ == "__main__":
