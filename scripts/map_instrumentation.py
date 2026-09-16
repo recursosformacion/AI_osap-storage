@@ -89,9 +89,7 @@ VOICE_ALIASES = {
     "vocals (other)": "Voice",
 }
 
-GROUP_PATTERNS = re.compile(
-    r"group|section|\(other\)|choir|ensemble", re.I
-)
+GROUP_PATTERNS = re.compile(r"group|section|\(other\)|choir|ensemble", re.I)
 _LETTER_VOICE = {"s": "Soprano", "a": "Contralto", "t": "Tenor", "b": "Bass"}
 
 
@@ -259,12 +257,23 @@ async def run(db_name: str, dry_run: bool, source_db: str = "osap-storage_v1") -
             cpdl_wv.append((wid, vid, q, ctx))
 
     if dry_run:
-        print(json.dumps({
-            "work_instruments": len(wi), "work_voices": len(wv), "work_ensembles": len(we),
-            "cpdl work_instruments": len(cpdl_wi), "cpdl work_voices": len(cpdl_wv),
-            "cpdl work_ensembles": len(cpdl_we), "cpdl ensembles nuevos": len(new_ens),
-            "no mapeados origen": len(unmatched_src), "no mapeados cpdl": len(unmatched_cpdl),
-        }, ensure_ascii=False, indent=1))
+        print(
+            json.dumps(
+                {
+                    "work_instruments": len(wi),
+                    "work_voices": len(wv),
+                    "work_ensembles": len(we),
+                    "cpdl work_instruments": len(cpdl_wi),
+                    "cpdl work_voices": len(cpdl_wv),
+                    "cpdl work_ensembles": len(cpdl_we),
+                    "cpdl ensembles nuevos": len(new_ens),
+                    "no mapeados origen": len(unmatched_src),
+                    "no mapeados cpdl": len(unmatched_cpdl),
+                },
+                ensure_ascii=False,
+                indent=1,
+            )
+        )
         for title, d in (("ORIGEN", unmatched_src), ("CPDL", unmatched_cpdl)):
             print(f"top no mapeados {title}:")
             for k, v in sorted(d.items(), key=lambda x: -x[1])[:100]:
@@ -293,25 +302,35 @@ async def run(db_name: str, dry_run: bool, source_db: str = "osap-storage_v1") -
         if wi or cpdl_wi:
             await cur.executemany(
                 "INSERT IGNORE INTO work_instruments (works_id, instruments_id, "
-                "work_instruments_quantity) VALUES (%s,%s,%s)", wi + cpdl_wi)
+                "work_instruments_quantity) VALUES (%s,%s,%s)",
+                wi + cpdl_wi,
+            )
         if wv or cpdl_wv:
             await cur.executemany(
                 "INSERT IGNORE INTO work_voices (works_id, voices_id, work_voices_quantity, "
-                "work_voices_context) VALUES (%s,%s,%s,%s)", wv + cpdl_wv)
+                "work_voices_context) VALUES (%s,%s,%s,%s)",
+                wv + cpdl_wv,
+            )
         if we or cpdl_we:
             await cur.executemany(
-                "INSERT IGNORE INTO work_ensembles (works_id, ensembles_id, "
-                "work_ensembles_quantity) VALUES (%s,%s,%s)", we + cpdl_we)
+                "INSERT IGNORE INTO work_ensembles (works_id, ensembles_id, work_ensembles_quantity) VALUES (%s,%s,%s)",
+                we + cpdl_we,
+            )
 
     await src.close()
     await tgt.close()
-    print(json.dumps({
-        "work_instruments": len(wi) + len(cpdl_wi),
-        "work_voices": len(wv) + len(cpdl_wv),
-        "work_ensembles": len(we) + len(cpdl_we),
-        "no mapeados origen": len(unmatched_src),
-        "no mapeados cpdl": len(unmatched_cpdl),
-    }, ensure_ascii=False))
+    print(
+        json.dumps(
+            {
+                "work_instruments": len(wi) + len(cpdl_wi),
+                "work_voices": len(wv) + len(cpdl_wv),
+                "work_ensembles": len(we) + len(cpdl_we),
+                "no mapeados origen": len(unmatched_src),
+                "no mapeados cpdl": len(unmatched_cpdl),
+            },
+            ensure_ascii=False,
+        )
+    )
     for k, v in sorted(unmatched_src.items(), key=lambda x: -x[1])[:30]:
         print(f"  ORIGEN sin mapear {v:>6}  {k}")
 
@@ -319,7 +338,9 @@ async def run(db_name: str, dry_run: bool, source_db: str = "osap-storage_v1") -
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--db", default="osap-storage")
-    ap.add_argument("--source-db", default="osap-storage_v1", help="BBDD con los textos enriquecidos (work_instruments)")
+    ap.add_argument(
+        "--source-db", default="osap-storage_v1", help="BBDD con los textos enriquecidos (work_instruments)"
+    )
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     asyncio.run(run(args.db, args.dry_run, args.source_db))
