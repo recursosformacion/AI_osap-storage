@@ -12,6 +12,7 @@ import {
   type TableSchema,
 } from '../api'
 import { metaOf } from '../tables'
+import WorkRelations from './WorkRelations'
 
 interface Props {
   mode?: 'new'
@@ -241,6 +242,10 @@ export default function RowForm({ mode }: Props) {
             </div>
           )}
         </form>
+      )}
+
+      {!loading && !isNew && table === 'works' && (
+        <WorkRelations workId={String(pk)} editing={editing} />
       )}
     </section>
   )

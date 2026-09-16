@@ -99,6 +99,11 @@ RELATIONS: dict[str, dict[str, Any]] = {
 }
 
 OPTIONS_SQL: dict[str, str] = {
+    "persons": (
+        "SELECT persons_id AS value, persons_name AS label FROM persons "
+        "WHERE persons_visible = 1 ORDER BY persons_name"
+    ),
+    "roles": "SELECT id AS value, role_name AS label FROM roles ORDER BY id",
     "person_roles": (
         "SELECT p.persons_id AS value, p.persons_name AS label, "
         "ro.id AS role_id, ro.role_name AS role_name "
@@ -131,12 +136,16 @@ def _relation(name: str) -> dict[str, Any]:
 
 @router.get("/options/{relation}", summary="Opciones del desplegable de una relación")
 async def relation_options(relation: str, q: str | None = None, db: Database = Depends(get_db)):
-    _relation(relation)  # valida el nombre
+    if relation not in OPTIONS_SQL:
+        raise HTTPException(status_code=404, detail=f"opciones desconocidas: {relation}")
     sql = OPTIONS_SQL[relation]
     params: list[Any] = []
     if q and q.strip():
-        if relation == "person_roles":
+        if relation in ("person_roles", "persons"):
             sql = sql.replace("WHERE p.persons_visible = 1", "WHERE p.persons_visible = 1 AND p.persons_name LIKE %s")
+            params.append(f"%{q.strip()}%")
+        elif relation == "roles":
+            sql = sql.replace("ORDER BY id", "WHERE role_name LIKE %s ORDER BY id")
             params.append(f"%{q.strip()}%")
         else:
             sql = sql.replace("ORDER BY", "WHERE label LIKE %s ORDER BY")
