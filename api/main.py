@@ -65,7 +65,11 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         await container.db.connect()
-        await migrate(container.db)
+        # Migraciones SOLO si se piden explícitamente. En pre-producción el esquema se
+        # gestiona a mano; aplicar migraciones al arrancar puede recrear tablas y vaciar
+        # la BBDD (pasó con un baseline que llevaba DROP TABLE).
+        if os.environ.get("OSAP_RUN_MIGRATIONS") == "1":
+            await migrate(container.db)
         await ensure_default_provider(container.provider_repo, container.registry, settings)
         # Recálculo de estadísticas de votación en cada arranque (idempotente). En producción
         # también lo ejecuta el cron diario; en desarrollo basta con lanzarlo aquí.
