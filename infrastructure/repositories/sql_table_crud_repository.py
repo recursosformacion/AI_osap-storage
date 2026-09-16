@@ -122,7 +122,7 @@ class SqlTableCrudRepository(TableCrudRepository):
             await cur.execute(
                 "SELECT column_name FROM information_schema.columns "
                 "WHERE table_schema = DATABASE() AND table_name = %s "
-                "AND data_type IN ('varchar','char','text','mediumtext','longtext') "
+                "AND data_type IN ('varchar','char') "
                 "ORDER BY ordinal_position",
                 (table,),
             )
