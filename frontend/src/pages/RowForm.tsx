@@ -162,7 +162,10 @@ export default function RowForm({ mode }: Props) {
             <button
               type="button"
               className="btn btn--primary"
-              onClick={() => setSearchParams({ mode: 'edit' })}
+              onClick={() => {
+                setSearchParams({ mode: 'edit' })
+                setEditing(true)
+              }}
             >
               Editar
             </button>
