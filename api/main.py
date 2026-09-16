@@ -22,6 +22,7 @@ from api.routes import (
     admin_composers,
     admin_epochs,
     admin_tables,
+    admin_work_relations,
     admin_works,
     archives,
     catalogues,
@@ -128,6 +129,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_composers.router)
     app.include_router(admin_works.router)
     app.include_router(admin_tables.router)
+    app.include_router(admin_work_relations.router)
     app.include_router(voting.router)
     app.include_router(catalogues.router)
     app.include_router(composers.router)

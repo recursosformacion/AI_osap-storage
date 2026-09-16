@@ -60,8 +60,8 @@ function Stop-Service($svc) {
 function Test-Venv($dir) {
     $cfg = Join-Path $dir ".venv\pyvenv.cfg"
     if (-not (Test-Path $cfg)) { return $false }
-    $home = (Select-String -Path $cfg -Pattern '^home\s*=\s*(.+)$').Matches.Groups[1].Value.Trim()
-    return (Test-Path (Join-Path $home "python.exe"))
+    $venvHome = (Select-String -Path $cfg -Pattern '^home\s*=\s*(.+)$').Matches.Groups[1].Value.Trim()
+    return (Test-Path (Join-Path $venvHome "python.exe"))
 }
 
 function Start-Service($svc) {
