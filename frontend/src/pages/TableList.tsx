@@ -96,15 +96,23 @@ export default function TableList() {
           </p>
         </div>
         <div className="page-head__actions">
-          <label className="field field--inline">
+          <form
+            className="field field--inline"
+            role="search"
+            onSubmit={(e) => {
+              e.preventDefault()
+              setDebounced(query.trim())
+              setOffset(0)
+            }}
+          >
             <span>Buscar (toda la tabla)</span>
             <input
               type="search"
               value={query}
-              placeholder="texto…"
+              placeholder="texto… (Enter para buscar)"
               onChange={(e) => setQuery(e.target.value)}
             />
-          </label>
+          </form>
           <Link className="btn btn--primary" to={`/t/${encodeURIComponent(table)}/new`}>
             Nueva fila
           </Link>
