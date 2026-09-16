@@ -84,6 +84,11 @@ _COMPOSED_BY = re.compile(
 _ARR_FROM = re.compile(
     r"^(?:arr(?:anged|angement)?|arm)\.?\s+from\s+(.+?)\s+by\s+(.+?)(?:\s+\d{4})?\s*$", re.I
 )
+_ARR_INLINE = re.compile(
+    r"^(.*?)\s+arr(?:anged)?\.?\s*(?:by)?\s*[:.]?\s*(.+)$", re.I
+)
+_ARR_PAREN = re.compile(r"\(\s*arr(?:anged)?\.?\s*(?:by)?\s*[:.]?\s*([^)]+)\)", re.I)
+_SPLIT_NAMES = re.compile(r"\s*(?:,|\band\b|&|\by\b|\bi\b|\be\b)\s*", re.I)
 _LYRICS_BY = re.compile(r"(?:lyrics?|words|text)\s+by\s+(.+)$", re.I)
 _ORCH = re.compile(r"^(?:orchestrated|orchestration)\s+by\s+(.+)$", re.I)
 _TRANSCRIBED = re.compile(
@@ -134,50 +139,75 @@ def extract(text: str) -> tuple[list[tuple[int, str]], bool]:
     if _BARE_ROLE.match(raw):
         return [], False
     found: list[tuple[int, str]] = []
+    # Arreglista entre paréntesis: "X (arr. Y)".
+    paren = _ARR_PAREN.search(raw)
+    if paren:
+        for piece in _SPLIT_NAMES.split(paren.group(1)):
+            if piece.strip():
+                found.append((ROLE_ARRANGER, _clean_name(piece)))
+        raw = _ARR_PAREN.sub("", raw).strip()
+    # Arreglista inline sin "by": "Ludwig van Beethoven Arr. Donovan DiIorio".
+    inline = _ARR_INLINE.match(raw) if raw else None
+    if inline and not _ARR_FROM.match(raw):
+        for piece in _SPLIT_NAMES.split(_clean_name(inline.group(1))):
+            if piece.strip():
+                found.append((ROLE_COMPOSER, _clean_name(piece)))
+        for piece in _SPLIT_NAMES.split(inline.group(2)):
+            if piece.strip():
+                found.append((ROLE_ARRANGER, _clean_name(piece)))
+        raw = ""
     # "Arr from <compositor> by <arreglista> [año]": dos roles distintos.
-    arr_from = _ARR_FROM.search(raw)
+    arr_from = _ARR_FROM.search(raw) if raw else None
     if arr_from:
         found.append((ROLE_COMPOSER, _clean_name(arr_from.group(1))))
         found.append((ROLE_ARRANGER, _clean_name(arr_from.group(2))))
-    composer = _MUSIC_BY.search(raw)
+    composer = _MUSIC_BY.search(raw) if raw else None
     if composer:
-        for piece in re.split(r"\s*(?:,| and | & )\s*", composer.group(1)):
+        for piece in _SPLIT_NAMES.split(composer.group(1)):
             if piece.strip():
                 found.append((ROLE_COMPOSER, _clean_name(piece)))
-    lyrics = _LYRICS_BY.search(raw)
+    lyrics = _LYRICS_BY.search(raw) if raw else None
     if lyrics:
-        for piece in re.split(r"\s*(?:,| and | & )\s*", lyrics.group(1)):
+        for piece in _SPLIT_NAMES.split(lyrics.group(1)):
             if piece.strip():
                 found.append((ROLE_LYRICS, _clean_name(piece)))
-    arr = None if arr_from else _ARR.search(raw)
+    arr = None if (arr_from or not raw) else _ARR.search(raw)
     if arr:
-        for piece in re.split(r"\s*(?:,| and | & )\s*", arr.group(1)):
+        for piece in _SPLIT_NAMES.split(arr.group(1)):
             if piece.strip():
                 found.append((ROLE_ARRANGER, _clean_name(piece)))
-    orch = _ORCH.search(raw)
+    orch = _ORCH.search(raw) if raw else None
     if orch:
         found.append((4, _clean_name(orch.group(1))))
-    trans = _TRANSCRIBED.search(raw)
+    trans = _TRANSCRIBED.search(raw) if raw else None
     if trans:
         found.append((5, _clean_name(trans.group(1))))
-    edited = _EDITED.search(raw)
+    edited = _EDITED.search(raw) if raw else None
     if edited:
         found.append((6, _clean_name(edited.group(1))))
-    composed = _COMPOSED_BY.search(raw)
+    composed = _COMPOSED_BY.search(raw) if raw else None
     if composed:
-        for piece in re.split(r"\s*(?:,| and | & )\s*", composed.group(1)):
+        for piece in _SPLIT_NAMES.split(composed.group(1)):
             if piece.strip():
                 found.append((ROLE_COMPOSER, _clean_name(piece)))
-    tagged = _COMPOSER_TAG.match(raw)
+    tagged = _COMPOSER_TAG.match(raw) if raw else None
     if tagged:
         found.append((ROLE_COMPOSER, _clean_name(tagged.group(1))))
-    if not found and "'s " in raw:
+    has_composer = any(role == ROLE_COMPOSER for role, _ in found)
+    if not has_composer and raw and "'s " in raw:
         # "Joe Buchanan's Scottish Tome" → compositor "Joe Buchanan".
         found.append((ROLE_COMPOSER, _clean_name(raw.split("'s ", 1)[0])))
-    if not found:
+    if not has_composer and raw:
         by = _BY.match(raw)
         if by:
             found.append((ROLE_COMPOSER, _clean_name(by.group(2))))
+    if not any(role == ROLE_COMPOSER for role, _ in found) and raw:
+        # Sin compositor explícito: el texto puede ser una lista de nombres
+        # ("Loïc Nottet i Beverly Jo Scott") o un nombre suelto tras "Composer:".
+        # Se proponen como compositores y el llamante aplica el control de reconocido.
+        for piece in _SPLIT_NAMES.split(_clean_name(raw)):
+            if piece.strip():
+                found.append((ROLE_COMPOSER, _clean_name(piece)))
     # Deduplica conservando orden y descartando nombres vacíos/cortos.
     out: list[tuple[int, str]] = []
     seen: set[tuple[int, str]] = set()
