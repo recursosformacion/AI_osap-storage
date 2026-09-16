@@ -161,3 +161,20 @@ Son las obras que quedan sin relación de compositor (PDMX con texto `NA`/no-per
 - **Fase 5-6**: CLI/scripts y migraciones.
 - **Fase 7**: un CRUD completo por tabla.
 - **Fase 8**: validación (ya hay 8 tests de integración en verde).
+
+---
+
+## 7. Pendientes anotados (2026-09-16)
+
+1. **`works_instrumentation` → `work_instruments`**: `works.works_instrumentation` guarda el
+   texto/JSON crudo de instrumentación de CPDL (56.420 filas) y **se mantiene**. Falta un
+   proceso que lo **normalice a `work_instruments`** (mapeando términos con `instruments`),
+   como ya se hace con el enriquecimiento PDMX (`map_instrumentation.py`).
+2. **SHA-256 / `works_music_digest`**: `files.sha256` está vacío en toda la BBDD (también en
+   `osap-storage_v1`); el hash nunca se calculó en este entorno (lo produce
+   `scripts/analyze_works_content.py` sobre los `.mxl`). `works_music_digest` (clave de
+   duplicados creada en la conversión) está a 0. Decisión: **calcular sha256 primero** y,
+   cuando exista, **eliminar `works_music_digest`** (no aporta nada frente al sha256).
+3. **`work_person_roles_attribution_type`**: eliminada (estaba vacía, 0/212.999).
+4. **Mantenimiento**: falta el **formulario de `works` con los 6 paneles de relaciones**
+   (persona+rol, ensembles, genres, instruments, language, voices). Backend ya hecho.

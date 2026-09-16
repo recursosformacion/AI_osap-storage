@@ -672,7 +672,6 @@ CREATE TABLE `works_person_roles` (
   `works_person_roles_person_id` char(36) NOT NULL,
   `works_person_roles_role_id` int(11) NOT NULL,
   `works_person_roles_order` int(11) NOT NULL DEFAULT 0,
-  `works_person_roles_attribution_type` varchar(64) DEFAULT NULL COMMENT 'ANONIMA, TRADICIONAL, POPULAR, ATRIBUIDA',
   PRIMARY KEY (`works_person_roles_id`),
   UNIQUE KEY `uq_works_person_roles` (`works_person_roles_work_id`,`works_person_roles_person_id`,`works_person_roles_role_id`),
   KEY `idx_wpr_work` (`works_person_roles_work_id`),
