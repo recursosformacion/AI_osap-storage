@@ -34,10 +34,15 @@ async def read_rows(
     table: str,
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    q: str | None = Query(None, description="Búsqueda (LIKE) en las columnas de texto"),
     uc: TableCrud = Depends(TableCrudDep),
 ) -> TableCrudRows:
-    rows = await uc.read(table, limit=limit, offset=offset)
-    total = await uc.count(table)
+    if q and q.strip():
+        rows = await uc.search(table, q.strip(), limit=limit, offset=offset)
+        total = await uc.count_search(table, q.strip())
+    else:
+        rows = await uc.read(table, limit=limit, offset=offset)
+        total = await uc.count(table)
     return TableCrudRows(table=table, total=total, rows=rows)
 
 

@@ -84,8 +84,14 @@ export function getSchema(table: string): Promise<TableSchema> {
   return request<TableSchema>(`/${encodeURIComponent(table)}/schema`)
 }
 
-export function getRows(table: string, limit: number, offset: number): Promise<RowsResponse> {
+export function getRows(
+  table: string,
+  limit: number,
+  offset: number,
+  q?: string,
+): Promise<RowsResponse> {
   const query = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  if (q) query.set('q', q)
   return request<RowsResponse>(`/${encodeURIComponent(table)}?${query.toString()}`)
 }
 

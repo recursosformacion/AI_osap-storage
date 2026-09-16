@@ -117,6 +117,45 @@ class SqlTableCrudRepository(TableCrudRepository):
             await cur.execute(f"SELECT COUNT(*) AS total FROM `{table}`")
             return int((await cur.fetchone())["total"])
 
+    async def _text_columns(self, table: str) -> list[str]:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = DATABASE() AND table_name = %s "
+                "AND data_type IN ('varchar','char','text','mediumtext','longtext') "
+                "ORDER BY ordinal_position",
+                (table,),
+            )
+            return [r["column_name"] for r in await cur.fetchall()]
+
+    async def _search_where(self, table: str, q: str) -> tuple[str, list]:
+        cols = await self._text_columns(table)
+        if not cols:
+            return "", []
+        clause = " OR ".join(f"`{c}` LIKE %s" for c in cols)
+        return f"({clause})", [f"%{q}%"] * len(cols)
+
+    async def search(self, table: str, q: str, *, limit: int, offset: int) -> list[dict]:
+        self._require_table(table)
+        where, params = await self._search_where(table, q)
+        if not where:
+            return []
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                f"SELECT * FROM `{table}` WHERE {where} LIMIT %s OFFSET %s",
+                [*params, limit, offset],
+            )
+            return [dict(r) for r in await cur.fetchall()]
+
+    async def count_search(self, table: str, q: str) -> int:
+        self._require_table(table)
+        where, params = await self._search_where(table, q)
+        if not where:
+            return 0
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(f"SELECT COUNT(*) AS total FROM `{table}` WHERE {where}", params)
+            return int((await cur.fetchone())["total"])
+
     async def read_one(self, table: str, pk_value: object) -> dict | None:
         pk = await self.pk_column(table)
         async with self._db.connection() as conn, conn.cursor() as cur:

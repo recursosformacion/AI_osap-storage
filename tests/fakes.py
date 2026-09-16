@@ -999,6 +999,14 @@ class InMemoryTableCrudRepository(TableCrudRepository):
     async def count(self, table: str) -> int:
         return len(self._data.get(table, {}))
 
+    async def search(self, table: str, q: str, *, limit: int, offset: int) -> list[dict]:
+        needle = q.lower()
+        rows = [r for r in self._data.get(table, {}).values() if any(needle in str(v).lower() for v in r.values())]
+        return rows[offset:offset + limit]
+
+    async def count_search(self, table: str, q: str) -> int:
+        return len(await self.search(table, q, limit=10**9, offset=0))
+
     async def read_one(self, table: str, pk_value: object) -> dict | None:
         await self.pk_column(table)
         row = self._data.get(table, {}).get(pk_value)

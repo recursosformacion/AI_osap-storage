@@ -26,6 +26,12 @@ class TableCrud:
     async def count(self, table: str) -> int:
         return await self._repo.count(table)
 
+    async def search(self, table: str, q: str, *, limit: int, offset: int) -> list[dict]:
+        return await self._repo.search(table, q, limit=limit, offset=offset)
+
+    async def count_search(self, table: str, q: str) -> int:
+        return await self._repo.count_search(table, q)
+
     async def read_one(self, table: str, pk_value: object) -> dict | None:
         return await self._repo.read_one(table, pk_value)
 

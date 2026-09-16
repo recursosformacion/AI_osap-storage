@@ -29,7 +29,8 @@ export default function TableList() {
   const [total, setTotal] = useState(0)
   const [limit, setLimit] = useState(50)
   const [offset, setOffset] = useState(0)
-  const [filter, setFilter] = useState('')
+  const [query, setQuery] = useState('')
+  const [debounced, setDebounced] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [pendingDelete, setPendingDelete] = useState<{ pk: string; row: Row } | null>(null)
@@ -47,7 +48,7 @@ export default function TableList() {
     try {
       const [schemaResponse, rowsResponse] = await Promise.all([
         getSchema(table),
-        getRows(table, limit, offset),
+        getRows(table, limit, offset, debounced || undefined),
       ])
       setSchema(schemaResponse)
       setRows(rowsResponse.rows)
@@ -57,19 +58,13 @@ export default function TableList() {
     } finally {
       setLoading(false)
     }
-  }, [table, limit, offset])
+  }, [table, limit, offset, debounced])
 
   useEffect(() => {
     void load()
   }, [load])
 
-  const visibleRows = useMemo(() => {
-    const needle = filter.trim().toLowerCase()
-    if (!needle) return rows
-    return rows.filter((row) =>
-      columns.some((c) => String(row[c] ?? '').toLowerCase().includes(needle)),
-    )
-  }, [rows, columns, filter])
+  const visibleRows = useMemo(() => rows, [rows])
 
   const pageEnd = Math.min(offset + rows.length, total)
 
@@ -102,12 +97,12 @@ export default function TableList() {
         </div>
         <div className="page-head__actions">
           <label className="field field--inline">
-            <span>Filtrar en la página</span>
+            <span>Buscar (toda la tabla)</span>
             <input
               type="search"
-              value={filter}
+              value={query}
               placeholder="texto…"
-              onChange={(e) => setFilter(e.target.value)}
+              onChange={(e) => setQuery(e.target.value)}
             />
           </label>
           <Link className="btn btn--primary" to={`/t/${encodeURIComponent(table)}/new`}>
@@ -143,7 +138,7 @@ export default function TableList() {
             {!loading && visibleRows.length === 0 && (
               <tr>
                 <td colSpan={columns.length + 1} className="grid__state">
-                  {filter ? 'Ninguna fila coincide con el filtro.' : 'No hay filas.'}
+                  {query ? `Ninguna fila coincide con «${query}».` : 'No hay filas.'}
                 </td>
               </tr>
             )}

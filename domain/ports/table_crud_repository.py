@@ -30,6 +30,12 @@ class TableCrudRepository(Protocol):
     async def count(self, table: str) -> int:
         """Nº total de filas de la tabla (para la paginación)."""
 
+    async def search(self, table: str, q: str, *, limit: int, offset: int) -> list[dict]:
+        """Busca `q` (LIKE) en las columnas de texto de la tabla."""
+
+    async def count_search(self, table: str, q: str) -> int:
+        """Nº de filas que casan con la búsqueda."""
+
     async def read_one(self, table: str, pk_value: object) -> dict | None: ...
 
     async def create(self, table: str, data: dict) -> dict:

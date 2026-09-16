@@ -82,7 +82,10 @@ function Start-Service($svc) {
     }
     New-Item -ItemType Directory -Force -Path $logs | Out-Null
     Write-Host "   -> arrancando $($svc.Name) en :$($svc.Port)" -ForegroundColor Cyan
+    $stdin = Join-Path $logs "_stdin.empty"
+    if (-not (Test-Path $stdin)) { New-Item -ItemType File -Path $stdin -Force | Out-Null }
     Start-Process -FilePath $py -ArgumentList $svc.Args -WorkingDirectory $svc.Dir -WindowStyle Hidden `
+        -RedirectStandardInput  $stdin `
         -RedirectStandardOutput (Join-Path $logs "$($svc.Name).out.log") `
         -RedirectStandardError  (Join-Path $logs "$($svc.Name).err.log")
 

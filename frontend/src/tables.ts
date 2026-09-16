@@ -76,10 +76,7 @@ export const TABLES: Record<string, TableMeta> = {
   works: {
     label: 'Obras',
     group: 'Obras',
-    columns: [
-      'id', 'works_title', 'works_origin', 'works_origin_id', 'works_catalogue',
-      'works_year', 'works_license',
-    ],
+    columns: ['id', 'works_title', 'works_description'],
   },
   works_person_roles: {
     label: 'Obra ↔ persona ↔ rol',
