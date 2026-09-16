@@ -81,7 +81,10 @@ _COMPOSED_BY = re.compile(
     r"^(?:composed|comp\.)\s*(?:by)?\s*[:.]?\s*(.+?)"
     r"(?:\s*(?:,|;)?\s*(?:arr(?:anged|\.)?|transcribed|orchestrated|edited)\b.*|$)", re.I
 )
-_LYRICS_BY = re.compile(r"^(?:lyrics?|words|text)\s+by\s+(.+)$", re.I)
+_ARR_FROM = re.compile(
+    r"^(?:arr(?:anged|angement)?|arm)\.?\s+from\s+(.+?)\s+by\s+(.+?)(?:\s+\d{4})?\s*$", re.I
+)
+_LYRICS_BY = re.compile(r"(?:lyrics?|words|text)\s+by\s+(.+)$", re.I)
 _ORCH = re.compile(r"^(?:orchestrated|orchestration)\s+by\s+(.+)$", re.I)
 _TRANSCRIBED = re.compile(
     r"^(?:transcribed|transcription|transcr\.?)\s*(?:by)?\s*[:.]?\s*(.+)$", re.I
@@ -113,6 +116,8 @@ def _clean_name(raw: str) -> str:
     name = re.sub(r"\s+\d{4}\s*$", "", name)
     name = re.sub(r"\s+(?:in\s+)?[A-G](?:\s*(?:major|minor|maj|min))?\s*$", "", name)
     name = re.sub(r"\s*\b(?:satb|ssatb|sattb|ttbb|ssaa|sab|unison)\b\s*$", "", name, flags=re.I)
+    # Posesivo + título de obra: "Joe Buchanan's Scottish Tome" -> "Joe Buchanan".
+    name = re.split(r"'s\s+", name, maxsplit=1)[0]
     name = re.sub(r"\s+", " ", name)
     return name.strip(" ;,.-—–\t")
 
@@ -122,11 +127,18 @@ def extract(text: str) -> tuple[list[tuple[int, str]], bool]:
     raw = clean_raw(text)
     if _ANON.match(raw):
         return [], True
+    # Separa palabras de rol pegadas ("ShaimanLyrics by ...").
+    raw = re.sub(r"(?<=[a-z])(?=(?:Lyrics|Words|Text|Arr|Composed|Music)\b)", " ", raw)
     # Quita el prefijo de rol ("Composer:", "Music:") deja el nombre o la etiqueta.
     raw = _PREFIX.sub("", raw).strip()
     if _BARE_ROLE.match(raw):
         return [], False
     found: list[tuple[int, str]] = []
+    # "Arr from <compositor> by <arreglista> [año]": dos roles distintos.
+    arr_from = _ARR_FROM.search(raw)
+    if arr_from:
+        found.append((ROLE_COMPOSER, _clean_name(arr_from.group(1))))
+        found.append((ROLE_ARRANGER, _clean_name(arr_from.group(2))))
     composer = _MUSIC_BY.search(raw)
     if composer:
         for piece in re.split(r"\s*(?:,| and | & )\s*", composer.group(1)):
@@ -137,7 +149,7 @@ def extract(text: str) -> tuple[list[tuple[int, str]], bool]:
         for piece in re.split(r"\s*(?:,| and | & )\s*", lyrics.group(1)):
             if piece.strip():
                 found.append((ROLE_LYRICS, _clean_name(piece)))
-    arr = _ARR.search(raw)
+    arr = None if arr_from else _ARR.search(raw)
     if arr:
         for piece in re.split(r"\s*(?:,| and | & )\s*", arr.group(1)):
             if piece.strip():
@@ -159,6 +171,9 @@ def extract(text: str) -> tuple[list[tuple[int, str]], bool]:
     tagged = _COMPOSER_TAG.match(raw)
     if tagged:
         found.append((ROLE_COMPOSER, _clean_name(tagged.group(1))))
+    if not found and "'s " in raw:
+        # "Joe Buchanan's Scottish Tome" → compositor "Joe Buchanan".
+        found.append((ROLE_COMPOSER, _clean_name(raw.split("'s ", 1)[0])))
     if not found:
         by = _BY.match(raw)
         if by:
@@ -298,7 +313,7 @@ async def run(db_name: str, roles: list[str], limit: int | None, dry_run: bool) 
     new_persons: list[tuple[str, str, dict | None]] = []
     review: list[dict] = []
     stats = {"filas": len(rows), "anonimos": 0, "enlazadas": 0, "creadas": 0,
-             "verificadas": 0, "sin_reconocer": 0, "sin_patron": 0}
+             "verificadas": 0, "del_origen": 0, "creadas_rol": 0, "sin_reconocer": 0, "sin_patron": 0}
 
     async with httpx.AsyncClient(timeout=12) as client:
         verifier = Verifier(client)
@@ -324,14 +339,28 @@ async def run(db_name: str, roles: list[str], limit: int | None, dry_run: bool) 
                     new_persons.append((pid, str(auth["name"]), auth))
                     by_norm.setdefault(key, set()).add(pid)
                     stats["creadas"] += 1
+                if not pid and role_id != ROLE_COMPOSER:
+                    # Arreglistas/letristas/transcriptores NO pasan el control de
+                    # "reconocido como compositor": el propio texto declara su rol.
+                    pid = str(uuid.uuid4())
+                    new_persons.append((pid, name, None))
+                    by_norm.setdefault(key, set()).add(pid)
+                    stats["creadas_rol"] += 1
                 if not pid and role_id == ROLE_COMPOSER:
-                    # Control de reconocido SOLO para compositores.
-                    hit = await verifier.check(name) or await verifier.musicbrainz(name)
-                    if hit:
+                    # Si el origen ya decía "composer", el nombre extraído vale; si venía
+                    # como "artist", exigimos verificación (control de reconocido).
+                    if str(r["role"]) == "composer":
                         pid = str(uuid.uuid4())
                         new_persons.append((pid, name, None))
                         by_norm.setdefault(key, set()).add(pid)
-                        stats["verificadas"] += 1
+                        stats["del_origen"] += 1
+                    else:
+                        hit = await verifier.check(name) or await verifier.musicbrainz(name)
+                        if hit:
+                            pid = str(uuid.uuid4())
+                            new_persons.append((pid, name, None))
+                            by_norm.setdefault(key, set()).add(pid)
+                            stats["verificadas"] += 1
                 if pid:
                     links.append((int(r["works_id"]), pid, role_id))
                     resolved_ids.append(int(r["id"]))
