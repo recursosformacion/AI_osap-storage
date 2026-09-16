@@ -37,7 +37,8 @@ async def read_rows(
     uc: TableCrud = Depends(TableCrudDep),
 ) -> TableCrudRows:
     rows = await uc.read(table, limit=limit, offset=offset)
-    return TableCrudRows(table=table, total=len(rows), rows=rows)
+    total = await uc.count(table)
+    return TableCrudRows(table=table, total=total, rows=rows)
 
 
 @router.get(

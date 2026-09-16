@@ -27,6 +27,9 @@ class TableCrudRepository(Protocol):
     async def read(self, table: str, *, limit: int, offset: int) -> list[dict]:
         """Lee filas (paginado)."""
 
+    async def count(self, table: str) -> int:
+        """Nº total de filas de la tabla (para la paginación)."""
+
     async def read_one(self, table: str, pk_value: object) -> dict | None: ...
 
     async def create(self, table: str, data: dict) -> dict:

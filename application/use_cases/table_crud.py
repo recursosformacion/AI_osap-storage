@@ -23,6 +23,9 @@ class TableCrud:
     async def read(self, table: str, *, limit: int, offset: int) -> list[dict]:
         return await self._repo.read(table, limit=limit, offset=offset)
 
+    async def count(self, table: str) -> int:
+        return await self._repo.count(table)
+
     async def read_one(self, table: str, pk_value: object) -> dict | None:
         return await self._repo.read_one(table, pk_value)
 

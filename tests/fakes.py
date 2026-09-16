@@ -996,6 +996,9 @@ class InMemoryTableCrudRepository(TableCrudRepository):
         rows = list(self._data.get(table, {}).values())
         return rows[offset : offset + limit]
 
+    async def count(self, table: str) -> int:
+        return len(self._data.get(table, {}))
+
     async def read_one(self, table: str, pk_value: object) -> dict | None:
         await self.pk_column(table)
         row = self._data.get(table, {}).get(pk_value)

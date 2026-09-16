@@ -111,6 +111,12 @@ class SqlTableCrudRepository(TableCrudRepository):
             )
             return [dict(r) for r in await cur.fetchall()]
 
+    async def count(self, table: str) -> int:
+        self._require_table(table)
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(f"SELECT COUNT(*) AS total FROM `{table}`")
+            return int((await cur.fetchone())["total"])
+
     async def read_one(self, table: str, pk_value: object) -> dict | None:
         pk = await self.pk_column(table)
         async with self._db.connection() as conn, conn.cursor() as cur:
