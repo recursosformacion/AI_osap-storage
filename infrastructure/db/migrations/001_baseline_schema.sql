@@ -136,7 +136,7 @@ CREATE TABLE `ensembles` (
   `ensembles_description` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_ensembles_code` (`ensembles_code`)
-) ENGINE=InnoDB AUTO_INCREMENT=393 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=740 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -230,7 +230,7 @@ CREATE TABLE `instruments` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_instrument_code` (`code`),
   KEY `fk_instrument_cat` (`category_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=182 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=268 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -242,7 +242,7 @@ CREATE TABLE `languages` (
   `languages_updated_at` datetime(6) NOT NULL DEFAULT current_timestamp(6) ON UPDATE current_timestamp(6),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_languages_code` (`languages_code`)
-) ENGINE=InnoDB AUTO_INCREMENT=246 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=155 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -293,7 +293,7 @@ CREATE TABLE `persons_aliases` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_composer_alias` (`person_id`,`person_aliases_normalized_alias`(255)),
   KEY `idx_composer_aliases_composer` (`person_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=39778 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=43567 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -327,7 +327,7 @@ CREATE TABLE `persons_authority_name` (
   KEY `idx_persons_authority_name_authority` (`authority_id`),
   KEY `idx_persons_authority_name_normalized` (`persons_authority_name_normalized_name`),
   CONSTRAINT `fk_persons_authority_name_authority` FOREIGN KEY (`authority_id`) REFERENCES `persons_authority` (`authority_id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=30149 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=32768 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -364,7 +364,7 @@ CREATE TABLE `persons_identifiers` (
   KEY `idx_persons_identifiers_person` (`persons_id`),
   KEY `idx_persons_identifiers_type` (`persons_identifiers_type`),
   CONSTRAINT `fk_persons_identifiers_person` FOREIGN KEY (`persons_id`) REFERENCES `persons` (`persons_id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=11961 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=12327 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -425,7 +425,7 @@ CREATE TABLE `statistics` (
   `created_at` datetime(6) NOT NULL DEFAULT current_timestamp(6),
   `updated_at` datetime(6) NOT NULL DEFAULT current_timestamp(6) ON UPDATE current_timestamp(6),
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -436,7 +436,7 @@ CREATE TABLE `statistics_runs` (
   `works_updated` int(11) NOT NULL DEFAULT 0,
   `composers_updated` int(11) NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=73 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=74 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -467,7 +467,7 @@ CREATE TABLE `storage_providers` (
   `updated_at` datetime(6) NOT NULL DEFAULT current_timestamp(6) ON UPDATE current_timestamp(6),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_storage_providers_name` (`name`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -630,7 +630,7 @@ CREATE TABLE `works` (
   `works_public_domain` tinyint(1) NOT NULL DEFAULT 0,
   `works_origin` varchar(255) DEFAULT NULL COMMENT 'proveedor/fuente o email si lo manda usuario',
   `works_origin_id` varchar(255) DEFAULT NULL COMMENT 'id del registro en ese origen',
-  `works_type_file` int(11) DEFAULT NULL COMMENT 'FK futura a tabla de tipos de fichero',
+  `works_type_file` varchar(16) DEFAULT NULL COMMENT 'PDF|MXL|MusicXML|MIDI',
   `works_obra_iden` bigint(20) unsigned DEFAULT NULL COMMENT 'autoreferencia works.id',
   `works_relative_path` varchar(1024) DEFAULT NULL,
   `works_music_digest` char(32) DEFAULT NULL,
@@ -645,7 +645,7 @@ CREATE TABLE `works` (
   KEY `idx_works_obra_iden` (`works_obra_iden`),
   CONSTRAINT `fk_works_epoch` FOREIGN KEY (`works_epoch_id`) REFERENCES `epochs` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_works_obra_iden` FOREIGN KEY (`works_obra_iden`) REFERENCES `works` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=366876 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=310456 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -662,7 +662,7 @@ CREATE TABLE `works_person_import` (
   KEY `idx_wpi_name` (`works_person_import_name`(255)),
   KEY `idx_wpi_role` (`works_person_import_role`),
   CONSTRAINT `fk_wpi_work` FOREIGN KEY (`works_id`) REFERENCES `works` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=506019 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=449615 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -681,7 +681,7 @@ CREATE TABLE `works_person_roles` (
   CONSTRAINT `fk_wpr_person` FOREIGN KEY (`works_person_roles_person_id`) REFERENCES `persons` (`persons_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_wpr_role` FOREIGN KEY (`works_person_roles_role_id`) REFERENCES `roles` (`id`),
   CONSTRAINT `fk_wpr_work` FOREIGN KEY (`works_person_roles_work_id`) REFERENCES `works` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=352108 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=220939 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
