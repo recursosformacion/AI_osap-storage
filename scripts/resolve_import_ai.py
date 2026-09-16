@@ -117,6 +117,11 @@ def _clean_name(raw: str) -> str:
     # Restos pegados sin separador: "JoeArr." / "MatusArranged".
     name = re.split(r"(?<=[a-z])(?:Arr\.|Arranged|Transcribed|Orchestrated|Edited)", name,
                     flags=re.I)[0]
+    # Restos pegados de instrumento/rol al final ("... Pian.", "... Org.").
+    name = re.sub(
+        r"[\s,;:.-]*(?:pian|piano|org|organ|viol|violin|vla|vlc|cello|guit|guitar|fl|cl|"
+        r"ob|tpt|trp|trb|tba|hn|perc|dr|sop|alt|ten|bass|satb)\s*\.?\s*$",
+        "", name, flags=re.I)
     # Años sueltos y tonalidades al final ("... 1848", "... C major", "... in D").
     name = re.sub(r"\s+\d{4}\s*$", "", name)
     name = re.sub(r"\s+(?:in\s+)?[A-G](?:\s*(?:major|minor|maj|min))?\s*$", "", name)
@@ -127,17 +132,17 @@ def _clean_name(raw: str) -> str:
     return name.strip(" ;,.-—–\t")
 
 
-def extract(text: str) -> tuple[list[tuple[int, str]], bool]:
-    """Devuelve ([(role_id, nombre)], es_anonimo)."""
+def extract(text: str) -> tuple[list[tuple[int, str]], str]:
+    """Devuelve ([(role_id, nombre)], estado) con estado: ok | anon | rejected."""
     raw = clean_raw(text)
     if _ANON.match(raw):
-        return [], True
+        return [], "anon"
     # Separa palabras de rol pegadas ("ShaimanLyrics by ...").
     raw = re.sub(r"(?<=[a-z])(?=(?:Lyrics|Words|Text|Arr|Composed|Music)\b)", " ", raw)
     # Quita el prefijo de rol ("Composer:", "Music:") deja el nombre o la etiqueta.
     raw = _PREFIX.sub("", raw).strip()
     if _BARE_ROLE.match(raw):
-        return [], False
+        return [], "rejected"
     found: list[tuple[int, str]] = []
     # Arreglista entre paréntesis: "X (arr. Y)".
     paren = _ARR_PAREN.search(raw)
@@ -213,15 +218,19 @@ def extract(text: str) -> tuple[list[tuple[int, str]], bool]:
     seen: set[tuple[int, str]] = set()
     for role, name in found:
         name = name.strip()
-        if len(name) < 3 or not normalize_composer_name(name):
+        norm = normalize_composer_name(name)
+        if len(name) < 3 or not norm:
             continue
         if _BARE_ROLE.match(name):
             continue
-        key = (role, normalize_composer_name(name))
+        # Nombres de 2-3 letras: se rechazan (no son una persona identificable).
+        if len(norm.replace(" ", "")) < 4:
+            continue
+        key = (role, norm)
         if key not in seen:
             seen.add(key)
             out.append((role, name))
-    return out, False
+    return out, ("ok" if out else "rejected")
 
 
 class Verifier:
@@ -340,22 +349,24 @@ async def run(db_name: str, roles: list[str], limit: int | None, dry_run: bool) 
 
     links: list[tuple[int, str, int]] = []
     resolved_ids: list[int] = []
+    reject_ids: list[int] = []
     new_persons: list[tuple[str, str, dict | None]] = []
     review: list[dict] = []
     stats = {"filas": len(rows), "anonimos": 0, "enlazadas": 0, "creadas": 0,
-             "verificadas": 0, "del_origen": 0, "creadas_rol": 0, "sin_reconocer": 0, "sin_patron": 0}
+             "verificadas": 0, "del_origen": 0, "creadas_rol": 0, "sin_reconocer": 0, "rechazados": 0}
 
     async with httpx.AsyncClient(timeout=12) as client:
         verifier = Verifier(client)
         for r in rows:
             text = str(r["name"])
-            found, is_anon = extract(text)
-            if is_anon:
+            found, status = extract(text)
+            if status == "anon":
                 resolved_ids.append(int(r["id"]))
                 stats["anonimos"] += 1
                 continue
-            if not found:
-                stats["sin_patron"] += 1
+            if status == "rejected" or not found:
+                reject_ids.append(int(r["id"]))
+                stats["rechazados"] += 1
                 continue
             for role_id, name in found:
                 key = normalize_composer_name(name)
@@ -442,8 +453,15 @@ async def run(db_name: str, roles: list[str], limit: int | None, dry_run: bool) 
                 f"WHERE id IN ({ph})",
                 chunk,
             )
+        for i in range(0, len(reject_ids), 1000):
+            chunk = reject_ids[i : i + 1000]
+            ph = ", ".join(["%s"] * len(chunk))
+            await cur.execute(
+                f"UPDATE works_person_import SET works_person_import_resolved = 2 "
+                f"WHERE id IN ({ph})",
+                chunk,
+            )
     await db.close()
-    print(f"personas: {len(new_persons)} | relaciones: {len(links)} | marcadas: {len(resolved_ids)}")
 
 
 def main() -> None:
