@@ -77,7 +77,8 @@ async def run(db_name: str, dry_run: bool) -> None:
     stats = {"filas": len(rows), "sin_match": 0, "alias": 0, "canonico": 0}
     for r in rows:
         raw = str(r["name"]).strip()
-        name = _ARR.split(raw, maxsplit=1)[0].strip()`r`n        name = re.sub(r"^(?:by|from|after)\\s+", "", name, flags=re.I).strip()
+        name = _ARR.split(raw, maxsplit=1)[0].strip()
+        name = re.sub(r"^(?:by|from|after)\s+", "", name, flags=re.I).strip()
         pid = by_key.get(key(name))
         if not pid:
             stats["sin_match"] += 1
