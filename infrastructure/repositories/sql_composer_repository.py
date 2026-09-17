@@ -42,10 +42,10 @@ _ALIAS_COLS = (
     "person_aliases_source AS source, created_at"
 )
 _IDENTIFIER_COLS = (
-    "id, persons_id AS composer_id, persons_identifiers_type AS id_type, "
-    "persons_identifiers_value AS id_value, persons_identifiers_source AS source, "
-    "persons_identifiers_is_identity_anchor AS is_identity_anchor, "
-    "persons_identifiers_strength AS strength, persons_identifiers_channels AS channels"
+    "id, persons_id AS composer_id, identity_type AS id_type, "
+    "identity_value AS id_value, identity_source AS source, "
+    "identity_is_anchor AS is_identity_anchor, "
+    "identity_strength AS strength, identity_channels AS channels"
 )
 _EVIDENCE_COLS = (
     "id, persons_id AS composer_id, persons_evidence_rule AS rule, "
@@ -485,15 +485,15 @@ class SqlComposerRepository(ComposerRepository):
         # `musicbrainz_id` ya no vive en persons: se guarda como identificador.
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "DELETE FROM persons_identifiers WHERE persons_id = %s "
-                "AND persons_identifiers_type = 'musicbrainz'",
+                "DELETE FROM persons_identity WHERE persons_id = %s "
+                "AND identity_type = 'musicbrainz'",
                 (composer_id,),
             )
             if musicbrainz_id:
                 await cur.execute(
-                    "INSERT INTO persons_identifiers "
-                    "(persons_id, persons_identifiers_type, persons_identifiers_value, "
-                    "persons_identifiers_source, persons_identifiers_is_identity_anchor) "
+                    "INSERT INTO persons_identity "
+                    "(persons_id, identity_type, identity_value, "
+                    "identity_source, identity_is_anchor) "
                     "VALUES (%s, 'musicbrainz', %s, 'maestro', 1)",
                     (composer_id, musicbrainz_id),
                 )
@@ -580,8 +580,8 @@ class SqlComposerRepository(ComposerRepository):
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
                 f"SELECT {_COMPOSER_COLS} FROM persons WHERE persons_id IN ("
-                "SELECT persons_id FROM persons_identifiers "
-                "WHERE persons_identifiers_type = %s AND persons_identifiers_value = %s) "
+                "SELECT persons_id FROM persons_identity "
+                "WHERE identity_type = %s AND identity_value = %s) "
                 "ORDER BY persons_id",
                 (id_type, id_value),
             )
@@ -597,24 +597,24 @@ class SqlComposerRepository(ComposerRepository):
         ch = _json.dumps(channels) if channels else None
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT id FROM persons_identifiers WHERE persons_id = %s "
-                "AND persons_identifiers_type = %s AND persons_identifiers_value = %s LIMIT 1",
+                "SELECT id FROM persons_identity WHERE persons_id = %s "
+                "AND identity_type = %s AND identity_value = %s LIMIT 1",
                 (composer_id, id_type, id_value),
             )
             row = await cur.fetchone()
             if row is not None:
                 if is_identity_anchor:
                     await cur.execute(
-                        "UPDATE persons_identifiers SET persons_identifiers_is_identity_anchor = 1 "
+                        "UPDATE persons_identity SET identity_is_anchor = 1 "
                         "WHERE id = %s",
                         (row["id"],),
                     )
                 return
             await cur.execute(
-                "INSERT INTO persons_identifiers "
-                "(persons_id, persons_identifiers_type, persons_identifiers_value, "
-                "persons_identifiers_is_identity_anchor, persons_identifiers_source, "
-                "persons_identifiers_strength, persons_identifiers_channels) "
+                "INSERT INTO persons_identity "
+                "(persons_id, identity_type, identity_value, "
+                "identity_is_anchor, identity_source, "
+                "identity_strength, identity_channels) "
                 "VALUES (%s,%s,%s,%s,%s,%s,%s)",
                 (composer_id, id_type, id_value, 1 if is_identity_anchor else 0,
                  source, strength, ch),
@@ -644,7 +644,7 @@ class SqlComposerRepository(ComposerRepository):
     async def list_identifiers(self, composer_id: str) -> list[ComposerIdentifier]:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                f"SELECT {_IDENTIFIER_COLS} FROM persons_identifiers "
+                f"SELECT {_IDENTIFIER_COLS} FROM persons_identity "
                 "WHERE persons_id = %s ORDER BY id",
                 (composer_id,),
             )
@@ -766,7 +766,7 @@ class SqlComposerRepository(ComposerRepository):
     async def delete_identifier(self, composer_id: str, identifier_id: int) -> None:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "DELETE FROM persons_identifiers WHERE id = %s AND persons_id = %s",
+                "DELETE FROM persons_identity WHERE id = %s AND persons_id = %s",
                 (identifier_id, composer_id),
             )
 
@@ -774,8 +774,8 @@ class SqlComposerRepository(ComposerRepository):
         """Nº de identificadores de persona por fuente (sustituye a authority_identifiers)."""
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT COUNT(*) AS total FROM persons_identifiers "
-                "WHERE persons_identifiers_source = %s",
+                "SELECT COUNT(*) AS total FROM persons_identity "
+                "WHERE identity_source = %s",
                 (source,),
             )
             row = await cur.fetchone()
@@ -877,11 +877,11 @@ class SqlComposerRepository(ComposerRepository):
             )
             works_count = int((await cur.fetchone())["total"])
             await cur.execute(
-                "SELECT id, persons_id AS composer_id, persons_identifiers_type AS id_type, "
-                "persons_identifiers_value AS id_value, persons_identifiers_source AS source, "
-                "persons_identifiers_is_identity_anchor AS is_identity_anchor, "
-                "persons_identifiers_strength AS strength, persons_identifiers_channels AS channels "
-                "FROM persons_identifiers WHERE persons_id = %s ORDER BY id",
+                "SELECT id, persons_id AS composer_id, identity_type AS id_type, "
+                "identity_value AS id_value, identity_source AS source, "
+                "identity_is_anchor AS is_identity_anchor, "
+                "identity_strength AS strength, identity_channels AS channels "
+                "FROM persons_identity WHERE persons_id = %s ORDER BY id",
                 (composer_id,),
             )
             identifiers = [_row_to_identifier(r) for r in await cur.fetchall()]
@@ -1025,14 +1025,14 @@ class SqlComposerRepository(ComposerRepository):
                 )
                 # Copia identificadores al target.
                 await cur.execute(
-                    "INSERT INTO persons_identifiers "
-                    "(persons_id, persons_identifiers_type, persons_identifiers_value, "
-                    " persons_identifiers_is_identity_anchor, persons_identifiers_source, "
-                    " persons_identifiers_strength, persons_identifiers_channels) "
-                    "SELECT %s, persons_identifiers_type, persons_identifiers_value, "
-                    "persons_identifiers_is_identity_anchor, persons_identifiers_source, "
-                    "persons_identifiers_strength, persons_identifiers_channels "
-                    "FROM persons_identifiers src WHERE src.persons_id = %s",
+                    "INSERT INTO persons_identity "
+                    "(persons_id, identity_type, identity_value, "
+                    " identity_is_anchor, identity_source, "
+                    " identity_strength, identity_channels) "
+                    "SELECT %s, identity_type, identity_value, "
+                    "identity_is_anchor, identity_source, "
+                    "identity_strength, identity_channels "
+                    "FROM persons_identity src WHERE src.persons_id = %s",
                     (target_id, sid),
                 )
 

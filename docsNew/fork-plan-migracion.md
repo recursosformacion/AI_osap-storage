@@ -178,3 +178,37 @@ Son las obras que quedan sin relación de compositor (PDMX con texto `NA`/no-per
 3. **`work_person_roles_attribution_type`**: eliminada (estaba vacía, 0/212.999).
 4. **Mantenimiento**: falta el **formulario de `works` con los 6 paneles de relaciones**
    (persona+rol, ensembles, genres, instruments, language, voices). Backend ya hecho.
+
+---
+
+## 8. Fusión de identidad (2026-09-17)
+
+Se unificaron `persons_authority` + `persons_authority_name` + `persons_identifiers` en una
+sola tabla **`persons_identity`** (EAV con `persons_id` opcional):
+
+- `persons_id IS NULL` = **candidato** (persona externa aún no incorporada).
+- Fila **canónica** por persona/candidato: `identity_is_anchor = 1`, `identity_type = ''`.
+- `identity_type` + `identity_value` = identificador (wikidata_qid, viaf, imslp, isni, gnd,
+  discogs, musicbrainz, cluster…), con `identity_source` (authority|wikidata|maestro|cpdl|web).
+- Los nombres de autoridad con persona pasaron a **`persons_aliases`**.
+- **Verdad de nombres**: `persons.persons_name` (canónico) + `persons_aliases` (variantes).
+
+Estado tras la fusión:
+| | |
+|---|---|
+| `persons` | 47.157 |
+| `persons_identity` | 124.206 (canónicas 47.157 = 1 por persona; candidatos 59.619; ids 62.124) |
+| `persons_aliases` | 44.723 |
+
+Consultas de resolución:
+- **nombre → persona/id**: `SELECT persons_id, identity_value FROM persons_identity WHERE identity_name_norm = ?`
+- **persona → ids**: `SELECT identity_type, identity_value FROM persons_identity WHERE persons_id = ?`
+
+Script: `scripts/migrate_identity_fusion.sql`. Backups: `persons_authority_bak`,
+`persons_authority_name_bak`, `persons_identifiers_bak`.
+
+**Pendiente**: los scripts de reconstrucción (`incorporate_from_authority.py`,
+`incorporate_cpdl_composers.py`, `resolve_import_ai.py`, `resolve_composers_web.py`,
+`link_works_person_import.py`, `resolve_persons.py`, `normalize_authority_names.py`) aún
+referencian las tablas antiguas y hay que repuntarlos a `persons_identity` antes del próximo
+reciclado completo.
