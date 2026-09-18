@@ -76,12 +76,12 @@ class EnrichComposersMusicBrainz:
                 existing = await self._composers.get_by_id(resolved[0])
         return existing
 
-    async def _add_aliases(self, composer_id: str, aliases: list[dict]) -> None:
+    async def _add_aliases(self, person_id: str, aliases: list[dict]) -> None:
         for alias in aliases:
             name = (alias.get("name") or "").strip()
             if not name:
                 continue
             try:
-                await self._composers.add_alias(composer_id, name, normalize_composer_name(name))
+                await self._composers.add_alias(person_id, name, normalize_composer_name(name))
             except DuplicateComposerAlias:
                 continue

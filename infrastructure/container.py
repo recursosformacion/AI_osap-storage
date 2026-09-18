@@ -95,11 +95,11 @@ from infrastructure.repositories.sql_archive_entry_repository import SqlArchiveE
 from infrastructure.repositories.sql_archive_repository import SqlArchiveRepository
 from infrastructure.repositories.sql_authority_sync_state_repository import SqlAuthoritySyncStateRepository
 from infrastructure.repositories.sql_catalogue_repository import SqlCatalogueRepository
-from infrastructure.repositories.sql_composer_repository import SqlComposerRepository
 from infrastructure.repositories.sql_file_repository import SqlFileRepository
 from infrastructure.repositories.sql_import_source_repository import SqlImportSourceRepository
 from infrastructure.repositories.sql_job_repository import SqlDownloadJobRepository
 from infrastructure.repositories.sql_location_repository import SqlStorageLocationRepository
+from infrastructure.repositories.sql_person_repository import SqlPersonRepository
 from infrastructure.repositories.sql_provider_repository import SqlStorageProviderRepository
 from infrastructure.repositories.sql_statistics_repository import SqlStatisticsRepository
 from infrastructure.repositories.sql_table_crud_repository import SqlTableCrudRepository
@@ -199,7 +199,7 @@ def build_container(settings: Settings) -> Container:
     import_source_repo = SqlImportSourceRepository(db)
     statistics_repo = SqlStatisticsRepository(db)
     work_repo = SqlWorkRepository(db)
-    composer_repo = SqlComposerRepository(db)
+    composer_repo = SqlPersonRepository(db)
     composer_resolver = ComposerResolver(composer_repo)
     catalogue_repo = SqlCatalogueRepository(db)
     catalogue_queries = CatalogueQueries(catalogue_repo)

@@ -167,7 +167,7 @@ function renderRows(rows) {
 }
 
 function findPk(row) {
-  // Usa la primera columna que parece clave (id, work_id, composer_id...) o la primera.
+  // Usa la primera columna que parece clave (id, work_id, person_id...) o la primera.
   const names = Object.keys(row);
   return names.find((n) => n === "id" || n.endsWith("_id")) || names[0];
 }

@@ -75,7 +75,7 @@ class BuildWorks:
                             Work(
                                 work_key=key,
                                 composer=entry.composer,
-                                composer_id=await composer_id_of(entry.composer),
+                                person_id=await composer_id_of(entry.composer),
                                 title=entry.title,
                             )
                         )

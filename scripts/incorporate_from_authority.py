@@ -2,10 +2,11 @@
 
 Para cada fila pendiente (rol `composer` por defecto):
   1. Busca la persona por nombre normalizado/compacto en `persons` + `persons_aliases`.
-  2. Si no la encuentra, la busca en la autoridad (`persons_authority`) **por nombre
-     completo normalizado** (no por clave: la clave iniciales+apellido da falsos
-     positivos) y, si coincide, **da de alta la persona** con el nombre canónico y sus
-     identificadores (`wikidata`/`viaf`/`imslp`), enlazándola con la autoridad.
+  2. Si no la encuentra, la busca en la autoridad (`persons_identity`, candidatos con
+     `persons_id` NULL) **por nombre completo normalizado** (no por clave: la clave
+     iniciales+apellido da falsos positivos) y, si coincide, **da de alta la persona** con
+     el nombre canónico y sus identificadores (`wikidata`/`viaf`/`imslp`), enlazándola con
+     el candidato (poniéndole `persons_id` a sus filas).
   3. En ambos casos **crea la fila en `works_person_roles`** (rol 1 = Composer) y **marca
      la fila de `works_person_import` como asignada** (`works_person_import_resolved = 1`).
 
@@ -34,7 +35,7 @@ from infrastructure.config import Settings  # noqa: E402
 from infrastructure.db.connection import Database  # noqa: E402
 
 sys.path.insert(0, str(ROOT / "scripts"))
-from link_works_person_import import ROLE_IDS, clean_raw, compact  # noqa: E402
+from link_works_person_import import ROLE_IDS, clean_raw, compact, composer_key  # noqa: E402
 
 SOURCE_SYSTEM = "authority"
 
@@ -68,17 +69,33 @@ async def run(db_name: str, roles: list[str], dry_run: bool) -> None:
         )
         work_count = {str(r["pid"]): int(r["n"]) for r in await cur.fetchall()}
 
-        # Autoridad indexada por nombre completo normalizado (encaje seguro).
+        # Autoridad/candidatos en `persons_identity`: la fila ancla guarda el nombre canónico;
+        # los identificadores (wikidata/viaf/imslp) comparten su `identity_name_norm`.
         await cur.execute(
-            "SELECT authority_id, persons_authority_canonical_name AS name, "
-            "persons_authority_wikidata_id AS wikidata_id, "
-            "persons_authority_viaf_id AS viaf_id, "
-            "persons_authority_imslp_id AS imslp_id FROM persons_authority"
+            "SELECT identity_name, identity_name_norm, identity_type, identity_value, "
+            "identity_is_anchor FROM persons_identity"
         )
-        for r in await cur.fetchall():
-            key = normalize_composer_name(r["name"])
-            if key:
-                authority.setdefault(key, r)
+        auth_rows = await cur.fetchall()
+        by_identity_norm: dict[str, str] = {}
+        for r in auth_rows:
+            if int(r["identity_is_anchor"]) == 1:
+                key = normalize_composer_name(r["identity_name"])
+                if key:
+                    authority.setdefault(key, {
+                        "name": str(r["identity_name"]),
+                        "wikidata_id": None, "viaf_id": None, "imslp_id": None,
+                        "identity_norm": str(r["identity_name_norm"] or ""),
+                    })
+                    by_identity_norm[str(r["identity_name_norm"] or "")] = key
+        for r in auth_rows:
+            itype = str(r["identity_type"] or "")
+            if not itype:
+                continue
+            key = by_identity_norm.get(str(r["identity_name_norm"] or ""))
+            field = {"wikidata_qid": "wikidata_id", "viaf": "viaf_id",
+                     "imslp": "imslp_id"}.get(itype)
+            if key and field and key in authority:
+                authority[key][field] = r["identity_value"]
 
         roles_ph = ", ".join(["%s"] * len(roles))
         await cur.execute(
@@ -160,16 +177,17 @@ async def run(db_name: str, roles: list[str], dry_run: bool) -> None:
             ):
                 if value:
                     await cur.execute(
-                        "INSERT INTO persons_identifiers "
-                        "(persons_id, persons_identifiers_type, persons_identifiers_value, "
-                        " persons_identifiers_source) VALUES (%s, %s, %s, 'wikidata')",
-                        (pid, id_type, str(value)),
+                        "INSERT INTO persons_identity "
+                        "(persons_id, identity_name, identity_name_norm, identity_type, "
+                        " identity_value, identity_source, identity_is_anchor) "
+                        "VALUES (%s, %s, %s, %s, %s, 'authority', 0)",
+                        (pid, name[:255], composer_key(name)[:128], id_type, str(value)),
                     )
-            if auth.get("authority_id"):
+            if auth.get("identity_norm"):
                 await cur.execute(
-                    "UPDATE persons_authority SET persons_id = %s "
-                    "WHERE authority_id = %s AND persons_id IS NULL",
-                    (pid, auth["authority_id"]),
+                    "UPDATE persons_identity SET persons_id = %s "
+                    "WHERE identity_name_norm = %s AND persons_id IS NULL",
+                    (pid, auth["identity_norm"]),
                 )
         if links:
             await cur.executemany(

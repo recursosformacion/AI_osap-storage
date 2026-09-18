@@ -89,7 +89,7 @@ def test_works_of_composer_paginated():
     works, total = asyncio.run(GetComposerWorks(repo).execute("source-b", limit=2, offset=0))
     assert total == 3
     assert len(works) == 2
-    assert all(w.composer_id == "source-b" for w in works)
+    assert all(w.person_id == "source-b" for w in works)
 
 
 # --- Merge ---

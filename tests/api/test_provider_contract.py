@@ -238,11 +238,11 @@ def test_search_returns_complete_works(client):
     body = resp.json()
     assert len(body["works"]) == 2
     w = next(w for w in body["works"] if w["id"] == 1)
-    expected_keys = {"id", "title", "composer", "composer_id", "catalogue", "aliases",
+    expected_keys = {"id", "title", "composer", "person_id", "catalogue", "aliases",
                      "metadata", "statistics", "resources"}
     assert set(w.keys()) == expected_keys
     assert w["composer"] == "Wolfgang Amadeus Mozart"
-    assert w["composer_id"] == "8f5b3a7e"
+    assert w["person_id"] == "8f5b3a7e"
     md = w["metadata"]
     for key in ("subtitle", "artist", "song_name", "opus", "musical_key", "duration", "measures",
                 "pages", "parts", "complexity", "license", "public_domain", "description",

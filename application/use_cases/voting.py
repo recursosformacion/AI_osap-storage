@@ -51,17 +51,17 @@ class GetComposerStatistics:
         self._votes = votes
         self._composers = composers
 
-    async def execute(self, composer_id: str) -> ComposerStatistics:
-        canonical = await self._resolve_canonical(composer_id)
+    async def execute(self, person_id: str) -> ComposerStatistics:
+        canonical = await self._resolve_canonical(person_id)
         stats = await self._votes.get_composer_statistics(canonical)
         if stats is None:
-            return ComposerStatistics(composer_id=canonical, vote_count=0, work_count=0)
+            return ComposerStatistics(person_id=canonical, vote_count=0, work_count=0)
         return stats
 
-    async def _resolve_canonical(self, composer_id: str) -> str:
-        composer = await self._composers.get_by_id(composer_id)
+    async def _resolve_canonical(self, person_id: str) -> str:
+        composer = await self._composers.get_by_id(person_id)
         if composer is None:
-            raise EntityNotFound("composer", composer_id)
+            raise EntityNotFound("composer", person_id)
         seen: set[str] = set()
         while composer.status == ComposerStatus.MERGED and composer.merged_into:
             if composer.id in seen:

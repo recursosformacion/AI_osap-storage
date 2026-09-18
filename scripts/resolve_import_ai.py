@@ -10,7 +10,7 @@ Qué hace, por fila pendiente:
    rol (3 arreglista / 10 intérprete) y nunca pasan el control de "reconocido como
    compositor".
 3. **Reconocimiento** (control de compositor): el nombre debe existir en `persons`/
-   `persons_aliases`, en `persons_authority`, o **verificarse en Wikipedia/MusicBrainz
+   `persons_aliases`, en `persons_identity`, o **verificarse en Wikipedia/MusicBrainz
    como persona**. Si no pasa el control, no se crea nada (queda para revisión).
 4. Crea/enlaza la persona con el rol correcto en `works_person_roles` y marca la fila como
    resuelta.
@@ -44,7 +44,7 @@ from infrastructure.config import Settings  # noqa: E402
 from infrastructure.db.connection import Database  # noqa: E402
 
 sys.path.insert(0, str(ROOT / "scripts"))
-from link_works_person_import import clean_raw, compact  # noqa: E402
+from link_works_person_import import clean_raw, compact, composer_key  # noqa: E402
 
 ROLE_COMPOSER = 1
 ROLE_LYRICS = 2
@@ -322,16 +322,29 @@ async def run(db_name: str, roles: list[str], limit: int | None, dry_run: bool) 
         for r in await cur.fetchall():
             by_norm[str(r["person_aliases_normalized_alias"])].add(r["person_id"])
             by_compact[compact(r["person_aliases_alias"])].add(r["person_id"])
-        # Autoridad por nombre completo normalizado y por clave canónica.
+        # Autoridad/candidatos en `persons_identity` (ancla = nombre canónico; los
+        # identificadores comparten su `identity_name_norm`).
         await cur.execute(
-            "SELECT authority_id, persons_authority_canonical_name AS name, "
-            "persons_authority_wikidata_id AS wid, persons_authority_viaf_id AS viaf, "
-            "persons_authority_imslp_id AS imslp FROM persons_authority"
+            "SELECT identity_name, identity_name_norm, identity_type, identity_value, "
+            "identity_is_anchor FROM persons_identity"
         )
-        for r in await cur.fetchall():
-            key = normalize_composer_name(r["name"])
-            if key:
-                authority.setdefault(key, dict(r))
+        auth_rows = await cur.fetchall()
+        by_identity_norm: dict[str, str] = {}
+        for r in auth_rows:
+            if int(r["identity_is_anchor"]) == 1:
+                key = normalize_composer_name(r["identity_name"])
+                if key:
+                    authority.setdefault(key, {"name": str(r["identity_name"]),
+                                               "wid": None, "viaf": None, "imslp": None})
+                    by_identity_norm[str(r["identity_name_norm"] or "")] = key
+        for r in auth_rows:
+            field = {"wikidata_qid": "wid", "viaf": "viaf", "imslp": "imslp"}.get(
+                str(r["identity_type"] or ""))
+            if not field:
+                continue
+            key = by_identity_norm.get(str(r["identity_name_norm"] or ""))
+            if key and key in authority:
+                authority[key][field] = r["identity_value"]
 
         roles_ph = ", ".join(["%s"] * len(roles))
         sql = (
@@ -434,10 +447,11 @@ async def run(db_name: str, roles: list[str], limit: int | None, dry_run: bool) 
                                        ("imslp", auth.get("imslp"))):
                     if value:
                         await cur.execute(
-                            "INSERT INTO persons_identifiers (persons_id, "
-                            "persons_identifiers_type, persons_identifiers_value, "
-                            "persons_identifiers_source) VALUES (%s, %s, %s, 'wikidata')",
-                            (pid, id_type, str(value)),
+                            "INSERT INTO persons_identity "
+                            "(persons_id, identity_name, identity_name_norm, identity_type, "
+                            " identity_value, identity_source, identity_is_anchor) "
+                            "VALUES (%s, %s, %s, %s, %s, 'authority', 0)",
+                            (pid, name[:255], composer_key(name)[:128], id_type, str(value)),
                         )
         if links:
             await cur.executemany(

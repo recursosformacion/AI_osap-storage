@@ -73,7 +73,7 @@ class SearchWorks:
         for work in works:
             result = resolved.get(work.composer)
             if result:
-                work.composer_id, work.composer = result
+                work.person_id, work.composer = result
 
 
 class GetWork:
@@ -96,7 +96,7 @@ class GetWork:
         if self._resolver is not None:
             resolved = await self._resolver.resolve(work.composer)
             if resolved:
-                work.composer_id, work.composer = resolved
+                work.person_id, work.composer = resolved
         resources = await self._entries.list_by_work(work_id)
         summaries = [
             ResourceSummary(
@@ -152,7 +152,7 @@ class SearchWorksFull:
             for work in found:
                 result = resolved.get(work.composer)
                 if result:
-                    work.composer_id, work.composer = result
+                    work.person_id, work.composer = result
 
         work_ids = [w.id for w in found if w.id is not None]
         if not work_ids:

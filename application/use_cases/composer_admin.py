@@ -49,13 +49,13 @@ class ReviewComposer:
     def __init__(self, composers: ComposerRepository) -> None:
         self._composers = composers
 
-    async def execute(self, composer_id: str, review_status: str) -> ComposerDetail:
+    async def execute(self, person_id: str, review_status: str) -> ComposerDetail:
         if review_status not in self._VALID:
             raise ValueError(f"review_status must be one of {sorted(self._VALID)}")
-        if await self._composers.get_detail(composer_id) is None:
-            raise EntityNotFound("composer", composer_id)
-        await self._composers.set_review_status(composer_id, review_status)
-        detail = await self._composers.get_detail(composer_id)
+        if await self._composers.get_detail(person_id) is None:
+            raise EntityNotFound("composer", person_id)
+        await self._composers.set_review_status(person_id, review_status)
+        detail = await self._composers.get_detail(person_id)
         assert detail is not None
         return detail
 
@@ -227,10 +227,10 @@ class GetComposerDetail:
     def __init__(self, composers: ComposerRepository) -> None:
         self._composers = composers
 
-    async def execute(self, composer_id: str) -> ComposerDetail:
-        detail = await self._composers.get_detail(composer_id)
+    async def execute(self, person_id: str) -> ComposerDetail:
+        detail = await self._composers.get_detail(person_id)
         if detail is None:
-            raise EntityNotFound("composer", composer_id)
+            raise EntityNotFound("composer", person_id)
         return detail
 
 
@@ -239,12 +239,12 @@ class GetComposerWorks:
         self._composers = composers
 
     async def execute(
-        self, composer_id: str, *, limit: int, offset: int
+        self, person_id: str, *, limit: int, offset: int
     ) -> tuple[list[ComposerWorkRef], int]:
-        if await self._composers.get_detail(composer_id) is None:
-            raise EntityNotFound("composer", composer_id)
-        works = await self._composers.list_works(composer_id, limit=limit, offset=offset)
-        detail = await self._composers.get_detail(composer_id)
+        if await self._composers.get_detail(person_id) is None:
+            raise EntityNotFound("composer", person_id)
+        works = await self._composers.list_works(person_id, limit=limit, offset=offset)
+        detail = await self._composers.get_detail(person_id)
         return works, (detail.works_count if detail else 0)
 
 
@@ -297,15 +297,15 @@ class AddAlias:
     def __init__(self, composers: ComposerRepository) -> None:
         self._composers = composers
 
-    async def execute(self, composer_id: str, alias: str) -> ComposerAlias:
+    async def execute(self, person_id: str, alias: str) -> ComposerAlias:
         from domain.services.composer_names import normalize_composer_name
 
         alias = (alias or "").strip()
         if not alias:
             raise ValueError("alias cannot be empty")
-        if await self._composers.get_by_id(composer_id) is None:
-            raise EntityNotFound("composer", composer_id)
-        return await self._composers.add_alias(composer_id, alias, normalize_composer_name(alias))
+        if await self._composers.get_by_id(person_id) is None:
+            raise EntityNotFound("composer", person_id)
+        return await self._composers.add_alias(person_id, alias, normalize_composer_name(alias))
 
 
 class ListAliases:
@@ -314,10 +314,10 @@ class ListAliases:
     def __init__(self, composers: ComposerRepository) -> None:
         self._composers = composers
 
-    async def execute(self, composer_id: str) -> list[ComposerAlias]:
-        if await self._composers.get_by_id(composer_id) is None:
-            raise EntityNotFound("composer", composer_id)
-        return await self._composers.list_aliases(composer_id)
+    async def execute(self, person_id: str) -> list[ComposerAlias]:
+        if await self._composers.get_by_id(person_id) is None:
+            raise EntityNotFound("composer", person_id)
+        return await self._composers.list_aliases(person_id)
 
 
 class MoveAlias:
@@ -326,10 +326,10 @@ class MoveAlias:
     def __init__(self, composers: ComposerRepository) -> None:
         self._composers = composers
 
-    async def execute(self, alias_id: int, from_composer_id: str, target_id: str) -> ComposerAlias:
+    async def execute(self, alias_id: int, from_person_id: str, target_id: str) -> ComposerAlias:
         if await self._composers.get_by_id(target_id) is None:
             raise EntityNotFound("composer", target_id)
-        return await self._composers.move_alias(alias_id, target_id, from_composer_id)
+        return await self._composers.move_alias(alias_id, target_id, from_person_id)
 
 
 class PromoteAlias:
@@ -338,8 +338,8 @@ class PromoteAlias:
     def __init__(self, composers: ComposerRepository) -> None:
         self._composers = composers
 
-    async def execute(self, alias_id: int, from_composer_id: str) -> Composer:
-        return await self._composers.promote_alias(alias_id, from_composer_id)
+    async def execute(self, alias_id: int, from_person_id: str) -> Composer:
+        return await self._composers.promote_alias(alias_id, from_person_id)
 
 
 class SetAttribution:
@@ -348,8 +348,8 @@ class SetAttribution:
     def __init__(self, composers: ComposerRepository) -> None:
         self._composers = composers
 
-    async def execute(self, composer_ids: list[str], attribution_type: str) -> int:
-        return await self._composers.set_attribution(composer_ids, attribution_type)
+    async def execute(self, person_ids: list[str], attribution_type: str) -> int:
+        return await self._composers.set_attribution(person_ids, attribution_type)
 
 
 class UpdateComposer:
@@ -359,7 +359,7 @@ class UpdateComposer:
         self._composers = composers
 
     async def execute(
-        self, composer_id: str, *,
+        self, person_id: str, *,
         name: str | None = None,
         birth_year: str | None = None,
         death_year: str | None = None,
@@ -371,10 +371,10 @@ class UpdateComposer:
         musicbrainz_id: str | None = None,
         status: str | None = None,
     ) -> ComposerDetail:
-        if await self._composers.get_detail(composer_id) is None:
-            raise EntityNotFound("composer", composer_id)
+        if await self._composers.get_detail(person_id) is None:
+            raise EntityNotFound("composer", person_id)
         await self._composers.update_composer(
-            composer_id,
+            person_id,
             name=name,
             birth_year=birth_year,
             death_year=death_year,
@@ -386,7 +386,7 @@ class UpdateComposer:
             musicbrainz_id=musicbrainz_id,
             status=status,
         )
-        detail = await self._composers.get_detail(composer_id)
+        detail = await self._composers.get_detail(person_id)
         assert detail is not None
         return detail
 
@@ -397,10 +397,10 @@ class GetComposerBiography:
     def __init__(self, composers: ComposerRepository) -> None:
         self._composers = composers
 
-    async def execute(self, composer_id: str) -> ComposerDetail:
-        detail = await self._composers.get_biography(composer_id)
+    async def execute(self, person_id: str) -> ComposerDetail:
+        detail = await self._composers.get_biography(person_id)
         if detail is None:
-            raise EntityNotFound("composer", composer_id)
+            raise EntityNotFound("composer", person_id)
         return detail
 
 
@@ -411,7 +411,7 @@ class UpdateComposerBiography:
         self._composers = composers
 
     async def execute(
-        self, composer_id: str, *,
+        self, person_id: str, *,
         summary: str | None = None,
         era: str | None = None,
         nationality: str | None = None,
@@ -419,10 +419,10 @@ class UpdateComposerBiography:
         key_fact: str | None = None,
         references: list[dict[str, str]] | None = None,
     ) -> ComposerDetail:
-        if await self._composers.get_detail(composer_id) is None:
-            raise EntityNotFound("composer", composer_id)
+        if await self._composers.get_detail(person_id) is None:
+            raise EntityNotFound("composer", person_id)
         await self._composers.upsert_biography(
-            composer_id,
+            person_id,
             summary=summary,
             era=era,
             nationality=nationality,
@@ -430,7 +430,7 @@ class UpdateComposerBiography:
             key_fact=key_fact,
             references=references,
         )
-        detail = await self._composers.get_detail(composer_id)
+        detail = await self._composers.get_detail(person_id)
         assert detail is not None
         return detail
 
@@ -441,7 +441,7 @@ class DeleteComposerIdentifier:
     def __init__(self, composers: ComposerRepository) -> None:
         self._composers = composers
 
-    async def execute(self, composer_id: str, identifier_id: int) -> None:
-        if await self._composers.get_detail(composer_id) is None:
-            raise EntityNotFound("composer", composer_id)
-        await self._composers.delete_identifier(composer_id, identifier_id)
+    async def execute(self, person_id: str, identifier_id: int) -> None:
+        if await self._composers.get_detail(person_id) is None:
+            raise EntityNotFound("composer", person_id)
+        await self._composers.delete_identifier(person_id, identifier_id)

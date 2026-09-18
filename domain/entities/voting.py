@@ -46,11 +46,11 @@ class ComposerStatistics:
 
     - rating: media ponderada de los adjusted_rating de sus Works, ponderada por
       sqrt(vote_count) de cada Work.
-    - work_count: número de Works con composer_id = este compositor.
+    - work_count: número de Works con person_id = este compositor.
     - confidence: min(1, vote_count / m).
     """
 
-    composer_id: str
+    person_id: str
     rating: float | None = None
     adjusted_rating: float | None = None
     vote_count: int = 0

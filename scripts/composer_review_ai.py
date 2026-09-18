@@ -55,7 +55,7 @@ def get_connection(db_config: dict[str, Any]):
 
 CREATE_BIO_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS composer_biographies (
-    composer_id CHAR(36) PRIMARY KEY,
+    person_id CHAR(36) PRIMARY KEY,
     biography_summary TEXT,
     biography_era TEXT,
     biography_nationality TEXT,
@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS composer_biographies (
     biography_key_fact TEXT,
     biography_references JSON,
     biography_updated_at VARCHAR(64),
-    CONSTRAINT fk_composer_bio FOREIGN KEY (composer_id) REFERENCES composers (id) ON DELETE CASCADE
+    CONSTRAINT fk_composer_bio FOREIGN KEY (person_id) REFERENCES composers (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 """
 
@@ -92,7 +92,7 @@ async def count_pending(conn: aiomysql.Connection) -> int:
         FROM composers c
         WHERE c.status IN ('active', 'candidate')
           AND NOT EXISTS (
-              SELECT 1 FROM composer_biographies b WHERE b.composer_id = c.id
+              SELECT 1 FROM composer_biographies b WHERE b.person_id = c.id
           )
     """
     async with conn.cursor() as cur:
@@ -112,7 +112,7 @@ async def fetch_pending_composers(
         FROM composers c
         WHERE c.status IN ('active', 'candidate')
           AND NOT EXISTS (
-              SELECT 1 FROM composer_biographies b WHERE b.composer_id = c.id
+              SELECT 1 FROM composer_biographies b WHERE b.person_id = c.id
           )
         ORDER BY c.id
         LIMIT %s OFFSET %s
@@ -124,7 +124,7 @@ async def fetch_pending_composers(
 
 async def update_composer_review(
     conn: aiomysql.Connection,
-    composer_id: str,
+    person_id: str,
     review_status: str,
     review_reason: str | None,
     reviewed_at: str | None,
@@ -136,7 +136,7 @@ async def update_composer_review(
                 reviewed_at = NULL
             WHERE id = %s
         """
-        params = (review_status, composer_id)
+        params = (review_status, person_id)
     else:
         query = """
             UPDATE composers
@@ -145,22 +145,22 @@ async def update_composer_review(
                 reviewed_at = %s
             WHERE id = %s
         """
-        params = (review_status, review_reason, reviewed_at, composer_id)
+        params = (review_status, review_reason, reviewed_at, person_id)
     async with conn.cursor() as cur:
         await cur.execute(query, params)
 
 
-async def _set_active(conn: aiomysql.Connection, composer_id: str) -> None:
+async def _set_active(conn: aiomysql.Connection, person_id: str) -> None:
     async with conn.cursor() as cur:
         await cur.execute(
             "UPDATE composers SET status = 'active' WHERE id = %s",
-            (composer_id,),
+            (person_id,),
         )
 
 
 async def upsert_biography(
     conn: aiomysql.Connection,
-    composer_id: str,
+    person_id: str,
     bio: dict[str, Any] | None,
 ) -> None:
     import json as _json
@@ -171,7 +171,7 @@ async def upsert_biography(
 
     query = """
         INSERT INTO composer_biographies
-            (composer_id, biography_summary, biography_era, biography_nationality,
+            (person_id, biography_summary, biography_era, biography_nationality,
              biography_key_works, biography_key_fact, biography_references, biography_updated_at)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
@@ -184,7 +184,7 @@ async def upsert_biography(
             biography_updated_at = VALUES(biography_updated_at)
     """
     params = (
-        composer_id,
+        person_id,
         bio.get("summary"),
         bio.get("era"),
         bio.get("nationality"),
@@ -773,7 +773,7 @@ async def run_phase1(db_config: dict[str, Any], limit: int, output_path: Path) -
         for c in composers:
             analysis = await analyze_composer_async(c["name"])
             result = {
-                "composer_id": c["id"],
+                "person_id": c["id"],
                 "name": c["name"],
                 "is_composer": analysis["is_composer"],
                 "biography": analysis["biography"],

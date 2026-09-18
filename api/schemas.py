@@ -137,7 +137,7 @@ class StatisticsRead(Model):
 class WorkRead(Model):
     id: int
     composer: str | None = None
-    composer_id: str | None = None
+    person_id: str | None = None
     title: str | None = None
     subtitle: str | None = None
     artist: str | None = None
@@ -173,7 +173,7 @@ class WorkRead(Model):
 class WorkAdminDetail(Model):
     id: int
     composer: str | None = None
-    composer_id: str | None = None
+    person_id: str | None = None
     title: str | None = None
     subtitle: str | None = None
     artist: str | None = None
@@ -214,7 +214,7 @@ class WorkAdminListResult(Model):
 
 class WorkAdminUpdateRequest(Model):
     composer: str | None = None
-    composer_id: str | None = None
+    person_id: str | None = None
     title: str | None = None
     subtitle: str | None = None
     artist: str | None = None
@@ -289,7 +289,7 @@ class ProviderWorkRead(Model):
     id: int
     title: str | None = None
     composer: str | None = None
-    composer_id: str | None = None
+    person_id: str | None = None
     catalogue: str | None = None
     aliases: list[str] = []
     metadata: dict[str, Any] = {}
@@ -343,7 +343,7 @@ class ComposerAdminListResult(Model):
 
 
 class ComposerIdentifierRead(Model):
-    composer_id: str
+    person_id: str
     id_type: str
     id_value: str
     is_identity_anchor: bool = False
@@ -353,7 +353,7 @@ class ComposerIdentifierRead(Model):
 
 
 class ComposerEvidenceRead(Model):
-    composer_id: str
+    person_id: str
     rule: str
     decision: str
     reason: str
@@ -368,7 +368,7 @@ class ComposerEvidenceRead(Model):
 
 class ComposerCreationEvidenceRead(Model):
     id: int | None = None
-    composer_id: str
+    person_id: str
     work_id: int | None = None
     work_title: str | None = None
     extracted_author: str | None = None
@@ -435,7 +435,7 @@ class BiographyUpdateRequest(BaseModel):
 class ComposerWorkRefRead(Model):
     work_id: int
     title: str | None = None
-    composer_id: str | None = None
+    person_id: str | None = None
 
 
 class ComposerWorksResult(Model):
@@ -464,8 +464,8 @@ class AddAliasRequest(BaseModel):
 
 
 class MoveAliasRequest(BaseModel):
-    target_composer_id: str = Field(min_length=1)
-    from_composer_id: str = Field(min_length=1)
+    target_person_id: str = Field(min_length=1)
+    from_person_id: str = Field(min_length=1)
 
 
 class AliasRead(Model):
@@ -479,12 +479,12 @@ class MoveAliasResultRead(Model):
 
 
 class PromoteAliasResultRead(Model):
-    composer_id: str
+    person_id: str
     name: str
 
 
 class SetAttributionRequest(BaseModel):
-    composer_ids: list[str] = Field(min_length=1)
+    person_ids: list[str] = Field(min_length=1)
     attribution_type: str = Field(min_length=1, max_length=64)
 
 
@@ -517,7 +517,7 @@ class WorkStatisticsRead(Model):
 
 
 class ComposerStatisticsRead(Model):
-    composer_id: str
+    person_id: str
     rating: float | None = None
     adjusted_rating: float | None = None
     vote_count: int = 0

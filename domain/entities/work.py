@@ -26,7 +26,7 @@ class Work:
     """Una obra musical. Una sola vez; puede tener varias Resource (representaciones)."""
 
     composer: str | None = None
-    composer_id: str | None = None
+    person_id: str | None = None
     attribution_type: str | None = None
     attribution_note: str | None = None
     title: str | None = None

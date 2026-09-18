@@ -367,4 +367,91 @@ Poblado (`scripts/map_instrumentation.py`, clasificador único):
 - **Origen (PDMX): 0 textos sin mapear.** Residual **CPDL: 2.421 textos distintos** (mayoría estilos/frases libres y plantillas: `A cappella or keyboard`, `Choral soprano solo`, `: 2 violins`, `add=...`, `{{Cat...`), no normalizables automáticamente.
 - Instrumentación de CPDL ya integrada (`works.works_instrumentation` → modelo).
 
+---
+
+## 11. PENDIENTE TÉCNICO — normalización de nombres/títulos dispersa (2026-09-17)
+
+> **No es un paso de migración de datos**, pero afecta a la migración porque las claves de identidad (`persons_identity.identity_name_norm`, `persons_aliases.person_aliases_normalized_alias`, `composer_key`, `work_key`) dependen de ella. Se deja anotado para retomarlo **después** de la migración (o cuando se toque identidad otra vez).
+
+**Situación**: cada aplicación tiene una función normalizadora canónica, pero está rodeada de copias locales y las dos apps **no normalizan igual**.
+
+| | Función canónica | Copias locales |
+|---|---|---|
+| `osap-storage` | `domain/services/composer_names.py:9` `normalize_composer_name` (usada por ~13 módulos) | ~15 scripts con versión propia |
+| `osap-api` | `src/osap/domain/normalization.py:6` `normalize_name` | 5 scripts con `composer_key` + ~8 módulos `src/` con `_norm`/`_strip`/variantes |
+
+**Evidencia (file:line):**
+
+1. **`composer_key` (iniciales + apellido) duplicado ~12 veces**: `osap-storage` en `candidate_cleanup.py:78`, `incorporate_candidates.py:44`, `incorporate_resolutions.py:44`, `test_authority_coverage.py:39`, `resolve_persons.py:53`, `link_works_person_import.py:67`, `load_composer_authority.py:35`; `osap-api` en `index_works.py:74`, `identity_resolver.py:57`, `build_composer_index.py:30`, `enrich_identifiers.py:30`, `diagnose_not_found.py:31`. `load_composer_authority.py:37` lo justifica como *"self-contained … sin depender de osap-api"*.
+2. **Tres semánticas de acentos distintas** (y ya causó drift real):
+   - `encode("ascii","ignore")` **borra** lo no latino: `osap-api/domain/normalization.py:9`, `canonicalizer.py:20`, `index_works.py:137`; `osap-storage` scripts `link_import_by_identity.py:38`, `resolve_persons.py:41`, `merge_duplicate_persons.py:70`…
+   - `if not unicodedata.combining(ch)` **conserva** la letra base (cirílico incluido): `composer_names.py:24`, `osap-api/music_query_normalizer.py:16`.
+   - `NFKC` **compone** en vez de descomponer: `link_works_person_import.py:56`.
+   - Prueba del fallo: `scripts/normalize_identity_names.py` tuvo que recalcular **96.730 filas** de `persons_identity.identity_name_norm` porque `composer_key` conservaba diacríticos.
+3. **`composer_key` ≠ `normalize_composer_name` dentro de `osap-storage`**: la primera tokeniza con `[a-z\u00e0-\u00ff]+` (pierde cirílico/CJK) y colapsa a *iniciales apellido*; la segunda conserva alfabetos y no colapsa.
+4. **Catálogos con 3–4 extractores paralelos**: `domain/entities/catalogue.py` + `application/use_cases/catalogues.py`, regex inline en `scripts/import_cpdl_works.py:115`, y en `osap-api` `index_works.py:131,216` / `index_catalog_provider.py`.
+5. **Tests**: sólo cubren la función canónica (`tests/domain/test_composer_normalization.py`, `tests/application/test_composer_review.py`, `osap-api/tests/osap/test_canonicalizer.py`). Ninguna copia local tiene test.
+
+**Recomendación (alcance de la revisión de consolidación):**
+- Una única `normalize_person_name` (misma semántica de acentos) y una única `composer_identity_key`, compartidas o replicadas 1:1 con test de contrato cruzado.
+- Decidir si los no-latinos se conservan o se descartan, uniformemente (afecta a `persons_identity`, `persons_aliases`, `works_key`).
+- Test que verifique que ambas apps producen la **misma** clave para Händel/Müller/Fauré y un nombre cirílico/CJK.
+- Los scripts de un solo uso pueden conservar copias, pero marcadas y sin divergir del canónico.
+
+**Riesgo**: medio. No rompe nada hoy, pero mientras existan criterios distintos la identidad de personas se puede volver a desalinear entre apps (ya pasó una vez).
+
+---
+
+## 12. CPDL: género y ediciones (2026-09-17)
+
+### 12.1 Género — mapeado
+`scripts/map_cpdl_genres.py`. El corpus usa la taxonomía coral de ChoralWiki (776 valores);
+se reduce a los 12 géneros con reglas explícitas + palabras clave.
+
+| Género | Obras |
+|---|---|
+| Música Sacra / Himnología | 36.979 |
+| Música Clásica / Docta | 21.185 |
+| Tradición Folclórica | 1.519 |
+| Música Escénica / Aplicada | 906 |
+
+- **60.589** filas en `work_genres`; 56.300 de 56.420 obras con género (120 sin etiqueta útil).
+- Mapeo auditable en `genre_mappings` con prefijo `cpdl:` (765 códigos). Fuera sólo
+  `unknown`/`other`/`dual`/`both` (ruido).
+
+### 12.2 Ediciones y ficheros — modelo nuevo
+Esquema `scripts/migrate_cpdl_editions.sql`, poblado por `scripts/import_cpdl_editions.py`.
+Modelo acordado: **Obra → Ediciones CPDL → Ficheros**, con **Editor (persona, rol 6)** sobre
+la edición. No se duplican filas en `works`.
+
+- `cpdl_editions`(id, works_id, cpdl_editions_cpdlno, cpdl_editions_license, created_at) —
+  conserva el **CPDLno** y la licencia (un `{{Copy}}` por edición; hay ediciones sin ficheros).
+- `cpdl_edition_files`(id, cpdl_editions_id, name, type, created_at).
+- `cpdl_edition_persons`(id, cpdl_editions_id, persons_id, roles_id=6, name, created_at).
+- `n_editions`/`n_files` son **derivables** (`COUNT`), sin contadores materializados.
+
+Poblado: **81.983 ediciones** en **56.179 obras**, **217.343 ficheros** (PDF 75.250, MXL 60.948,
+MIDI 44.850, MP3 10.267, CAPX 9.030, MUS 8.465, SIB 6.399, MSCZ 2.115, MusicXML 19) y
+**80.166** relaciones de editor (1.834 personas distintas; **1.296 personas nuevas** con rol 6).
+
+Notas: el `cpdlno` **no es único** (48 duplicados reales: la misma edición listada en dos
+páginas) y `cpdlno=0` se descartó como artefacto.
+
+### 12.3 Instrumentación CPDL — cerrada
+`scripts/map_instrumentation.py` ampliado para los textos libres de CPDL: conectores
+(`, / & + and or with / e`), cantidades iniciales (`2 violins`), plurales, paréntesis
+(se prueban el texto, sin paréntesis y cada paréntesis), calificativos (`ad lib.`,
+`optional`, `reduction`, `colla voce`, tonalidad `in G`), numerales romanos (`Oboe I`) y
+alias nuevos (`basso continuo`/`bc`, `violoncello`, `corni`, `classic guitar`, `hand drum`…).
+Se añadió el instrumento genérico **Percussion** (cat. 3).
+
+- **Residual: 795 → 126 obras** con texto instrumental real sin normalizar.
+- Los 126 restantes ya **no son listas de instrumentos**: etiquetas sin instrumento (`Ad lib.`,
+  `None`, `vocal`, `Other`), códigos de voces (`SATB.TTBB`, `SMATBarB`, `TrCTB`) y unas pocas
+  frases descriptivas largas. Cierre aceptado.
+- Totales tras el rebuild: `work_instruments` **337.110**, `work_voices` **30.962**,
+  `work_ensembles` **96.305**. Origen PDMX: **0 textos sin mapear** (sin regresión).
+- Backups de las 3 tablas antes del rebuild: `%TEMP%\kilo\instrumentation_pre_*.sql`.
+
+Atribución (compositor de 153.579 obras) sigue en el módulo de identidad/datos.
 

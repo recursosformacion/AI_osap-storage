@@ -10,7 +10,7 @@ router = APIRouter(prefix="/api/v1/composers", tags=["composers"])
 
 
 @router.get(
-    "/{composer_id}",
+    "/{person_id}",
     response_model=ComposerPublicRead,
     summary="Detalle de un compositor",
     description="Devuelve el compositor con su biografía (resumen, época, nacionalidad, "
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/v1/composers", tags=["composers"])
     "para mostrar la ficha de compositor.",
 )
 async def get_composer(
-    composer_id: str,
+    person_id: str,
     uc: GetComposerDetail = Depends(GetComposerDetailDep),
 ) -> ComposerPublicRead:
-    return ComposerPublicRead.model_validate(await uc.execute(composer_id))
+    return ComposerPublicRead.model_validate(await uc.execute(person_id))

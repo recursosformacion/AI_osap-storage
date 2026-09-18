@@ -114,24 +114,27 @@ async def run(db_name: str, roles: list[str], dry_run: bool) -> None:
         )
         work_count = {str(r["pid"]): int(r["n"]) for r in await cur.fetchall()}
 
-        # Autoridad de compositores (candidatos a incorporar más adelante): clave canónica
-        # -> nombre canónico de la autoridad.
+        # Autoridad/candidatos en `persons_identity` (fila ancla = nombre canónico; el resto
+        # son variantes). Clave = `identity_name_norm` (iniciales + apellido, sin acentos).
         await cur.execute(
-            "SELECT n.persons_authority_name_normalized_name AS k, "
-            "a.persons_authority_canonical_name AS name "
-            "FROM persons_authority_name n "
-            "JOIN persons_authority a ON a.authority_id = n.authority_id"
+            "SELECT identity_name_norm AS k, identity_name AS name "
+            "FROM persons_identity WHERE identity_type = '' "
+            "ORDER BY identity_is_anchor DESC"
         )
-        authority_by_key = {str(r["k"]): str(r["name"]) for r in await cur.fetchall()}
+        authority_by_key: dict[str, str] = {}
+        for r in await cur.fetchall():
+            k = str(r["k"] or "")
+            if k:
+                authority_by_key.setdefault(k, str(r["name"]))
         await cur.execute(
-            "SELECT persons_authority_canonical_name AS name FROM persons_authority"
+            "SELECT identity_name AS name FROM persons_identity WHERE identity_is_anchor = 1"
         )
         authority_full = {
             normalize_composer_name(r["name"]) for r in await cur.fetchall()
         }
         await cur.execute(
-            "SELECT persons_authority_name_normalized_name AS k, "
-            "COUNT(DISTINCT authority_id) AS n FROM persons_authority_name GROUP BY 1"
+            "SELECT identity_name_norm AS k, COUNT(DISTINCT identity_name) AS n "
+            "FROM persons_identity WHERE identity_type = '' GROUP BY 1"
         )
         key_collisions = {str(r["k"]) for r in await cur.fetchall() if int(r["n"]) > 1}
 

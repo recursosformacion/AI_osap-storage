@@ -73,7 +73,7 @@ class EnrichWork:
 
             extracted = extract_composer_name(work.composer)
             resolved = await self._resolver.resolve(extracted) if extracted else None
-            work.composer_id = resolved[0] if resolved else UNKNOWN_COMPOSER_ID
+            work.person_id = resolved[0] if resolved else UNKNOWN_COMPOSER_ID
 
         await self._works.update(work)
         await self._works.replace_tags(work.id, e.tags)

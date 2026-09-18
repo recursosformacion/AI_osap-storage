@@ -6,13 +6,17 @@ Reglas (aprendidas del falso merge "Wilhelm/Wenzel Müller"):
      "by/from/arranger…").
   2. Sólo se agrupan personas con la **misma clave** y al menos **2 tokens** de nombre en
      común con el canónico del grupo.
-  3. El **canónico** del grupo se elige por prioridad de origen
-     (`authority` > `web` > `identity-resolver` > `pdmx`), luego el nombre más largo y, en
-     empate, el `persons_id` menor.
-  4. Se **reapunta todo** al canónico (`works_person_roles`, `persons_aliases`,
+  3. **Regla del apellido único**: un grupo cuyo canónico quedó reducido a una sola
+     palabra (sólo apellido, p. ej. "from Handel" → "Handel") se fusiona en la familia
+     con ese apellido, pero **sólo** si hay una familia clara y dominante (evita el caso
+     "Müller", donde el apellido lo comparten muchos compositores distintos).
+  4. El **canónico** del grupo se elige por prioridad de origen
+     (`maestro` > `authority` > `web` > `identity-resolver` > `cpdl` > `pdmx`), luego el
+     nombre más largo y, en empate, el `persons_id` menor.
+  5. Se **reapunta todo** al canónico (`works_person_roles`, `persons_aliases`,
      `persons_identity`, `persons_evidence`) y se registra en `persons_merge_history`.
      **Nunca** se borran relaciones.
-  5. Sólo se borra la persona duplicada.
+  6. Sólo se borra la persona duplicada.
 
 Uso:
     .venv\\Scripts\\python.exe scripts/merge_duplicate_persons.py --dry-run [--like Handel]
@@ -37,7 +41,15 @@ sys.path.insert(0, str(ROOT))
 from infrastructure.config import Settings  # noqa: E402
 from infrastructure.db.connection import Database  # noqa: E402
 
-_PRIORITY = {"authority": 0, "web": 1, "identity-resolver": 2, "cpdl": 3, "pdmx": 4, "": 9}
+_PRIORITY = {
+    "maestro": 0,
+    "authority": 1,
+    "web": 2,
+    "identity-resolver": 3,
+    "cpdl": 4,
+    "pdmx": 5,
+    "": 9,
+}
 _PARENS = re.compile(r"\([^)]*\)")
 _YEARS = re.compile(r"\b(1[0-9]{3}|20[0-9]{2})\b")
 _CATALOG = re.compile(
@@ -89,6 +101,16 @@ def tokens(name: str) -> set[str]:
     return {t for t in re.findall(r"[a-z]+", clean_name(name).lower()) if len(t) > 1}
 
 
+def words(name: str) -> list[str]:
+    """Palabras del nombre limpio (para distinguir "Handel" de "G.F. Handel")."""
+    return clean_name(name).lower().split()
+
+
+def surname_token(name: str) -> str:
+    parts = words(name)
+    return re.sub(r"[^a-z]", "", parts[-1]) if parts else ""
+
+
 async def run(db_name: str, dry_run: bool, like: str | None) -> None:
     base = Settings()  # type: ignore[call-arg]
     db = Database(base.model_copy(update={"db_name": db_name}))
@@ -101,7 +123,12 @@ async def run(db_name: str, dry_run: bool, like: str | None) -> None:
         persons = [dict(r) for r in await cur.fetchall()]
 
     if like:
-        persons = [p for p in persons if like.lower() in str(p["persons_name"]).lower()]
+        needle = fold(like).lower()
+        if not needle:
+            print(f"--like {like!r} no tiene caracteres comparables; se cancela el filtro.")
+            await db.close()
+            return
+        persons = [p for p in persons if needle in fold(str(p["persons_name"])).lower()]
 
     groups: dict[str, list[dict]] = defaultdict(list)
     for p in persons:
@@ -109,46 +136,92 @@ async def run(db_name: str, dry_run: bool, like: str | None) -> None:
         if k:
             groups[k].append(p)
 
-    merges: list[tuple[str, list[str], str]] = []  # (keeper, duplicados, motivo)
-    for k, members in groups.items():
-        if len(members) < 2:
-            continue
-        members = sorted(
-            members,
+    for members in groups.values():
+        members.sort(
             key=lambda p: (
                 _PRIORITY.get(str(p["persons_source_system"] or "").lower(), 9),
                 -len(str(p["persons_name"])),
                 str(p["persons_id"]),
-            ),
+            )
         )
+
+    def surname(name: str) -> str:
+        return (clean_name(name).lower().split() or [""])[-1]
+
+    # Separa los grupos "sólo apellido" (canónico de una sola palabra) de las familias
+    # con nombre completo, y decide a qué familia cae cada apellido huérfano.
+    named_by_surname: dict[str, list[str]] = defaultdict(list)
+    bare: dict[str, list[dict]] = {}
+    for k, members in groups.items():
+        cname = str(members[0]["persons_name"])
+        if len(words(cname)) == 1:
+            bare[k] = members
+        else:
+            st = surname_token(cname)
+            if st:
+                named_by_surname[st].append(k)
+
+    fold_target: dict[str, str] = {}
+    for k, members in bare.items():
+        st = surname_token(str(members[0]["persons_name"]))
+        counts = {ck: len(groups[ck]) for ck in named_by_surname.get(st, [])}
+        if not counts:
+            continue
+        top = max(counts, key=lambda ck: counts[ck])
+        others = sum(v for ck, v in counts.items() if ck != top)
+        # Sólo si la familia es clara y domina al resto (así "Müller" no se fusiona).
+        if counts[top] >= 2 and counts[top] > others:
+            fold_target[k] = top
+
+    merges: dict[str, dict] = {}  # keeper_id -> {name, dups, motivos}
+
+    def plan(keeper: dict, dups: list[dict], motivo: str) -> None:
+        entry = merges.setdefault(
+            str(keeper["persons_id"]),
+            {"name": str(keeper["persons_name"]), "dups": set(), "motivos": set()},
+        )
+        entry["dups"].update(str(d["persons_id"]) for d in dups)
+        entry["motivos"].add(motivo)
+
+    for k, members in groups.items():
         keeper = members[0]
         kn = str(keeper["persons_name"])
-        ktok = tokens(kn)
-        ksurname = (clean_name(kn).lower().split() or [""])[-1]
+        ksurname = surname(kn)
+        if k in fold_target:
+            plan(groups[fold_target[k]][0], members, f"apellido unico '{ksurname}'")
+            continue
+        if len(members) < 2:
+            continue
         dups = []
         for m in members[1:]:
             mn = str(m["persons_name"])
-            msurname = (clean_name(mn).lower().split() or [""])[-1]
-            shared = len(ktok & tokens(mn))
+            msurname = surname(mn)
+            shared = len(tokens(kn) & tokens(mn))
             if msurname == ksurname and (shared >= 2 or similar(kn, mn) >= 0.85):
                 dups.append(m)
         if dups:
-            merges.append((str(keeper["persons_id"]), [str(d["persons_id"]) for d in dups], str(keeper["persons_name"])))
+            plan(keeper, dups, "misma clave")
 
-    total_dups = sum(len(d) for _, d, _ in merges)
+    total_dups = sum(len(e["dups"]) for e in merges.values())
     print({"grupos con duplicados": len(merges), "personas a fusionar": total_dups})
-    for keeper, dups, name in merges[:15]:
-        print(f"   {name}  <=  {len(dups)} duplicados")
+    for e in list(merges.values())[:15]:
+        print(f"   {e['name']}  <=  {len(e['dups'])} duplicados  [{'+'.join(sorted(e['motivos']))}]")
+
+    folds = [e for e in merges.values() if any(m.startswith("apellido unico") for m in e["motivos"])]
+    print(f"regla apellido unico: {len(folds)} familias")
+    for e in folds:
+        print(f"   [apellido] {e['name']}  <=  {len(e['dups'])} duplicados")
 
     if dry_run or not merges:
         if dry_run and like:
-            for keeper, dups, name in merges:
-                print(f"  --- {name} ({keeper})")
+            for keeper_id, e in merges.items():
+                ids = [keeper_id, *sorted(e["dups"])]
+                print(f"  --- {e['name']} ({keeper_id}) [{'+'.join(sorted(e['motivos']))}]")
                 async with db.connection() as conn, conn.cursor() as cur:
                     await cur.execute(
                         f"SELECT persons_id, persons_name FROM persons "
-                        f"WHERE persons_id IN ({','.join(['%s'] * (len(dups) + 1))})",
-                        [keeper, *dups],
+                        f"WHERE persons_id IN ({','.join(['%s'] * len(ids))})",
+                        ids,
                     )
                     for r in await cur.fetchall():
                         print(f"       {r['persons_id']}  {r['persons_name']}")
@@ -156,13 +229,14 @@ async def run(db_name: str, dry_run: bool, like: str | None) -> None:
         return
 
     async with db.transaction() as conn, conn.cursor() as cur:
-        for keeper, dups, _name in merges:
+        for keeper_id, e in merges.items():
+            dups = sorted(e["dups"])
             ph = ", ".join(["%s"] * len(dups))
             # 1) Relaciones obra↔persona (evitando duplicados work+rol).
             await cur.execute(
                 f"UPDATE IGNORE works_person_roles SET works_person_roles_person_id = %s "
                 f"WHERE works_person_roles_person_id IN ({ph})",
-                [keeper, *dups],
+                [keeper_id, *dups],
             )
             await cur.execute(
                 f"DELETE FROM works_person_roles WHERE works_person_roles_person_id IN ({ph})",
@@ -171,7 +245,7 @@ async def run(db_name: str, dry_run: bool, like: str | None) -> None:
             # 2) Alias.
             await cur.execute(
                 f"UPDATE IGNORE persons_aliases SET person_id = %s WHERE person_id IN ({ph})",
-                [keeper, *dups],
+                [keeper_id, *dups],
             )
             await cur.execute(
                 f"DELETE FROM persons_aliases WHERE person_id IN ({ph})", dups
@@ -179,19 +253,19 @@ async def run(db_name: str, dry_run: bool, like: str | None) -> None:
             # 3) Identidad.
             await cur.execute(
                 f"UPDATE persons_identity SET persons_id = %s WHERE persons_id IN ({ph})",
-                [keeper, *dups],
+                [keeper_id, *dups],
             )
             # 4) Evidencia.
             await cur.execute(
                 f"UPDATE persons_evidence SET persons_id = %s WHERE persons_id IN ({ph})",
-                [keeper, *dups],
+                [keeper_id, *dups],
             )
             # 5) Historial y borrado.
             for dup in dups:
                 await cur.execute(
                     "INSERT INTO persons_merge_history (source_person_id, target_person_id, "
                     "merged_by) VALUES (%s, %s, 'merge_duplicate_persons')",
-                    (dup, keeper),
+                    (dup, keeper_id),
                 )
             await cur.execute(f"DELETE FROM persons WHERE persons_id IN ({ph})", dups)
     await db.close()

@@ -151,8 +151,8 @@ async def _cmd_backfill_composer_ids(args: argparse.Namespace, container: Contai
             scanned += 1
             r = resolved.get(name)
             new_id = r[0] if r else UNKNOWN_COMPOSER_ID
-            if w.composer_id != new_id:
-                w.composer_id = new_id
+            if w.person_id != new_id:
+                w.person_id = new_id
                 pending.append(w)
         for w in pending:
             await container.work_repo.update(w)
@@ -535,7 +535,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     backfill = sub.add_parser(
         "backfill-composer-ids",
-        help="Rellenar works.composer_id resolviendo works.composer contra los alias",
+        help="Rellenar works.person_id resolviendo works.composer contra los alias",
     )
     backfill.set_defaults(handler=_cmd_backfill_composer_ids)
 

@@ -18,7 +18,7 @@ _DERIVED = """
       ORDER BY r.works_person_roles_order, r.works_person_roles_id LIMIT 1) AS composer,
     (SELECT r.works_person_roles_person_id FROM works_person_roles r
       WHERE r.works_person_roles_work_id = w.id AND r.works_person_roles_role_id = %(composer_role)s
-      ORDER BY r.works_person_roles_order, r.works_person_roles_id LIMIT 1) AS composer_id,
+      ORDER BY r.works_person_roles_order, r.works_person_roles_id LIMIT 1) AS person_id,
     (SELECT GROUP_CONCAT(DISTINCT p.persons_name ORDER BY p.persons_name SEPARATOR ', ')
        FROM works_person_roles r
        JOIN persons p ON p.persons_id = r.works_person_roles_person_id
@@ -46,7 +46,7 @@ def _row_to_work(row: dict) -> Work:
         id=row["id"],
         work_key=row.get("works_key"),
         composer=row.get("composer"),
-        composer_id=row.get("composer_id"),
+        person_id=row.get("person_id"),
         attribution_type=row.get("works_attr_type"),
         attribution_note=row.get("works_attribution_note"),
         title=row.get("works_title"),
@@ -127,12 +127,12 @@ class SqlWorkRepository(WorkRepository):
                 ),
             )
             work.id = cur.lastrowid
-            if work.composer_id:
+            if work.person_id:
                 await cur.execute(
                     "INSERT IGNORE INTO works_person_roles (works_person_roles_work_id, "
                     "works_person_roles_person_id, works_person_roles_role_id) "
                     "VALUES (%s, %s, %s)",
-                    (work.id, work.composer_id, ROLE_COMPOSER),
+                    (work.id, work.person_id, ROLE_COMPOSER),
                 )
             return work
 
@@ -153,12 +153,12 @@ class SqlWorkRepository(WorkRepository):
                     int(work.public_domain), work.id,
                 ),
             )
-            if work.composer_id:
+            if work.person_id:
                 await cur.execute(
                     "INSERT IGNORE INTO works_person_roles (works_person_roles_work_id, "
                     "works_person_roles_person_id, works_person_roles_role_id) "
                     "VALUES (%s, %s, %s)",
-                    (work.id, work.composer_id, ROLE_COMPOSER),
+                    (work.id, work.person_id, ROLE_COMPOSER),
                 )
 
     async def get_by_id(self, work_id: int) -> Work | None:
@@ -218,7 +218,7 @@ class SqlWorkRepository(WorkRepository):
             return [_row_to_work(row) for row in await cur.fetchall()]
 
     async def list_by_composer(
-        self, composer_id: str, *, limit: int = 100, offset: int = 0
+        self, person_id: str, *, limit: int = 100, offset: int = 0
     ) -> list[Work]:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
@@ -227,7 +227,7 @@ class SqlWorkRepository(WorkRepository):
                 "        r.works_person_roles_person_id = %(cid)s AND "
                 "        r.works_person_roles_role_id = %(composer_role)s) "
                 "ORDER BY w.id LIMIT %(limit)s OFFSET %(offset)s",
-                {**_SELECT_PARAMS, "cid": composer_id, "limit": limit, "offset": offset},
+                {**_SELECT_PARAMS, "cid": person_id, "limit": limit, "offset": offset},
             )
             return [_row_to_work(row) for row in await cur.fetchall()]
 

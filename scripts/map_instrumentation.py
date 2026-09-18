@@ -64,9 +64,69 @@ INSTRUMENT_ALIASES = {
     "clarinet alto": "Clarinet",
     "clarinet contrabass": "Bass Clarinet",
     "tamtam": "Tam-tam",
+    "continuo": "Basso continuo",
+    "basso continuo": "Basso continuo",
+    "figured bass": "Basso continuo",
+    "thoroughbass": "Basso continuo",
+    "bc": "Basso continuo",
+    "b c": "Basso continuo",
+    "b-c": "Basso continuo",
+    "percussion": "Percussion",
+    "violoncello": "Cello",
+    "violoncelli": "Cello",
+    "violini": "Violin",
+    "basso seguente": "Basso continuo",
+    "basso per l'organo": "Basso continuo",
+    "basso organo": "Basso continuo",
+    "organ continuo": "Pipe Organ",
+    "keyboard": "Piano",
+    "renaissance lute": "Lute",
+    "chittarrone": "Theorbo",
+    "symphony orchestra": "Orchestra",
+    "alto recorder": "Recorder",
+    "soprano recorder": "Recorder",
+    "tenor recorder": "Recorder",
+    "treble recorder": "Recorder",
+    "bass recorder": "Recorder",
+    "treble viol": "Viol",
+    "tenor viol": "Viol",
+    "bass viol": "Viol",
+    "vl": "Violin",
+    "vln": "Violin",
+    "vc": "Cello",
+    "vlc": "Cello",
+    "vla": "Viola",
+    "ob": "Oboe",
+    "fg": "Bassoon",
+    "classic guitar": "Acoustic Guitar",
+    "b-flat trumpet": "Trumpet",
+    "b flat trumpet": "Trumpet",
+    "corni": "French Horn",
+    "corno": "French Horn",
+    "hand drum": "Percussion",
+    "chamber orchestra": "Orchestra",
     "bass voice": None,
     "vocals": None,
 }
+
+# Conectores entre instrumentos en los textos libres de CPDL ("2 violins & bc",
+# "Organ with Basso continuo", "2 Violini e Basso continuo"…).
+_PIECE_SPLIT = re.compile(
+    r"\s*,\s*|\s+or\s+|\s+and\s+|\s+e\s+|\s*&\s*|\s*\+\s*|\s+with\s+|\s*/\s*|\s*;\s*", re.I
+)
+_LEAD_QTY = re.compile(r"^(\d+)\s+(.*)$")
+_HANDS = re.compile(r"\b(?:4|four)\s*[- ]?\s*hands?\b", re.I)
+# Calificativos que no aportan instrumento ("Organ ad lib.", "Piano reduction of …").
+_QUAL = re.compile(
+    r"\b(?:ad\s*lib\.?|optional|opt\.?|tablature|colla (?:parte|voce)|"
+    r"reduction(?:\s+of\b.*)?|accompaniment)\b.*$",
+    re.I,
+)
+_HEAD = re.compile(r"^\s*\d+\s*[- ]?\s*(?:part|voice)\s+", re.I)
+_LEAD_CONN = re.compile(r"^(?:with|for|and|or|plus|incl\.?)\s+", re.I)
+_LEAD_QUAL = re.compile(r"^(?:optional|opt\.?|arr\.?|arranged|obbligato)\s+", re.I)
+_IN_KEY = re.compile(r"\s+in\s+[a-g](?:[- ]?(?:major|minor|flat|sharp))?.*$", re.I)
+_ROMAN = re.compile(r"\s+(?:i{1,3}|iv|v|vi{1,3}|ix|x)\s*\.?$", re.I)
 
 VOICE_ALIASES = {
     "soprano": "Soprano",
@@ -150,42 +210,70 @@ async def run(db_name: str, dry_run: bool, source_db: str = "osap-storage_v1") -
             return ("inst", inst_keys[key])
         return None
 
-    def classify_cpdl(wid: int, raw: str, acc_dict, unmatched) -> None:
-        for piece in re.split(r"\s*,\s*|\s+or\s+|\s+and\s+", raw, flags=re.I):
-            p = piece.strip().strip(";:.")
-            if not p or p[0].isdigit() or "{{" in p or p.lower().startswith("add="):
-                continue
-            low = norm(p).replace("capella", "cappella").replace(" divisi", "")
-            low = re.sub(r"\s+", " ", low).strip()
-            if low in {"unknown", "other", "-", ""}:
-                continue
-            if low.startswith("solo "):
-                vname = VOICE_ALIASES.get(norm(p[5:]))
+    def _emit(term: str, qty: int, acc_dict) -> bool:
+        if not term:
+            return False
+        low = norm(term).replace("capella", "cappella").replace(" divisi", "")
+        low = _HANDS.sub("", low)
+        low = _QUAL.sub("", low)
+        low = _HEAD.sub("", low)
+        low = _LEAD_CONN.sub("", low)
+        low = _LEAD_QUAL.sub("", low)
+        low = _IN_KEY.sub("", low)
+        low = _ROMAN.sub("", low)
+        low = re.sub(r"\s+", " ", low).strip().strip(";:.")
+        if low in {"unknown", "other", "-", "", "none", "ad lib", "ad lib."}:
+            return True
+        if low.startswith("solo "):
+            vname = VOICE_ALIASES.get(norm(term[5:]))
+            vid = voice_ids.get(norm(vname)) if vname else None
+            if vid:
+                acc_dict.setdefault("v", {}).setdefault(vid, 0)
+                acc_dict["v"][vid] += 1
+            return True
+        low3 = low.replace(".", "-").replace("/", "-").replace(" ", "")
+        hit = (
+            classify(low)
+            or classify(low3)
+            or classify(low[:-1] if low.endswith("s") else low)
+        )
+        if hit:
+            kind, iid = hit
+            slot = {"voice": "v", "ens": "e", "inst": "i"}[kind]
+            acc_dict.setdefault(slot, {}).setdefault(iid, 0)
+            acc_dict[slot][iid] += qty
+            return True
+        if re.fullmatch(r"[satbr]+", low3):
+            if len(low3) == 1:
+                vname = _LETTER_VOICE.get(low3)
                 vid = voice_ids.get(norm(vname)) if vname else None
                 if vid:
                     acc_dict.setdefault("v", {}).setdefault(vid, 0)
                     acc_dict["v"][vid] += 1
-                continue
-            low3 = low.replace(".", "-").replace("/", "-").replace(" ", "")
-            hit = classify(p) or classify(low3)
-            if hit:
-                kind, iid = hit
-                slot = {"voice": "v", "ens": "e", "inst": "i"}[kind]
-                acc_dict.setdefault(slot, {}).setdefault(iid, 0)
-                acc_dict[slot][iid] += 1
-                continue
-            if re.fullmatch(r"[satbr]+", low3):
-                if len(low3) == 1:
-                    vname = _LETTER_VOICE.get(low3)
-                    vid = voice_ids.get(norm(vname)) if vname else None
-                    if vid:
-                        acc_dict.setdefault("v", {}).setdefault(vid, 0)
-                        acc_dict["v"][vid] += 1
-                else:
-                    acc_dict.setdefault("e", {}).setdefault(("new", low3), 0)
-                    acc_dict["e"][("new", low3)] += 1
-                continue
-            unmatched[p] = unmatched.get(p, 0) + 1
+            else:
+                acc_dict.setdefault("e", {}).setdefault(("new", low3), 0)
+                acc_dict["e"][("new", low3)] += 1
+            return True
+        return False
+
+    def classify_cpdl(wid: int, raw: str, acc_dict, unmatched) -> None:
+        # Variantes: el texto tal cual, sin paréntesis, y cada paréntesis por separado.
+        candidates = [raw]
+        if re.search(r"\([^)]*\)", raw):
+            candidates.append(re.sub(r"\([^)]*\)", " ", raw))
+            candidates.extend(re.findall(r"\(([^)]*)\)", raw))
+        for cand in candidates:
+            for piece in _PIECE_SPLIT.split(cand):
+                p = piece.strip().strip(";:.")
+                if not p or "{{" in p or p.lower().startswith("add="):
+                    continue
+                qty = 1
+                lead = _LEAD_QTY.match(p)
+                if lead:
+                    qty = int(lead.group(1))
+                    p = lead.group(2).strip()
+                if not _emit(p, qty, acc_dict):
+                    unmatched[p] = unmatched.get(p, 0) + 1
 
     # ---- 1. Fuente enriquecida (PDMX) ----
     acc: dict[int, dict] = {}

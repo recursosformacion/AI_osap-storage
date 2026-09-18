@@ -1,8 +1,8 @@
 """Registra los compositores de CPDL en el catálogo de autoridad y completa sus enlaces.
 
 Los nombres de compositor de CPDL son **fiables**: se normalizan y se incorporan al
-catálogo de autoridad (`persons_authority` + `persons_authority_name`, `source='cpdl'`),
-enlazando la autoridad con la persona correspondiente. Si un nombre no tuviera persona
+catálogo de autoridad (`persons_identity`, `identity_source='cpdl'`),
+enlazando el candidato con la persona correspondiente. Si un nombre no tuviera persona
 (las obras CPDL sin enlace), se crea y se enlazan sus obras en `works_person_roles` (rol 1).
 
 Uso:
@@ -28,7 +28,7 @@ from infrastructure.config import Settings  # noqa: E402
 from infrastructure.db.connection import Database  # noqa: E402
 
 sys.path.insert(0, str(ROOT / "scripts"))
-from link_works_person_import import clean_raw, compact  # noqa: E402
+from link_works_person_import import clean_raw, compact, composer_key  # noqa: E402
 
 ROLE_COMPOSER = 1
 SOURCE_SYSTEM = "cpdl"
@@ -45,8 +45,7 @@ async def run(db_name: str, dry_run: bool) -> None:
 
     by_norm: dict[str, set[str]] = defaultdict(set)
     by_compact: dict[str, set[str]] = defaultdict(set)
-    auth_by_name: dict[str, int] = {}
-    auth_person: dict[int, str | None] = {}
+    auth_person: dict[str, str | None] = {}
 
     async with db.connection() as conn, conn.cursor() as cur:
         await cur.execute("SELECT persons_id, persons_name FROM persons")
@@ -56,13 +55,15 @@ async def run(db_name: str, dry_run: bool) -> None:
         await cur.execute("SELECT person_id, person_aliases_normalized_alias FROM persons_aliases")
         for r in await cur.fetchall():
             by_norm[str(r["person_aliases_normalized_alias"])].add(r["person_id"])
+        # Candidatos/personas de autoridad en `persons_identity` (clave = identity_name_norm).
         await cur.execute(
-            "SELECT n.persons_authority_name_normalized_name AS k, n.authority_id, a.persons_id "
-            "FROM persons_authority_name n JOIN persons_authority a ON a.authority_id = n.authority_id"
+            "SELECT identity_name_norm AS k, persons_id FROM persons_identity "
+            "WHERE identity_type = ''"
         )
         for r in await cur.fetchall():
-            auth_by_name.setdefault(str(r["k"]), int(r["authority_id"]))
-            auth_person[int(r["authority_id"])] = r["persons_id"]
+            k = str(r["k"] or "")
+            if k:
+                auth_person.setdefault(k, r["persons_id"])
 
         # Nombres CPDL distintos y la persona ya enlazada (si existe).
         await cur.execute(
@@ -93,7 +94,7 @@ async def run(db_name: str, dry_run: bool) -> None:
 
     new_persons: list[tuple[str, str]] = []
     new_auth: list[tuple[str, str, str]] = []   # (pid, nombre, normalizado)
-    link_auth: list[tuple[int, str]] = []
+    link_auth: list[tuple[str, str]] = []
     links: list[tuple[int, str, int]] = []
     cache: dict[str, str] = {}
     stats = {"nombres": len(rows), "con_persona": 0, "personas_nuevas": 0,
@@ -106,13 +107,14 @@ async def run(db_name: str, dry_run: bool) -> None:
         if not key or key in _NOISE or len(key.replace(" ", "")) < 4:
             stats["ruido"] += 1
             continue
+        ckey = composer_key(raw)
         pid = r["pid"] or cache.get(key)
         if not pid:
             pids = by_norm.get(key) or by_compact.get(compact(raw))
             if pids:
                 pid = sorted(pids)[0]
-            elif key in auth_by_name:
-                pid = auth_person.get(auth_by_name[key])
+            elif ckey in auth_person:
+                pid = auth_person.get(ckey)
         if pid:
             stats["con_persona"] += 1
         else:
@@ -122,13 +124,12 @@ async def run(db_name: str, dry_run: bool) -> None:
         cache[key] = str(pid)
         by_norm.setdefault(key, set()).add(str(pid))
 
-        if key in auth_by_name:
-            aid = auth_by_name[key]
-            if auth_person.get(aid) is None:
-                link_auth.append((aid, str(pid)))
+        if ckey in auth_person:
+            if auth_person.get(ckey) is None:
+                link_auth.append((ckey, str(pid)))
             stats["autoridades_ya_existentes"] += 1
         else:
-            new_auth.append((str(pid), raw, key))
+            new_auth.append((str(pid), raw, ckey))
             stats["autoridades_nuevas"] += 1
 
         for wid in pend_works.get(str(r["name"]), []):
@@ -157,21 +158,17 @@ async def run(db_name: str, dry_run: bool) -> None:
             )
         for pid, name, key in new_auth:
             await cur.execute(
-                "INSERT INTO persons_authority (persons_authority_canonical_name, persons_id) "
-                "VALUES (%s, %s)",
-                (name[:255], pid),
+                "INSERT INTO persons_identity "
+                "(persons_id, identity_name, identity_name_norm, identity_type, "
+                " identity_value, identity_source, identity_is_anchor) "
+                "VALUES (%s, %s, %s, '', '', 'cpdl', 1)",
+                (pid, name[:255], key[:128]),
             )
+        for key, pid in link_auth:
             await cur.execute(
-                "INSERT INTO persons_authority_name (authority_id, "
-                "persons_authority_name_name, persons_authority_name_normalized_name, "
-                "persons_authority_name_source) VALUES (%s, %s, %s, 'cpdl')",
-                (cur.lastrowid, name[:255], key[:128]),
-            )
-        for aid, pid in link_auth:
-            await cur.execute(
-                "UPDATE persons_authority SET persons_id = %s "
-                "WHERE authority_id = %s AND persons_id IS NULL",
-                (pid, aid),
+                "UPDATE persons_identity SET persons_id = %s "
+                "WHERE identity_name_norm = %s AND persons_id IS NULL",
+                (pid, key),
             )
         if links:
             await cur.executemany(

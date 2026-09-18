@@ -8,7 +8,7 @@ class ComposerResolver:
     """Resuelve un nombre de compositor procedente de un proveedor a su identidad canónica.
 
     Almacena la forma normalizada de cada nombre para resolverlo contra
-    `composer_aliases` y devolver `(composer_id, nombre canónico)` o `None`.
+    `composer_aliases` y devolver `(person_id, nombre canónico)` o `None`.
     La normalización y la consulta por lotes evitan llamadas N+1.
     """
 

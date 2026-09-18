@@ -39,7 +39,7 @@ def _row_to_composer_stats(row: dict) -> ComposerStatistics:
         return float(val) if val is not None else None
 
     return ComposerStatistics(
-        composer_id=row["composer_id"],
+        person_id=row["person_id"],
         rating=_f("rating"),
         adjusted_rating=_f("adjusted_rating"),
         vote_count=int(row["vote_count"] or 0),
@@ -109,12 +109,12 @@ class SqlVotingRepository(VotingRepository):
             )
             return {r["work_id"]: _row_to_work_stats(r) for r in await cur.fetchall()}
 
-    async def get_composer_statistics(self, composer_id: str) -> ComposerStatistics | None:
+    async def get_composer_statistics(self, person_id: str) -> ComposerStatistics | None:
         # `composer_statistics` está retirado: se calcula en vivo desde
         # work_statistics + works_person_roles (solo personas activas).
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT r.works_person_roles_person_id AS composer_id, "
+                "SELECT r.works_person_roles_person_id AS person_id, "
                 "SUM(ws.wksta_adjusted_rating * SQRT(ws.wksta_vote_count)) "
                 "    / NULLIF(SUM(SQRT(ws.wksta_vote_count)), 0) AS rating, "
                 "SUM(ws.wksta_adjusted_rating * SQRT(ws.wksta_vote_count)) "
@@ -130,7 +130,7 @@ class SqlVotingRepository(VotingRepository):
                 "LEFT JOIN work_statistics ws ON ws.works_id = w.id "
                 "WHERE c.persons_id = %s AND c.persons_status = 'active' "
                 "GROUP BY r.works_person_roles_person_id",
-                (ADJUSTMENT_MIN_VOTES, composer_id),
+                (ADJUSTMENT_MIN_VOTES, person_id),
             )
             row = await cur.fetchone()
             return _row_to_composer_stats(row) if row else None

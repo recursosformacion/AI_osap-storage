@@ -143,7 +143,7 @@ def test_merged_composer_resolves_to_target():
     asyncio.run(RefreshVotingStatistics(v).execute())
     # Consultar el id fusionado devuelve la estadística del target canónico.
     stats = asyncio.run(GetComposerStatistics(v, composers).execute("mrg"))
-    assert stats.composer_id == "moz"
+    assert stats.person_id == "moz"
     assert stats.work_count == 2
     # El compositor fusionado no recibe estadística independiente.
     assert asyncio.run(v.get_composer_statistics("mrg")) is None

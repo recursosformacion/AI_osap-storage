@@ -406,7 +406,7 @@ window.openWork = async (id) => {
         </div>
         <div class="row">
           <div class="grow"><label>Compositor (texto)</label><input type="text" id="wComposer" value="${esc(w.composer || "")}" /></div>
-          <div class="grow"><label>composer_id</label><input type="text" id="wComposerId" value="${esc(w.composer_id || "")}" /></div>
+          <div class="grow"><label>person_id</label><input type="text" id="wComposerId" value="${esc(w.person_id || "")}" /></div>
         </div>
         <div class="row">
           <div class="grow"><label>Género</label><input type="text" id="wGenre" value="${esc(w.genre || "")}" /></div>
@@ -454,7 +454,7 @@ window.saveWork = async (id) => {
     title: $("wTitle").value,
     subtitle: $("wSubtitle").value || null,
     composer: $("wComposer").value || null,
-    composer_id: $("wComposerId").value || null,
+    person_id: $("wComposerId").value || null,
     genre: $("wGenre").value || null,
     opus: $("wOpus").value || null,
     catalogue: $("wCatalogue").value || null,

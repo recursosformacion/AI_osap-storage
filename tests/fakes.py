@@ -390,7 +390,7 @@ class InMemoryComposerRepository(ComposerRepository):
         self._composers: dict[str, Composer] = {}
         self._aliases: dict[str, list[ComposerAlias]] = {}
         self._by_normalized: dict[str, str] = {}
-        # work_id -> (composer_id, title)
+        # work_id -> (person_id, title)
         self._works: dict[int, tuple[str, str | None]] = {}
         self._history: list[dict] = []
         self._evidence: dict[str, list[ComposerCreationEvidence]] = {}
@@ -398,8 +398,8 @@ class InMemoryComposerRepository(ComposerRepository):
         self._evidence_rows: dict[str, list[ComposerEvidence]] = {}
         self._seq = 0
 
-    def set_work(self, work_id: int, composer_id: str, title: str | None = None) -> None:
-        self._works[work_id] = (composer_id, title)
+    def set_work(self, work_id: int, person_id: str, title: str | None = None) -> None:
+        self._works[work_id] = (person_id, title)
 
     @property
     def history(self) -> list[dict]:
@@ -421,8 +421,8 @@ class InMemoryComposerRepository(ComposerRepository):
             return existing
         return await self.create(Composer(id=UNKNOWN_COMPOSER_ID, name=UNKNOWN_COMPOSER))
 
-    async def get_by_id(self, composer_id: str) -> Composer | None:
-        return self._composers.get(composer_id)
+    async def get_by_id(self, person_id: str) -> Composer | None:
+        return self._composers.get(person_id)
 
     async def get_by_name(self, name: str) -> Composer | None:
         lower = name.lower()
@@ -432,10 +432,10 @@ class InMemoryComposerRepository(ComposerRepository):
             None,
         )
 
-    async def add_alias(self, composer_id: str, alias: str, normalized_alias: str) -> ComposerAlias:
-        # UNIQUE por (composer_id, normalized_alias): el mismo alias puede existir
+    async def add_alias(self, person_id: str, alias: str, normalized_alias: str) -> ComposerAlias:
+        # UNIQUE por (person_id, normalized_alias): el mismo alias puede existir
         # en compositores distintos (homónimos); no se duplica dentro de la persona.
-        for existing in self._aliases.get(composer_id, []):
+        for existing in self._aliases.get(person_id, []):
             if existing.normalized_alias == normalized_alias:
                 from domain.exceptions import DuplicateComposerAlias
 
@@ -443,19 +443,19 @@ class InMemoryComposerRepository(ComposerRepository):
         self._seq += 1
         entry = ComposerAlias(
             id=self._seq,
-            composer_id=composer_id,
+            person_id=person_id,
             alias=alias,
             normalized_alias=normalized_alias,
         )
-        self._aliases.setdefault(composer_id, []).append(entry)
-        self._by_normalized[normalized_alias] = composer_id
+        self._aliases.setdefault(person_id, []).append(entry)
+        self._by_normalized[normalized_alias] = person_id
         return entry
 
     async def resolve_by_normalized(self, normalized: str) -> tuple[str, str] | None:
-        composer_id = self._by_normalized.get(normalized)
-        if composer_id is None:
+        person_id = self._by_normalized.get(normalized)
+        if person_id is None:
             return None
-        return await self._canonical_of(composer_id)
+        return await self._canonical_of(person_id)
 
     async def resolve_many_by_normalized(
         self, normalized: list[str]
@@ -469,8 +469,8 @@ class InMemoryComposerRepository(ComposerRepository):
                     result[norm] = canonical
         return result
 
-    async def _canonical_of(self, composer_id: str) -> tuple[str, str] | None:
-        current = self._composers.get(composer_id)
+    async def _canonical_of(self, person_id: str) -> tuple[str, str] | None:
+        current = self._composers.get(person_id)
         seen: set[str] = set()
         while current is not None and current.status == "merged" and current.merged_into:
             if current.id in seen or current.merged_into not in self._composers:
@@ -481,11 +481,11 @@ class InMemoryComposerRepository(ComposerRepository):
             return None
         return (current.id, current.name)
 
-    async def list_aliases(self, composer_id: str) -> list[ComposerAlias]:
-        return list(self._aliases.get(composer_id, []))
+    async def list_aliases(self, person_id: str) -> list[ComposerAlias]:
+        return list(self._aliases.get(person_id, []))
 
-    async def list_identifiers(self, composer_id: str) -> list[ComposerIdentifier]:
-        return [i for i in self._identifiers.get(composer_id, [])]
+    async def list_identifiers(self, person_id: str) -> list[ComposerIdentifier]:
+        return [i for i in self._identifiers.get(person_id, [])]
 
     async def find_by_identifier(self, id_type: str, id_value: str) -> list[Composer]:
         out = []
@@ -496,40 +496,40 @@ class InMemoryComposerRepository(ComposerRepository):
         return out
 
     async def add_identifier(
-        self, composer_id: str, id_type: str, id_value: str, *,
+        self, person_id: str, id_type: str, id_value: str, *,
         is_identity_anchor: bool = False, source: str = "musicbrainz",
         strength: str | None = None, channels: list[str] | None = None,
     ) -> None:
-        for i in self._identifiers.get(composer_id, []):
+        for i in self._identifiers.get(person_id, []):
             if i.id_type == id_type and i.id_value == id_value:
                 if is_identity_anchor:
-                    i = ComposerIdentifier(composer_id=composer_id, id_type=id_type,
+                    i = ComposerIdentifier(person_id=person_id, id_type=id_type,
                                            id_value=id_value, is_identity_anchor=True,
                                            source=source, strength=strength, channels=channels)
                 return
-        self._identifiers.setdefault(composer_id, []).append(
-            ComposerIdentifier(composer_id=composer_id, id_type=id_type, id_value=id_value,
+        self._identifiers.setdefault(person_id, []).append(
+            ComposerIdentifier(person_id=person_id, id_type=id_type, id_value=id_value,
                                is_identity_anchor=is_identity_anchor, source=source,
                                strength=strength, channels=channels))
 
     async def add_evidence(
-        self, composer_id: str, *, rule: str, decision: str, reason: str,
+        self, person_id: str, *, rule: str, decision: str, reason: str,
         anchor_type: str = "none", anchor_value: str = "none",
         channels: list | None = None, identifiers_used: list | None = None,
         matcher_version: str = "",
     ) -> None:
-        self._evidence_rows.setdefault(composer_id, []).append(
-            ComposerEvidence(composer_id=composer_id, rule=rule, decision=decision,
+        self._evidence_rows.setdefault(person_id, []).append(
+            ComposerEvidence(person_id=person_id, rule=rule, decision=decision,
                              reason=reason, anchor_type=anchor_type, anchor_value=anchor_value,
                              channels=channels, identifiers_used=identifiers_used,
                              matcher_version=matcher_version))
 
-    async def list_evidence(self, composer_id: str) -> list[ComposerEvidence]:
-        return [e for e in self._evidence_rows.get(composer_id, [])]
+    async def list_evidence(self, person_id: str) -> list[ComposerEvidence]:
+        return [e for e in self._evidence_rows.get(person_id, [])]
 
     async def add_creation_evidence(
         self,
-        composer_id: str,
+        person_id: str,
         *,
         work_id: int | None = None,
         work_title: str | None = None,
@@ -539,15 +539,15 @@ class InMemoryComposerRepository(ComposerRepository):
     ) -> ComposerCreationEvidence:
         self._seq += 1
         entry = ComposerCreationEvidence(
-            id=self._seq, composer_id=composer_id, work_id=work_id, work_title=work_title,
+            id=self._seq, person_id=person_id, work_id=work_id, work_title=work_title,
             extracted_author=extracted_author, provider=provider,
             resource_reference=resource_reference,
         )
-        self._evidence.setdefault(composer_id, []).append(entry)
+        self._evidence.setdefault(person_id, []).append(entry)
         return entry
 
-    async def list_creation_evidence(self, composer_id: str) -> list[ComposerCreationEvidence]:
-        return list(self._evidence.get(composer_id, []))
+    async def list_creation_evidence(self, person_id: str) -> list[ComposerCreationEvidence]:
+        return list(self._evidence.get(person_id, []))
 
     async def backfill_creation_evidence(self, provider: str | None = None) -> int:
         created = 0
@@ -562,11 +562,11 @@ class InMemoryComposerRepository(ComposerRepository):
             composer = self._composers.get(cid)
             if composer is None or composer.status != "active":
                 continue
-            if any(e.composer_id == cid for e in self._evidence.get(cid, [])):
+            if any(e.person_id == cid for e in self._evidence.get(cid, [])):
                 continue
             self._seq += 1
             self._evidence.setdefault(cid, []).append(ComposerCreationEvidence(
-                id=self._seq, composer_id=cid, work_id=wid, work_title=title,
+                id=self._seq, person_id=cid, work_id=wid, work_title=title,
                 extracted_author=composer.name, provider=provider,
             ))
             created += 1
@@ -632,18 +632,18 @@ class InMemoryComposerRepository(ComposerRepository):
         return len(await self.list_summaries(limit=10**9, offset=0, q=q, review=review,
                                              visible=visible))
 
-    async def set_review_status(self, composer_id: str, review_status: str) -> None:
-        composer = self._composers.get(composer_id)
+    async def set_review_status(self, person_id: str, review_status: str) -> None:
+        composer = self._composers.get(person_id)
         if composer is not None:
             composer.review_status = review_status
 
-    async def set_musicbrainz_id(self, composer_id: str, musicbrainz_id: str | None) -> None:
-        composer = self._composers.get(composer_id)
+    async def set_musicbrainz_id(self, person_id: str, musicbrainz_id: str | None) -> None:
+        composer = self._composers.get(person_id)
         if composer is not None:
             composer.musicbrainz_id = musicbrainz_id
 
-    async def set_suspicious(self, composer_id: str, suspicious: bool, reason: str | None = None) -> None:
-        composer = self._composers.get(composer_id)
+    async def set_suspicious(self, person_id: str, suspicious: bool, reason: str | None = None) -> None:
+        composer = self._composers.get(person_id)
         if composer is not None:
             composer.suspicious = suspicious
             composer.suspicious_reason = reason if suspicious else None
@@ -658,19 +658,19 @@ class InMemoryComposerRepository(ComposerRepository):
     async def list_resolutions(self, work_id: int) -> list[ComposerResolution]:
         return [r for r in getattr(self, "_resolutions", []) if r.work_id == work_id]
 
-    async def rename_composer(self, composer_id: str, new_name: str) -> None:
-        composer = self._composers.get(composer_id)
+    async def rename_composer(self, person_id: str, new_name: str) -> None:
+        composer = self._composers.get(person_id)
         if composer is not None:
             composer.name = new_name
             norm = normalize_composer_name(new_name)
-            self._aliases.setdefault(composer_id, []).append(ComposerAlias(
-                id=self._seq + 1, composer_id=composer_id, alias=new_name,
+            self._aliases.setdefault(person_id, []).append(ComposerAlias(
+                id=self._seq + 1, person_id=person_id, alias=new_name,
                 normalized_alias=norm,
             ))
-            self._by_normalized[norm] = composer_id
+            self._by_normalized[norm] = person_id
 
     async def update_composer(
-        self, composer_id: str, *,
+        self, person_id: str, *,
         name: str | None = None,
         birth_year: str | None = None,
         death_year: str | None = None,
@@ -682,7 +682,7 @@ class InMemoryComposerRepository(ComposerRepository):
         musicbrainz_id: str | None = None,
         status: str | None = None,
     ) -> None:
-        composer = self._composers.get(composer_id)
+        composer = self._composers.get(person_id)
         if composer is None:
             return
         if name is not None:
@@ -706,11 +706,11 @@ class InMemoryComposerRepository(ComposerRepository):
         if status is not None:
             composer.status = status
 
-    async def get_biography(self, composer_id: str):
-        return await self.get_detail(composer_id)
+    async def get_biography(self, person_id: str):
+        return await self.get_detail(person_id)
 
     async def upsert_biography(
-        self, composer_id: str, *,
+        self, person_id: str, *,
         summary: str | None = None,
         era: str | None = None,
         nationality: str | None = None,
@@ -720,7 +720,7 @@ class InMemoryComposerRepository(ComposerRepository):
     ) -> None:
         if not hasattr(self, "_biographies"):
             self._biographies: dict[str, dict] = {}
-        bio = self._biographies.setdefault(composer_id, {})
+        bio = self._biographies.setdefault(person_id, {})
         if summary is not None:
             bio["summary"] = summary
         if era is not None:
@@ -734,9 +734,9 @@ class InMemoryComposerRepository(ComposerRepository):
         if references is not None:
             bio["references"] = references
 
-    async def delete_identifier(self, composer_id: str, identifier_id: int) -> None:
-        rows = self._identifiers.get(composer_id, [])
-        self._identifiers[composer_id] = [i for i in rows if i.id != identifier_id]
+    async def delete_identifier(self, person_id: str, identifier_id: int) -> None:
+        rows = self._identifiers.get(person_id, [])
+        self._identifiers[person_id] = [i for i in rows if i.id != identifier_id]
 
     async def list_pending_review(self, *, limit: int, offset: int) -> list[ComposerSummary]:
         pending = [c for c in self._composers.values()
@@ -754,17 +754,17 @@ class InMemoryComposerRepository(ComposerRepository):
         return [ComposerSummary(id=c.id, name=c.name, status=c.status,
                                 review_status=c.review_status or "not_reviewed") for c in page]
 
-    async def get_detail(self, composer_id: str):
-        composer = self._composers.get(composer_id)
+    async def get_detail(self, person_id: str):
+        composer = self._composers.get(person_id)
         if composer is None:
             return None
-        bio = getattr(self, "_biographies", {}).get(composer_id, {})
+        bio = getattr(self, "_biographies", {}).get(person_id, {})
         return ComposerDetail(
             id=composer.id,
             name=composer.name,
             status=composer.status,
             aliases=[a.alias for a in self._aliases.get(composer.id, [])],
-            works_count=sum(1 for (wid, _) in self._works.values() if wid == composer_id),
+            works_count=sum(1 for (wid, _) in self._works.values() if wid == person_id),
             merged_into=composer.merged_into,
             merged_at=composer.merged_at,
             review_status=composer.review_status or "not_reviewed",
@@ -779,14 +779,14 @@ class InMemoryComposerRepository(ComposerRepository):
             biography_key_works=list(bio.get("key_works") or []),
             biography_key_fact=bio.get("key_fact"),
             biography_references=list(bio.get("references") or []),
-            creation_evidence=list(self._evidence.get(composer_id, [])),
+            creation_evidence=list(self._evidence.get(person_id, [])),
         )
 
-    async def list_works(self, composer_id: str, *, limit: int, offset: int):
-        rows = [(wid, cid, t) for (wid, (cid, t)) in self._works.items() if cid == composer_id]
+    async def list_works(self, person_id: str, *, limit: int, offset: int):
+        rows = [(wid, cid, t) for (wid, (cid, t)) in self._works.items() if cid == person_id]
         rows.sort(key=lambda r: r[0])
         return [
-            ComposerWorkRef(work_id=wid, title=t, composer_id=cid)
+            ComposerWorkRef(work_id=wid, title=t, person_id=cid)
             for (wid, cid, t) in rows[offset : offset + limit]
         ]
 
@@ -828,7 +828,7 @@ class InMemoryComposerRepository(ComposerRepository):
         for sid in to_merge:
             for alias in self._aliases.get(sid, []):
                 self._aliases.setdefault(target_id, []).append(alias)
-                alias.composer_id = target_id
+                alias.person_id = target_id
                 self._by_normalized[alias.normalized_alias] = target_id
                 aliases_transferred += 1
             self._aliases[sid] = []
@@ -842,7 +842,7 @@ class InMemoryComposerRepository(ComposerRepository):
         # Evidencia de creación: se redirige al target, nunca se borra.
         for sid in to_merge:
             for ev in self._evidence.get(sid, []):
-                ev.composer_id = target_id
+                ev.person_id = target_id
                 self._evidence.setdefault(target_id, []).append(ev)
             self._evidence[sid] = []
 
@@ -867,13 +867,13 @@ class InMemoryVotingRepository(VotingRepository):
     def __init__(self) -> None:
         self._votes: list[Vote] = []
         self._seq = 0
-        # work_id -> composer_id
+        # work_id -> person_id
         self._works: dict[int, str] = {}
         self._work_stats: dict[int, WorkStatistics] = {}
         self._composer_stats: dict[str, ComposerStatistics] = {}
 
-    def set_work(self, work_id: int, composer_id: str) -> None:
-        self._works[work_id] = composer_id
+    def set_work(self, work_id: int, person_id: str) -> None:
+        self._works[work_id] = person_id
 
     async def add_vote(self, user_id: str, work_id: int, vote: int) -> Vote:
         from domain.exceptions import DuplicateVote
@@ -896,8 +896,8 @@ class InMemoryVotingRepository(VotingRepository):
     async def get_work_statistics_bulk(self, work_ids: list[int]) -> dict[int, WorkStatistics]:
         return {wid: self._work_stats[wid] for wid in work_ids if wid in self._work_stats}
 
-    async def get_composer_statistics(self, composer_id: str) -> ComposerStatistics | None:
-        return self._composer_stats.get(composer_id)
+    async def get_composer_statistics(self, person_id: str) -> ComposerStatistics | None:
+        return self._composer_stats.get(person_id)
 
     async def recompute_all(self) -> StatisticsRun:
         from collections import defaultdict
@@ -933,7 +933,7 @@ class InMemoryVotingRepository(VotingRepository):
             vcounts = [self._work_stats[wid].vote_count for wid in wids if wid in self._work_stats]
             total_votes = sum(vcounts)
             self._composer_stats[cid] = ComposerStatistics(
-                composer_id=cid,
+                person_id=cid,
                 rating=composer_rating(adjusted, vcounts),
                 adjusted_rating=composer_rating(adjusted, vcounts),
                 vote_count=total_votes,
@@ -1116,8 +1116,8 @@ class InMemoryWorkRepository(WorkRepository):
         }
         self._seq = 0
 
-    async def list_by_composer(self, composer_id: str, *, limit: int = 100, offset: int = 0) -> list[Work]:
-        items = [w for w in self._items.values() if w.composer_id == composer_id]
+    async def list_by_composer(self, person_id: str, *, limit: int = 100, offset: int = 0) -> list[Work]:
+        items = [w for w in self._items.values() if w.person_id == person_id]
         items.sort(key=lambda w: w.id or 0)
         return items[offset : offset + limit]
 

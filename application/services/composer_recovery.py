@@ -92,10 +92,10 @@ class ComposerRecoveryService:
     async def recover(
         self, work: Work, *, old_composer: ComposerSummary | None = None
     ) -> ComposerResolution:
-        old_id = work.composer_id
+        old_id = work.person_id
         if not work.title:
             resolution = ComposerResolution(
-                work_id=work.id, old_composer_id=old_id, reason="no_title",
+                work_id=work.id, old_person_id=old_id, reason="no_title",
                 resolver_version=RESOLVER_VERSION,
                 decision=ComposerResolutionDecision.PENDING_HUMAN,
             )
@@ -106,7 +106,7 @@ class ComposerRecoveryService:
             envelope = await self._osap_api.resolve_composer(payload)
         except Exception:
             resolution = ComposerResolution(
-                work_id=work.id, old_composer_id=old_id, reason="error",
+                work_id=work.id, old_person_id=old_id, reason="error",
                 resolver_version=RESOLVER_VERSION,
                 decision=ComposerResolutionDecision.PENDING_HUMAN,
             )
@@ -133,8 +133,8 @@ class ComposerRecoveryService:
 
         resolution = ComposerResolution(
             work_id=work.id,
-            old_composer_id=old_id,
-            candidate_composer_id=None,
+            old_person_id=old_id,
+            candidate_person_id=None,
             reason=status,
             evidence=evidence_json,
             confidence=confidence,
@@ -144,7 +144,7 @@ class ComposerRecoveryService:
 
         if status == "resolved" and api_composer:
             canonical = await self._apply_canonical(work, api_composer)
-            resolution.candidate_composer_id = canonical.id
+            resolution.candidate_person_id = canonical.id
             resolution.decision = "resolved"
         return await self._composers.record_resolution(resolution)
 
@@ -173,7 +173,7 @@ class ComposerRecoveryService:
                     composer.id, a, normalize_composer_name(a)
                 )
 
-        work.composer_id = composer.id
+        work.person_id = composer.id
         work.composer = name
         await self._works.update(work)
         return composer

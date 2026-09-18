@@ -170,11 +170,13 @@ Son las obras que quedan sin relación de compositor (PDMX con texto `NA`/no-per
    texto/JSON crudo de instrumentación de CPDL (56.420 filas) y **se mantiene**. Falta un
    proceso que lo **normalice a `work_instruments`** (mapeando términos con `instruments`),
    como ya se hace con el enriquecimiento PDMX (`map_instrumentation.py`).
-2. **SHA-256 / `works_music_digest`**: `files.sha256` está vacío en toda la BBDD (también en
-   `osap-storage_v1`); el hash nunca se calculó en este entorno (lo produce
-   `scripts/analyze_works_content.py` sobre los `.mxl`). `works_music_digest` (clave de
-   duplicados creada en la conversión) está a 0. Decisión: **calcular sha256 primero** y,
-   cuando exista, **eliminar `works_music_digest`** (no aporta nada frente al sha256).
+2. **SHA-256 / `works_music_digest`** — *prioridad baja (2026-09-17), en pendientes*:
+   `files.sha256` está vacío en toda la BBDD (también en `osap-storage_v1`); el hash nunca se
+   calculó en este entorno (lo produce `scripts/analyze_works_content.py` sobre los `.mxl` de
+   `G:\osap-storage`). `works_music_digest` (clave de duplicados creada en la conversión) está
+   a 0. Decisión: **calcular sha256 primero** y, cuando exista, **eliminar
+   `works_music_digest`** (no aporta nada frente al sha256). Cuando se haga: re-ejecutar el
+   script con `--only-missing` (ya tiene la query preparada con `music_digest IS NULL`).
 3. **`work_person_roles_attribution_type`**: eliminada (estaba vacía, 0/212.999).
 4. **Mantenimiento**: falta el **formulario de `works` con los 6 paneles de relaciones**
    (persona+rol, ensembles, genres, instruments, language, voices). Backend ya hecho.
@@ -207,8 +209,90 @@ Consultas de resolución:
 Script: `scripts/migrate_identity_fusion.sql`. Backups: `persons_authority_bak`,
 `persons_authority_name_bak`, `persons_identifiers_bak`.
 
-**Pendiente**: los scripts de reconstrucción (`incorporate_from_authority.py`,
-`incorporate_cpdl_composers.py`, `resolve_import_ai.py`, `resolve_composers_web.py`,
-`link_works_person_import.py`, `resolve_persons.py`, `normalize_authority_names.py`) aún
-referencian las tablas antiguas y hay que repuntarlos a `persons_identity` antes del próximo
-reciclado completo.
+**Resuelto (2026-09-17)**: los scripts de reconstrucción están repuntados a
+`persons_identity`/`persons_evidence` y verificados en seco: `resolve_persons.py`,
+`link_works_person_import.py`, `incorporate_from_authority.py`,
+`incorporate_cpdl_composers.py`, `resolve_composers_web.py` y `resolve_import_ai.py`.
+`normalize_authority_names.py` quedó obsoleto (lo sustituye `normalize_identity_names.py`).
+
+Se **retiraron 8 scripts** del pipeline antiguo que apuntaban a tablas ya inexistentes
+(`composer_candidate`, `composer_identity_resolution`, `composer_authority`,
+`composer_identifiers`, `composer_evidence`, `persons_authority*`, `persons_identifiers`):
+`candidate_cleanup.py`, `candidate_priority.py`, `catalog_statistics.py`,
+`incorporate_candidates.py`, `incorporate_resolutions.py`, `load_composer_authority.py`,
+`test_authority_coverage.py`, `normalize_authority_names.py`.
+
+Con esto el **módulo de identidad queda cerrado** (código). En datos siguen pendientes los
+547 artistas de staging y las obras sin compositor (ver §9 para cifras actuales).
+
+---
+
+## 9. Contratos de repositorios contra el esquema nuevo (2026-09-17)
+
+Los tests unitarios usan **fakes en memoria** y no ejecutan SQL; sólo `tests/integration`
+tocaba la BBDD, con 8 comprobaciones de existencia. Se ha añadido
+**`tests/integration/test_repository_contracts.py`** (17 tests) que ejercitan cada
+repositorio contra el esquema nuevo, en una **copia** `osap-storage_test` (nunca la
+principal, porque algunas pruebas escriben y limpian):
+
+| Repositorio | Qué valida |
+|---|---|
+| `SqlWorkRepository` | round-trip por `works_key`; listas desde `work_genres`/`work_instruments`; `replace_*` con restauración; `list_by_composer` = rol 1; búsqueda |
+| `SqlComposerRepository` | `list_summaries` solo con obras; `get_detail` con identificadores/alias desde `persons_identity`/`persons_aliases`; alta de alias + `resolve_by_normalized`; `find_by_identifier`; alta de identificador y de evidencia (con limpieza) |
+| `SqlVotingRepository` | `add_vote` → `recompute_all` → `work_statistics` |
+| `SqlCatalogueRepository` | `list_all` / `get_by_prefix` |
+| `SqlTableCrudRepository` | whitelist completa (incl. tablas CPDL nuevas); FK nuevas; columnas nuevas; `read_one` |
+
+Ejecución:
+
+    $env:OSAP_TEST_DB = "1"; $env:OSAP_TEST_DB_NAME = "osap-storage_test"
+    .venv\\Scripts\\python.exe -m pytest tests/integration -q    # 25 pasan
+
+**Bugs reales encontrados y corregidos**:
+- `SqlComposerRepository.add_identifier` y `set_musicbrainz_id` insertaban en
+  `persons_identity` **sin `identity_name`/`identity_name_norm`** (NOT NULL). En modo no
+  estricto entraba `''` con warning; con `STRICT_TRANS_TABLES` fallaría.
+- La whitelist del CRUD genérico no incluía `cpdl_editions`, `cpdl_edition_files` ni
+  `cpdl_edition_persons`.
+
+**Cifras actuales de atribución** (rol 1 en `works_person_roles`):
+`works` 310.455 · con compositor **133.431** · sin compositor **177.024** (174.060 PDMX +
+2.964 CPDL) · `persons` 45.217 · relaciones rol 1 **134.374** · personas sin obra **1.891**.
+De las PDMX sin compositor, **162.974 no tienen ni fila en `works_person_import`** (el dato
+no está en la BBDD; habría que leerlo de los `.mxl`), por lo que la atribución depende del
+**fichero de compositores** (decisión pendiente #1).
+
+### 9.1 Renombrado `Composer` → `Person` (2026-09-17, en curso)
+
+Decisión #3 resuelta con **alcance por pasos y alias de compatibilidad** (elegido): se
+renombra la capa canónica y se mantienen los nombres antiguos para no romper nada.
+
+Hecho:
+- `domain/entities/person.py` — `Person`, `PersonAlias`, `PersonIdentifier`, `PersonEvidence`,
+  `PersonCreationEvidence`, `PersonSummary`, `PersonDetail`, `PersonWorkRef`, `PersonStatus`,
+  `PersonResolution`, `PersonResolutionDecision`, `MergePersonsResult`, `UNKNOWN_PERSON(_ID)`.
+- `domain/ports/person_repository.py` — `PersonRepository`.
+- `infrastructure/repositories/sql_person_repository.py` — `SqlPersonRepository` (implementación canónica).
+- Compatibilidad (re-export): `domain/entities/composer.py`, `domain/ports/composer_repository.py`,
+  `infrastructure/repositories/sql_composer_repository.py`.
+- Migrados a los nombres nuevos: `infrastructure/container.py`, `scripts/run_works_matching.py`
+  y los tests de integración.
+
+Campos renombrados (**`composer_id` → `person_id`**, incluidos `composer_ids`,
+`from_/target_/old_/candidate_composer_id` y el camelCase `composerId`/`composerIds` de la web)
+en **ambos repos**, propagado a `application/use_cases/*`, `api/*` (schemas/rutas/DTOs),
+`scripts/*` y tests; también el contrato consumido por `osap-api`
+(`storage/work_store.py`, `storage/storage_composer_client.py`, `api/contracts/votes.py`, web).
+
+Verificación:
+- `osap-storage`: `ruff` limpio · **231 unit + 31 integración en verde** (el contrato de la API
+  ya expone `person_id`).
+- `osap-api`: **654 tests pasan**; 2 fallos **ajenos al renombrado** (falta
+  `openapi_spec_validator` porque se ejecutó con el venv de osap-storage —el suyo apunta a
+  `C:\Python313`, inexistente— y `test_select_best_representation` por `imslp: descarga
+  fallida`). Su venv hay que recrearlo para correr la suite en condiciones.
+
+Pendiente (paso posterior): **nombres de método** del puerto (`rename_composer`,
+`update_composer`, `prune_zero_work_composers`…), del módulo `composer_admin`, las **rutas**
+`/api/admin/composers*` y `/api/v1/composers*`, y los nombres de módulo `composer_*`. No
+afectan al contrato de datos ya renombrado.

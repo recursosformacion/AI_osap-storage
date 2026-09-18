@@ -21,7 +21,7 @@ class VotingRepository(Protocol):
     async def get_work_statistics_bulk(self, work_ids: list[int]) -> dict[int, WorkStatistics]:
         """Recupera estadísticas de varias obras (sin N+1)."""
 
-    async def get_composer_statistics(self, composer_id: str) -> ComposerStatistics | None: ...
+    async def get_composer_statistics(self, person_id: str) -> ComposerStatistics | None: ...
 
     async def recompute_all(self) -> StatisticsRun:
         """Recalcula todas las estadísticas derivadas. Idempotente. Transaccional."""

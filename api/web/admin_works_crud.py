@@ -96,7 +96,7 @@ function loadToken(){
   else { $("tokenCard").classList.remove("hidden"); }
 }
 const SCALARS = [
-  ["title","Título"],["subtitle","Subtítulo"],["composer","Compositor"],["composer_id","composer_id"],
+  ["title","Título"],["subtitle","Subtítulo"],["composer","Compositor"],["person_id","person_id"],
   ["artist","Artista"],["song_name","Song name"],["genre","Género"],["opus","Opus"],
   ["catalogue","Catálogo"],["musical_key","Tonalidad"],["year","Año","number"],
   ["instrumentation","Instrumentación"],["language","Idioma"],["duration","Duración"],

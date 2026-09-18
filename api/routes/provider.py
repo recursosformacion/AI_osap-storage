@@ -104,7 +104,7 @@ def _work(detail: WorkDetail) -> dict[str, Any]:
         "id": w.id,
         "title": w.title,
         "composer": display_composer(w.composer),
-        "composer_id": w.composer_id,
+        "person_id": w.person_id,
         "catalogue": w.catalogue,
         "aliases": [],
         "metadata": _metadata(detail),

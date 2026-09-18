@@ -70,7 +70,7 @@ def test_resolve_many_batch_and_no_n_plus_one():
 
 
 def test_duplicate_normalized_alias_same_composer_rejected():
-    """UNIQUE por (composer_id, normalized_alias): duplicar dentro de la misma
+    """UNIQUE por (person_id, normalized_alias): duplicar dentro de la misma
     persona se rechaza, pero el mismo alias puede existir en compositores distintos."""
     repo, cid = _seed()
     with pytest.raises(DuplicateComposerAlias):

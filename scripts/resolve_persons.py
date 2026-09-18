@@ -4,9 +4,9 @@ las relaciones `works_person_roles` (rol 1 = Composer).
 Estrategia de resolución, por nombre:
 1) `persons.persons_name` (normalizado)
 2) `persons_aliases` (alias normalizado)
-3) autoridad (`persons_authority_name.normalized_name` -> `persons_authority`): si la
-   autoridad ya está enlazada a una persona se usa; si no, se crea la persona con el
-   `canonical_name` de la autoridad y se enlaza.
+3) autoridad/candidatos en `persons_identity` (fila ancla, `identity_is_anchor = 1`): si el
+   candidato ya está enlazado a una persona (`persons_id`) se usa; si no, se crea la persona
+   con su `identity_name` y se enlazan sus filas marcándoles `persons_id`.
 4) si no hay coincidencia, se crea una persona nueva con el nombre original.
 
 Los artistas (rol `artist`) NO se resuelven aquí: se quedan en staging.
@@ -89,18 +89,17 @@ async def run(db_name: str, dry_run: bool) -> None:
         for r in await cur.fetchall():
             by_norm.setdefault(norm(r["person_aliases_alias"]), r["person_id"])
 
+        # Autoridad/candidatos: en la identidad fusionada la fila ancla (`identity_is_anchor=1`)
+        # guarda el nombre canónico y su `identity_name_norm`; `persons_id` NULL = candidato.
         await cur.execute(
-            "SELECT pa.authority_id, pa.persons_authority_canonical_name, pa.persons_id "
-            "FROM persons_authority pa"
+            "SELECT identity_name, identity_name_norm, persons_id FROM persons_identity "
+            "WHERE identity_is_anchor = 1"
         )
-        auth_by_id: dict[int, tuple[str, str | None]] = {
-            int(r["authority_id"]): (r["persons_authority_canonical_name"], r["persons_id"])
-            for r in await cur.fetchall()
-        }
-        auth_key: dict[str, int] = {}
-        await cur.execute("SELECT authority_id, persons_authority_name_normalized_name FROM persons_authority_name")
+        auth_key: dict[str, tuple[str, str | None]] = {}
         for r in await cur.fetchall():
-            auth_key.setdefault(str(r["persons_authority_name_normalized_name"]), int(r["authority_id"]))
+            k = str(r["identity_name_norm"] or "")
+            if k:
+                auth_key.setdefault(k, (str(r["identity_name"]), r["persons_id"]))
 
         await cur.execute(
             "SELECT works_id, works_person_import_name, works_person_import_source "
@@ -112,7 +111,7 @@ async def run(db_name: str, dry_run: bool) -> None:
     resolved: list[tuple[int, str]] = []
     cache: dict[str, str] = {}
     stats = {"personas_existentes": 0, "autoridad": 0, "autoridad_nueva": 0, "nuevas": 0}
-    auth_to_link: list[tuple[int, str]] = []
+    auth_to_link: list[tuple[str, str]] = []
 
     for r in rows:
         wid = int(r["works_id"])
@@ -127,7 +126,7 @@ async def run(db_name: str, dry_run: bool) -> None:
                 akey = composer_key(raw)
                 auth = auth_key.get(akey)
                 if auth is not None:
-                    cname, linked = auth_by_id.get(auth, (raw, None))
+                    cname, linked = auth
                     if linked:
                         pid = linked
                         stats["autoridad"] += 1
@@ -139,7 +138,7 @@ async def run(db_name: str, dry_run: bool) -> None:
                             created.append((pid, cname, "resolved"))
                             by_norm[ckey] = pid
                             stats["autoridad_nueva"] += 1
-                            auth_to_link.append((auth, pid))
+                            auth_to_link.append((akey, pid))
                         else:
                             stats["personas_existentes"] += 1
                 else:
@@ -163,10 +162,11 @@ async def run(db_name: str, dry_run: bool) -> None:
                 "VALUES (%s,%s,%s)",
                 created,
             )
-        for auth_id, pid in auth_to_link:
+        for akey, pid in auth_to_link:
             await cur.execute(
-                "UPDATE persons_authority SET persons_id=%s WHERE authority_id=%s AND persons_id IS NULL",
-                (pid, auth_id),
+                "UPDATE persons_identity SET persons_id=%s "
+                "WHERE identity_name_norm=%s AND persons_id IS NULL",
+                (pid, akey),
             )
         if resolved:
             await cur.executemany(

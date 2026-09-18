@@ -206,7 +206,7 @@ def test_works_of_composer(client):
     body = resp.json()
     assert body["total"] == 3
     assert len(body["items"]) == 2
-    assert set(body["items"][0].keys()) == {"work_id", "title", "composer_id"}
+    assert set(body["items"][0].keys()) == {"work_id", "title", "person_id"}
 
 
 def test_merge_and_verify(client):

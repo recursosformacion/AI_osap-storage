@@ -6,7 +6,7 @@ lectura) y escribe en las tablas del Maestro mediante los repositorios de
 osap-storage:
 
 - Composer ya existe (por alias, nombre o identificador) -> asocia la obra
-  (works.composer_id) y works_count queda derivado (COUNT).
+  (works.person_id) y works_count queda derivado (COUNT).
 - Composer NO existe pero la evidencia del proveedor es sólida
   (MBID/VIAF/ISNI/IPI/QID/IMSLP o combinación) -> CREA el Composer (idempotente
   por SELECT previo de identificador; active/visible=1), con aliases,
@@ -48,7 +48,7 @@ sys.path.insert(0, str(ROOT))
 from domain.entities.composer import Composer, ComposerStatus  # noqa: E402
 from infrastructure.config import Settings  # noqa: E402
 from infrastructure.db.connection import Database  # noqa: E402
-from infrastructure.repositories.sql_composer_repository import SqlComposerRepository  # noqa: E402
+from infrastructure.repositories.sql_person_repository import SqlPersonRepository  # noqa: E402
 
 PIPELINE_VERSION = "osap-api-resolve-v1"
 MATCHER_VERSION = "works-matching-0.1.0"
@@ -111,7 +111,7 @@ class ResolveClient:
 class Matcher:
     """Clasificación + escritura (repositorios de osap-storage)."""
 
-    def __init__(self, repo: SqlComposerRepository, db: Database) -> None:
+    def __init__(self, repo: SqlPersonRepository, db: Database) -> None:
         self._repo = repo
         self._db = db
 
@@ -172,11 +172,11 @@ class Matcher:
             matcher_version=MATCHER_VERSION)
         return composer
 
-    async def associate(self, work_id: int, composer_id: str) -> None:
+    async def associate(self, work_id: int, person_id: str) -> None:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "UPDATE works SET composer_id = %s, updated_at = NOW(6) WHERE id = %s",
-                (composer_id, work_id))
+                "UPDATE works SET person_id = %s, updated_at = NOW(6) WHERE id = %s",
+                (person_id, work_id))
 
     def classify(self, work_status: str | None, name: str | None,
                  identifiers: dict[str, str]) -> dict:
@@ -222,7 +222,7 @@ def main() -> int:
     base = Settings()  # type: ignore[call-arg]
     settings = base.model_copy(update={"db_name": args.db or base.db_name})
     db = Database(settings)
-    repo = SqlComposerRepository(db)
+    repo = SqlPersonRepository(db)
     client = ResolveClient(args.api)
     matcher = Matcher(repo, db)
 
@@ -249,10 +249,10 @@ def main() -> int:
         sem = asyncio.Semaphore(args.workers)
         lock = asyncio.Lock()
 
-        async def checkpoint(wid: int, status: str, composer_id: str | None = None,
+        async def checkpoint(wid: int, status: str, person_id: str | None = None,
                              visible: bool | None = None, cs: str | None = None) -> None:
             async with lock:
-                _checkpoint(checkpoint_path, run_id, wid, status, composer_id, visible, cs)
+                _checkpoint(checkpoint_path, run_id, wid, status, person_id, visible, cs)
 
         async def process(row: dict) -> None:
             wid = int(row["id"])
@@ -265,8 +265,8 @@ def main() -> int:
                 return
             # idempotencia: ¿ya asociada a un Composer del Maestro?
             async with db.connection() as conn, conn.cursor() as cur:
-                await cur.execute("SELECT composer_id FROM works WHERE id = %s", (wid,))
-                current = (await cur.fetchone() or {}).get("composer_id")
+                await cur.execute("SELECT person_id FROM works WHERE id = %s", (wid,))
+                current = (await cur.fetchone() or {}).get("person_id")
             if current:
                 existing = await repo.get_by_id(current)
                 if existing and existing.status != ComposerStatus.MERGED:
@@ -325,7 +325,7 @@ def main() -> int:
                 await matcher.associate(wid, new_c.id)
             created.append({"work_id": wid, "provider_composer": composer,
                             "provider_identifiers": provider_ids,
-                            "composer_id": str(new_c.id) if new_c else "DRY-RUN",
+                            "person_id": str(new_c.id) if new_c else "DRY-RUN",
                             "works_count": 1})
             await checkpoint(wid, "composer_created", str(new_c.id) if new_c else None)
             print(f"  work {wid}: {work_status} | {decision['composer_match']} | "
@@ -378,11 +378,11 @@ def main() -> int:
 
 
 def _checkpoint(path: Path, run_id: str, work_id: int, status: str,
-                composer_id: str | None, visible: bool | None = None,
+                person_id: str | None, visible: bool | None = None,
                 composer_status: str | None = None) -> None:
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps({"run_id": run_id, "work_id": work_id, "status": status,
-                            "composer_id": composer_id, "visible": visible,
+                            "person_id": person_id, "visible": visible,
                             "composer_status": composer_status}, ensure_ascii=False) + "\n")
 
 

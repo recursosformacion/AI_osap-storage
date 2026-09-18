@@ -53,7 +53,7 @@ def test_merge_redirects_evidence_and_never_deletes():
     # La evidencia del source se redirige al target; el source queda sin evidencia propia.
     target_ev = asyncio.run(repo.list_creation_evidence("target"))
     assert len(target_ev) == 1
-    assert target_ev[0].composer_id == "target"
+    assert target_ev[0].person_id == "target"
     assert target_ev[0].work_title == "BWV 846"
     assert asyncio.run(repo.list_creation_evidence("source")) == []
 

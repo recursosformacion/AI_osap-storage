@@ -18,8 +18,8 @@ class FakeOsapApi:
         return self._responses.pop(0) if self._responses else {"data": {"status": "not_found"}}
 
 
-def _work(title: str, work_id: int = 1, composer_id: str = "susp", catalogue=None):
-    return Work(id=work_id, work_key=f"k{work_id}", title=title, composer_id=composer_id,
+def _work(title: str, work_id: int = 1, person_id: str = "susp", catalogue=None):
+    return Work(id=work_id, work_key=f"k{work_id}", title=title, person_id=person_id,
                 catalogue=catalogue)
 
 
@@ -59,10 +59,10 @@ def test_resolved_applies_canonical():
     work = asyncio.run(works.get_by_id(1))
     res = asyncio.run(svc.recover(work))
     assert res.decision == "resolved"
-    assert res.old_composer_id == "susp"
+    assert res.old_person_id == "susp"
     # la obra pasa al compositor canónico, no al corrupto
-    assert work.composer_id != "susp"
-    assert asyncio.run(works.get_by_id(1)).composer_id == work.composer_id
+    assert work.person_id != "susp"
+    assert asyncio.run(works.get_by_id(1)).person_id == work.person_id
     assert asyncio.run(works.get_by_id(1)).composer == "Xiao Youmei"
     # auditoría guardada con el envelope
     resolutions = asyncio.run(composers.list_resolutions(1))
@@ -81,7 +81,7 @@ def test_ambiguous_pending_human():
     res = asyncio.run(svc.recover(work))
     assert res.decision == "pending_human"
     assert res.reason == "ambiguous"
-    assert asyncio.run(works.get_by_id(1)).composer_id == "susp"  # no cambia
+    assert asyncio.run(works.get_by_id(1)).person_id == "susp"  # no cambia
 
 
 def test_not_found_pending_human_no_invent():
@@ -92,8 +92,8 @@ def test_not_found_pending_human_no_invent():
     res = asyncio.run(svc.recover(work))
     assert res.decision == "pending_human"
     assert res.reason == "not_found"
-    assert res.candidate_composer_id is None
-    assert asyncio.run(works.get_by_id(1)).composer_id == "susp"
+    assert res.candidate_person_id is None
+    assert asyncio.run(works.get_by_id(1)).person_id == "susp"
 
 
 def test_no_title_pending():
@@ -113,7 +113,7 @@ def test_recover_batch_resolved_and_skips():
         {"data": {"status": "not_found", "composer": None}},
     ])
     # dos obras del mismo compositor sospechoso
-    asyncio.run(works.create(_work("Otra obra", work_id=2, composer_id="susp")))
+    asyncio.run(works.create(_work("Otra obra", work_id=2, person_id="susp")))
     asyncio.run(composers.set_suspicious("susp", True, "encoding_anomaly"))
     stats = asyncio.run(svc.recover_batch(limit=5))
     assert stats.recovered == 1

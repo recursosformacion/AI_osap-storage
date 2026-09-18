@@ -18,7 +18,7 @@ import pytest
 from infrastructure.config import Settings
 from infrastructure.db.connection import Database
 from infrastructure.repositories.sql_catalogue_repository import SqlCatalogueRepository
-from infrastructure.repositories.sql_composer_repository import SqlComposerRepository
+from infrastructure.repositories.sql_person_repository import SqlPersonRepository
 from infrastructure.repositories.sql_table_crud_repository import TABLES, SqlTableCrudRepository
 from infrastructure.repositories.sql_voting_repository import SqlVotingRepository
 from infrastructure.repositories.sql_work_repository import SqlWorkRepository
@@ -86,7 +86,7 @@ async def test_works_search_and_lists_run(db: Database) -> None:
 
 
 async def test_composer_repository_lists_only_composers(db: Database) -> None:
-    repo = SqlComposerRepository(db)
+    repo = SqlPersonRepository(db)
     summaries = await repo.list_summaries(limit=10, offset=0)
     assert summaries, "debe haber personas con rol compositor"
     assert all(s.works_count >= 1 for s in summaries), "el listado es solo de quien tiene obras"
@@ -97,7 +97,7 @@ async def test_composer_repository_lists_only_composers(db: Database) -> None:
 
 
 async def test_composer_detail_and_works(db: Database) -> None:
-    repo = SqlComposerRepository(db)
+    repo = SqlPersonRepository(db)
     summary = (await repo.list_summaries(limit=1, offset=0))[0]
 
     detail = await repo.get_detail(summary.id)
@@ -106,7 +106,7 @@ async def test_composer_detail_and_works(db: Database) -> None:
 
     works = await repo.list_works(summary.id, limit=5, offset=0)
     assert works
-    assert all(w.composer_id == summary.id for w in works)
+    assert all(w.person_id == summary.id for w in works)
     assert all(w.title for w in works)
 
 

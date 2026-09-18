@@ -69,7 +69,7 @@ async def update_work(
 ) -> WorkAdminDetail:
     work = Work(
         composer=payload.composer,
-        composer_id=payload.composer_id,
+        person_id=payload.person_id,
         title=payload.title,
         subtitle=payload.subtitle,
         artist=payload.artist,

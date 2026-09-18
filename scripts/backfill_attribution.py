@@ -5,7 +5,7 @@ Toma las obras cuyo `composer` es una atribución no-persona (anónima, tradicio
 atribuida) y las mueve a los campos nuevos:
   attribution_type  -> ANONIMA / TRADICIONAL / POPULAR / ATRIBUIDA (según patrón)
   attribution_note  -> el texto original (ej. "Traditional English")
-y limpia composer / composer_id (para no tratarlas como persona).
+y limpia composer / person_id (para no tratarlas como persona).
 
 Idempotente: solo procesa obras con composer no vacío que matchee los patrones.
 
@@ -58,7 +58,7 @@ def main() -> int:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, composer, composer_id, attribution_type FROM works "
+                "SELECT id, composer, person_id, attribution_type FROM works "
                 "WHERE composer IS NOT NULL AND TRIM(composer)<>''"
             )
             rows = cur.fetchall()
@@ -90,7 +90,7 @@ def main() -> int:
                 for wid, tipo, note in matched:
                     cur.execute(
                         "UPDATE works SET attribution_type=%s, attribution_note=%s, "
-                        "composer=NULL, composer_id=NULL WHERE id=%s",
+                        "composer=NULL, person_id=NULL WHERE id=%s",
                         (tipo, note[:255], wid),
                     )
                 for wid, tipo in corrected:

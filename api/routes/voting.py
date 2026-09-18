@@ -53,14 +53,14 @@ async def work_statistics(
 
 
 @router.get(
-    "/composers/{composer_id}/statistics",
+    "/composers/{person_id}/statistics",
     response_model=ComposerStatisticsRead,
     summary="Valoración agregada de un Composer",
     description="Works, votos y valoración media del compositor canónico. Si el id es un "
     "compositor fusionado, devuelve la del compositor activo destino.",
 )
 async def composer_statistics(
-    composer_id: str,
+    person_id: str,
     uc: GetComposerStatistics = Depends(GetComposerStatisticsDep),
 ) -> ComposerStatisticsRead:
-    return ComposerStatisticsRead.model_validate(await uc.execute(composer_id))
+    return ComposerStatisticsRead.model_validate(await uc.execute(person_id))
