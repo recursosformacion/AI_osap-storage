@@ -437,6 +437,17 @@ MIDI 44.850, MP3 10.267, CAPX 9.030, MUS 8.465, SIB 6.399, MSCZ 2.115, MusicXML 
 Notas: el `cpdlno` **no es único** (48 duplicados reales: la misma edición listada en dos
 páginas) y `cpdlno=0` se descartó como artefacto.
 
+> **Modelo provisional (2026-09-18).** `cpdl_editions`/`cpdl_edition_files` se construyeron
+> antes de fijar el nivel *representación*, y **no son la arquitectura definitiva**: están
+> desconectados de la app (no los lee el buscador ni el provider) y no resuelven que las 56.420
+> obras CPDL no tengan recursos. Se sustituirán por `representations` + `works_resources`
+> (`Work → Representation → Resource`), absorbiendo también `archive_entries`/`works_type_file`.
+> Detalle, mapeo y decisiones pendientes en
+> **`docsNew/diseño-representaciones-recursos.md`**. No migrar ni retirar `archive_entries`
+> hasta demostrar con consultas que su información queda cubierta. Datos: **11.242 ediciones sin
+> ficheros** (10.902 con licencia, 10.198 con editor) y una edición con 225 ficheros (media
+> 3,07) → validar el parseo antes de consolidar.
+
 ### 12.3 Instrumentación CPDL — cerrada
 `scripts/map_instrumentation.py` ampliado para los textos libres de CPDL: conectores
 (`, / & + and or with / e`), cantidades iniciales (`2 violins`), plurales, paréntesis

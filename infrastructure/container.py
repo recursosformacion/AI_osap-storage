@@ -38,11 +38,16 @@ from application.use_cases.import_pdmx import PdmxImporter
 from application.use_cases.list_files import ListFiles
 from application.use_cases.materialize_archive import MaterializeArchive
 from application.use_cases.materialize_file import MaterializeFile
+from application.use_cases.persons import GetPerson, GetPersonWorks, ListPersons
 from application.use_cases.providers import CreateProvider, GetProvider, ListProviders
 from application.use_cases.register_existing_file import RegisterExistingFile
 from application.use_cases.register_file import RegisterFile
 from application.use_cases.register_resources import RegisterMirrorResources
+from application.use_cases.representation_admin import RepresentationAdminCrud
+from application.use_cases.resolution import ResolveWorkGrouping
 from application.use_cases.resolve_file import ResolveFile
+from application.use_cases.resource_admin import ResourceAdminCrud
+from application.use_cases.rism_search import SearchRismSources
 from application.use_cases.search_entries import SearchEntries
 from application.use_cases.start_download import StartDownload
 from application.use_cases.statistics import GetStatistics, RefreshStatistics
@@ -69,6 +74,7 @@ from domain.ports.repositories import (
     StorageLocationRepository,
     StorageProviderRepository,
 )
+from domain.ports.representation_repository import RepresentationRepository
 from domain.ports.storage import StorageBackendRegistry
 from domain.ports.tasks import TaskScheduler
 from domain.ports.voting_repository import VotingRepository
@@ -99,8 +105,17 @@ from infrastructure.repositories.sql_file_repository import SqlFileRepository
 from infrastructure.repositories.sql_import_source_repository import SqlImportSourceRepository
 from infrastructure.repositories.sql_job_repository import SqlDownloadJobRepository
 from infrastructure.repositories.sql_location_repository import SqlStorageLocationRepository
+from infrastructure.repositories.sql_person_query_repository import SqlPersonQueryRepository
 from infrastructure.repositories.sql_person_repository import SqlPersonRepository
 from infrastructure.repositories.sql_provider_repository import SqlStorageProviderRepository
+from infrastructure.repositories.sql_representation_admin_repository import (
+    SqlRepresentationAdminRepository,
+)
+from infrastructure.repositories.sql_representation_repository import SqlRepresentationRepository
+from infrastructure.repositories.sql_resolution_source import SqlResolutionSource
+from infrastructure.repositories.sql_resource_admin_repository import SqlResourceAdminRepository
+from infrastructure.repositories.sql_rism_attribution_provider import SqlRismAttributionProvider
+from infrastructure.repositories.sql_rism_source_repository import SqlRismSourceRepository
 from infrastructure.repositories.sql_statistics_repository import SqlStatisticsRepository
 from infrastructure.repositories.sql_table_crud_repository import SqlTableCrudRepository
 from infrastructure.repositories.sql_voting_repository import SqlVotingRepository
@@ -185,6 +200,16 @@ class Container:
     search_works_full: SearchWorksFull
     get_work: GetWork
     enrich_work: EnrichWork
+    representation_repo: RepresentationRepository | None = None
+    resolve_work_grouping: ResolveWorkGrouping | None = None
+    search_rism_sources: SearchRismSources | None = None
+    representation_admin: RepresentationAdminCrud | None = None
+    resource_admin: ResourceAdminCrud | None = None
+    # Personas (modelo nuevo): consultas por rol para la API de osap-api.
+    person_queries: SqlPersonQueryRepository | None = None
+    list_persons: ListPersons | None = None
+    get_person: GetPerson | None = None
+    get_person_works: GetPersonWorks | None = None
 
 
 def build_container(settings: Settings) -> Container:
@@ -196,6 +221,9 @@ def build_container(settings: Settings) -> Container:
     job_repo = SqlDownloadJobRepository(db)
     archive_repo = SqlArchiveRepository(db)
     archive_entry_repo = SqlArchiveEntryRepository(db)
+    representation_repo = SqlRepresentationRepository(db)
+    resolution_source = SqlResolutionSource(db)
+    rism_attributions = SqlRismAttributionProvider(db)
     import_source_repo = SqlImportSourceRepository(db)
     statistics_repo = SqlStatisticsRepository(db)
     work_repo = SqlWorkRepository(db)
@@ -278,8 +306,12 @@ def build_container(settings: Settings) -> Container:
     get_statistics = GetStatistics(refresh_statistics, statistics_repo)
     build_works = BuildWorks(archive_entry_repo, work_repo, composer_resolver)
     search_works = SearchWorks(work_repo, composer_resolver)
-    search_works_full = SearchWorksFull(work_repo, archive_entry_repo, composer_resolver)
-    get_work = GetWork(work_repo, archive_entry_repo, composer_resolver)
+    search_works_full = SearchWorksFull(work_repo, archive_entry_repo, composer_resolver, representation_repo)
+    get_work = GetWork(work_repo, archive_entry_repo, composer_resolver, representation_repo)
+    resolve_work_grouping = ResolveWorkGrouping(resolution_source, rism_attributions)
+    search_rism_sources = SearchRismSources(SqlRismSourceRepository(db))
+    representation_admin = RepresentationAdminCrud(SqlRepresentationAdminRepository(db))
+    resource_admin = ResourceAdminCrud(SqlResourceAdminRepository(db))
     enrich_work = EnrichWork(work_repo, composer_resolver)
     list_composers = ListComposers(composer_repo)
     get_composer_detail = GetComposerDetail(composer_repo)
@@ -311,6 +343,11 @@ def build_container(settings: Settings) -> Container:
     get_work_statistics = GetWorkStatistics(voting_repo, work_repo)
     get_composer_statistics = GetComposerStatistics(voting_repo, composer_repo)
     refresh_voting_statistics = RefreshVotingStatistics(voting_repo)
+
+    person_queries = SqlPersonQueryRepository(db)
+    list_persons = ListPersons(person_queries)
+    get_person = GetPerson(person_queries)
+    get_person_works = GetPersonWorks(person_queries)
 
     return Container(
         settings=settings,
@@ -388,4 +425,13 @@ def build_container(settings: Settings) -> Container:
         search_works_full=search_works_full,
         get_work=get_work,
         enrich_work=enrich_work,
+        representation_repo=representation_repo,
+        resolve_work_grouping=resolve_work_grouping,
+        search_rism_sources=search_rism_sources,
+        representation_admin=representation_admin,
+        resource_admin=resource_admin,
+        person_queries=person_queries,
+        list_persons=list_persons,
+        get_person=get_person,
+        get_person_works=get_person_works,
     )

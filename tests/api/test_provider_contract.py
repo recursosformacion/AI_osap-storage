@@ -32,36 +32,6 @@ from tests.fakes import (
 from api import errors
 
 
-def _settings(tmp_path) -> Settings:
-    cfg = tmp_path / "config.yaml"
-    cfg.write_text(
-        "db:\n"
-        "  host: 127.0.0.1\n"
-        "  port: 3306\n"
-        "  user: dev\n"
-        "  password: devpass\n"
-        "  name: osap_storage\n"
-        "  pool_size: 10\n"
-        "http:\n"
-        "  host: 127.0.0.1\n"
-        "  port: 8000\n"
-        "  public_base_url: http://storage.example\n"
-        "temp_dir: /tmp\n"
-        "bootstrap:\n"
-        "  create_default_provider: false\n"
-        "repository:\n"
-        "  provider: local\n"
-        "  local:\n"
-        "    root: /tmp/data\n",
-        encoding="utf-8",
-    )
-    import os
-
-    os.environ["OSAP_CONFIG"] = str(cfg)
-    os.environ.pop("OSAP_REPOSITORY_PROVIDER", None)
-    return Settings()  # type: ignore[call-arg]
-
-
 def _registry() -> StorageBackendRegistry:
     reg = StorageBackendRegistry()
     reg.register(ProviderType.LOCAL_DISK, MemoryBackend)
@@ -202,8 +172,7 @@ def _app(container: Container) -> FastAPI:
 
 
 @pytest.fixture
-def client(tmp_path):
-    settings = _settings(tmp_path)
+def client(settings):
     work_repo = InMemoryWorkRepository()
     entry_repo = InMemoryArchiveEntryRepository()
     composer_repo = InMemoryComposerRepository()
@@ -239,7 +208,7 @@ def test_search_returns_complete_works(client):
     assert len(body["works"]) == 2
     w = next(w for w in body["works"] if w["id"] == 1)
     expected_keys = {"id", "title", "composer", "person_id", "catalogue", "aliases",
-                     "metadata", "statistics", "resources"}
+                     "metadata", "statistics", "resources", "representations"}
     assert set(w.keys()) == expected_keys
     assert w["composer"] == "Wolfgang Amadeus Mozart"
     assert w["person_id"] == "8f5b3a7e"
@@ -264,7 +233,7 @@ def test_search_returns_complete_works(client):
 def test_search_responses_contain_no_osap_concepts(client):
     body = client.get("/api/search?q=mozart").json()
     text = str(body).lower()
-    for banned in ("representation", "matching", "resolution", "relationship", "knowledge", "work_resolution"):
+    for banned in ("matching", "resolution", "relationship", "knowledge", "work_resolution"):
         assert banned not in text
 
 
@@ -285,7 +254,7 @@ def test_download_redirects_without_internal_paths(client):
     assert location.startswith("http://storage.example/")
 
 
-def test_search_has_no_n_plus_one(tmp_path):
+def test_search_has_no_n_plus_one(settings):
     class CountingEntries(InMemoryArchiveEntryRepository):
         def __init__(self):
             super().__init__()
@@ -304,7 +273,6 @@ def test_search_has_no_n_plus_one(tmp_path):
             self.bulk_calls += 1
             return await super().get_lists_bulk(work_ids)
 
-    settings = _settings(tmp_path)
     work_repo = CountingWorks()
     entry_repo = CountingEntries()
     _seed(work_repo, entry_repo)

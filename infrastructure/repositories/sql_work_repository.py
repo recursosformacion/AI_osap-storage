@@ -175,10 +175,12 @@ class SqlWorkRepository(WorkRepository):
             row = await cur.fetchone()
             return _row_to_work(row) if row else None
 
-    async def search(self, query: str, *, limit: int = 50, offset: int = 0) -> list[Work]:
+    async def search(
+        self, query: str, *, limit: int = 50, offset: int = 0, origins: list[str] | None = None
+    ) -> list[Work]:
         pattern = f"%{query}%"
         prefix = f"{query}%"
-        params = {
+        params: dict = {
             **_SELECT_PARAMS,
             "query": query,
             "prefix": prefix,
@@ -186,9 +188,15 @@ class SqlWorkRepository(WorkRepository):
             "limit": limit,
             "offset": offset,
         }
+        origin_clause = ""
+        if origins:
+            origin_clause = "AND w.works_origin IN (" + ", ".join(
+                f"%(origin{i})s" for i in range(len(origins))
+            ) + ")"
+            params.update({f"origin{i}": value for i, value in enumerate(origins)})
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                f"{_SELECT_ONE} WHERE "
+                f"{_SELECT_ONE} WHERE ("
                 "w.works_title = %(query)s OR w.works_title LIKE %(prefix)s "
                 "OR w.works_title LIKE %(pattern)s "
                 "OR w.works_catalogue LIKE %(pattern)s "
@@ -196,7 +204,8 @@ class SqlWorkRepository(WorkRepository):
                 "OR w.works_attribution_note LIKE %(pattern)s "
                 "OR EXISTS (SELECT 1 FROM works_person_roles r JOIN persons p "
                 "  ON p.persons_id = r.works_person_roles_person_id "
-                "  WHERE r.works_person_roles_work_id = w.id AND p.persons_name LIKE %(pattern)s) "
+                "  WHERE r.works_person_roles_work_id = w.id AND p.persons_name LIKE %(pattern)s)) "
+                f"{origin_clause} "
                 "ORDER BY (CASE WHEN w.works_title = %(query)s THEN 100 "
                 "  WHEN w.works_title LIKE %(prefix)s THEN 90 "
                 "  WHEN w.works_title LIKE %(pattern)s THEN 70 "
@@ -206,14 +215,25 @@ class SqlWorkRepository(WorkRepository):
             )
             return [_row_to_work(row) for row in await cur.fetchall()]
 
-    async def all_(self, *, limit: int = 100, offset: int = 0) -> list[Work]:
-        return await self.list_all(limit=limit, offset=offset)
+    async def all_(
+        self, *, limit: int = 100, offset: int = 0, origins: list[str] | None = None
+    ) -> list[Work]:
+        return await self.list_all(limit=limit, offset=offset, origins=origins)
 
-    async def list_all(self, *, limit: int = 1000, offset: int = 0) -> list[Work]:
+    async def list_all(
+        self, *, limit: int = 1000, offset: int = 0, origins: list[str] | None = None
+    ) -> list[Work]:
+        params: dict = {**_SELECT_PARAMS, "limit": limit, "offset": offset}
+        origin_clause = ""
+        if origins:
+            origin_clause = "WHERE w.works_origin IN (" + ", ".join(
+                f"%(origin{i})s" for i in range(len(origins))
+            ) + ")"
+            params.update({f"origin{i}": value for i, value in enumerate(origins)})
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                f"{_SELECT_ONE} ORDER BY w.id LIMIT %(limit)s OFFSET %(offset)s",
-                {**_SELECT_PARAMS, "limit": limit, "offset": offset},
+                f"{_SELECT_ONE} {origin_clause} ORDER BY w.id LIMIT %(limit)s OFFSET %(offset)s",
+                params,
             )
             return [_row_to_work(row) for row in await cur.fetchall()]
 

@@ -19,7 +19,7 @@ class FileStatus(StrEnum):
 class File:
     """Un fichero registrado, identificado de forma unívoca por su SHA256."""
 
-    sha256: str
+    sha256: str | None
     name: str
     mime_type: str | None = None
     size_bytes: int | None = None
@@ -30,4 +30,6 @@ class File:
 
     def storage_key(self) -> str:
         """Clave de objeto utilizada dentro de un proveedor, derivada del SHA256."""
+        if not self.sha256:
+            raise ValueError(f"file {self.id or self.name!r} has no sha256; cannot derive storage key")
         return f"{self.sha256[:2]}/{self.sha256}"

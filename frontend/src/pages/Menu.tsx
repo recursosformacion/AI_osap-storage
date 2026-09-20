@@ -51,6 +51,12 @@ export default function Menu() {
         </label>
       </div>
 
+      <p>
+        <Link className="btn" to="/representations">
+          Representaciones (obras → representación → recursos)
+        </Link>
+      </p>
+
       {error && <p className="alert alert--error">{error}</p>}
 
       {!loading && groups.length === 0 && (

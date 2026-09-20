@@ -14,7 +14,6 @@ from domain.entities.composer import Composer
 from domain.entities.work import Work
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from infrastructure.config import Settings
 from infrastructure.container import Container
 from infrastructure.providers.registry import StorageBackendRegistry
 from tests.fakes import (
@@ -31,23 +30,6 @@ from tests.fakes import (
 )
 
 from api import errors
-
-
-def _settings(tmp_path) -> Settings:
-    cfg = tmp_path / "config.yaml"
-    cfg.write_text(
-        "db:\n  host: 127.0.0.1\n  port: 3306\n  user: dev\n  password: devpass\n"
-        "  name: osap_storage\n  pool_size: 10\n"
-        "http:\n  host: 127.0.0.1\n  port: 8000\n  public_base_url: http://storage.example\n"
-        "temp_dir: /tmp\nbootstrap:\n  create_default_provider: false\n"
-        "repository:\n  provider: local\n  local:\n    root: /tmp/data\n",
-        encoding="utf-8",
-    )
-    import os
-
-    os.environ["OSAP_CONFIG"] = str(cfg)
-    os.environ.pop("OSAP_REPOSITORY_PROVIDER", None)
-    return Settings()  # type: ignore[call-arg]
 
 
 def _container(settings, works, votes, composers) -> Container:
@@ -143,9 +125,9 @@ def _setup():
 
 
 @pytest.fixture
-def client(tmp_path):
+def client(settings):
     works, votes, composers = _setup()
-    return TestClient(_app(_container(_settings(tmp_path), works, votes, composers)))
+    return TestClient(_app(_container(settings, works, votes, composers)))
 
 
 def _app(container) -> FastAPI:

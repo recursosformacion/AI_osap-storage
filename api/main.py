@@ -21,6 +21,8 @@ from api.metrics import router as metrics_router
 from api.routes import (
     admin_composers,
     admin_epochs,
+    admin_representations,
+    admin_resources,
     admin_tables,
     admin_work_relations,
     admin_works,
@@ -35,11 +37,13 @@ from api.routes import (
     pages,
     provider,
     providers,
+    resolution,
     search,
     statistics,
     voting,
     works,
 )
+from api.routes import persons as persons_routes
 
 
 def _validate_config() -> None:
@@ -130,18 +134,35 @@ def create_app() -> FastAPI:
     app.include_router(admin_works.router)
     app.include_router(admin_tables.router)
     app.include_router(admin_work_relations.router)
+    app.include_router(admin_representations.router)
+    app.include_router(admin_resources.router)
+    app.include_router(resolution.router)
     app.include_router(voting.router)
     app.include_router(catalogues.router)
     app.include_router(composers.router)
+    app.include_router(persons_routes.public_router)
+    app.include_router(persons_routes.admin_router)
     app.include_router(metrics_router)
 
     # Frontend de mantenimiento (React): se sirve el build si existe (frontend/dist).
-    # En desarrollo se usa el servidor de Vite (proxy /api); en producción, este mount.
+    # En desarrollo se usa el servidor de Vite (proxy /api); en producción, este handler.
+    # Fallback SPA: cualquier ruta bajo /admin sin fichero propio devuelve index.html.
     _dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
     if _dist.is_dir():
+        from fastapi.responses import FileResponse
         from fastapi.staticfiles import StaticFiles
 
-        app.mount("/admin", StaticFiles(directory=str(_dist), html=True), name="admin")
+        index = _dist / "index.html"
+        if index.is_file():
+            app.mount("/admin/assets", StaticFiles(directory=str(_dist / "assets")), name="admin-assets")
+
+            @app.get("/admin", include_in_schema=False)
+            @app.get("/admin/{path:path}", include_in_schema=False)
+            async def admin_spa(path: str = "") -> FileResponse:
+                candidate = _dist / path
+                if path and candidate.is_file():
+                    return FileResponse(candidate)
+                return FileResponse(index)
     return app
 
 

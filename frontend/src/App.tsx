@@ -1,6 +1,7 @@
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
 
 import Menu from './pages/Menu'
+import Representations from './pages/Representations'
 import RowForm from './pages/RowForm'
 import TableList from './pages/TableList'
 
@@ -22,6 +23,7 @@ export default function App() {
       <main className="main">
         <Routes>
           <Route path="/" element={<Menu />} />
+          <Route path="/representations" element={<Representations />} />
           <Route path="/t/:table" element={<TableList />} />
           <Route path="/t/:table/new" element={<RowForm mode="new" />} />
           <Route path="/t/:table/:pk" element={<RowForm />} />

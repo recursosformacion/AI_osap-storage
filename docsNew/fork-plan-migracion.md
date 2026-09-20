@@ -178,8 +178,109 @@ Son las obras que quedan sin relación de compositor (PDMX con texto `NA`/no-per
    `works_music_digest`** (no aporta nada frente al sha256). Cuando se haga: re-ejecutar el
    script con `--only-missing` (ya tiene la query preparada con `music_digest IS NULL`).
 3. **`work_person_roles_attribution_type`**: eliminada (estaba vacía, 0/212.999).
-4. **Mantenimiento**: falta el **formulario de `works` con los 6 paneles de relaciones**
-   (persona+rol, ensembles, genres, instruments, language, voices). Backend ya hecho.
+4. **Mantenimiento**: el **formulario de `works` con los 6 paneles de relaciones**
+   (persona+rol, ensembles, genres, instruments, language, voices) está hecho
+   (`api/routes/admin_work_relations.py` + `frontend/src/pages/WorkRelations.tsx`) y
+   **validado end-to-end** el 2026-09-18 (ver §10).
+5. **Modelo `Work → Representation → Resource`** (2026-09-18). Modelo **cerrado** y **migración
+   paralela ejecutada** en `osap-storage_test` y `osap-storage`: `representations` **336.018**,
+   `works_resources` **471.378**, `representation_persons` **80.166**; 0 huérfanos de `archive_entries`.
+   `archive_entries` y `cpdl_*` intactos (transición aditiva). DDL
+   `scripts/migrate_representations_resources.sql`, datos `scripts/migrate_to_representations.py`.
+   La **app ya consume** el modelo nuevo (§12): GetWork/SearchWorksFull, DTO del provider
+   (`representations`, aditivo), descarga por `resources.id` y whitelist CRUD. §11 **cerrado**
+   (D1, D2, **D3=A**, D4) en **`docsNew/diseño-semantica-representacion.md`**: Representation y
+   Work son niveles de **resolución por agrupación**; **sin nuevo nivel persistente**. Etapa
+   siguiente: resolutor de agrupación, diseñado en
+   **`docsNew/diseño-resolutor-agrupacion.md`** (criterios, autoridad de la identidad de obra,
+   reglas aplicadas **y de bloqueo**, atributos comunes/divergentes) e **implementado** como
+    resolutor de solo lectura (`GET /api/admin/resolution/works/{id}`, sin persistencia). Materialización CPDL y
+    retirada de `cpdl_*`, aparte. No retirar `archive_entries` sin repetir las comprobaciones de §9.
+6. **Autoridad de títulos de obra** (2026-09-19, pendiente). El nombre está repartido:
+   `works.works_title` (presentación; **68.047** con `"título - compositor"`),
+   `works.works_song_name` (**título limpio, 238.637 con valor** — la previsión original),
+   `representations.source_name` (título de fuente, solo PDMX, 254.035, a menudo distinto de
+   `works_title`), `works_resources.name` (ficheros) y `archive_entries.logical_id` (legacy).
+   No hay tabla de alias de título (equivalente a `persons_aliases`) y la búsqueda solo usa
+   `works_title` + catálogo + compositor. Decidir el **título canónico** (probablemente
+   `works_song_name`) y si se añade `works_titles` (`main`/`source`/`uniform`/`alternative`)
+   alimentada también desde `representations.source_name` y los títulos RISM `240`/`245`.
+7. **Decisión RISM y forma del modelo** (2026-09-19, pendiente). RISM **no aporta ficheros**
+   (solo ~12 % de fuentes con enlace a digitalización `856$u`); aporta **identificación** y
+   `works_origin='rism'`. Medición estricta (`240` + persona canónica, sin anónimos ni genéricos):
+   **356.811 obras RISM**, **78.016 ya en catálogo**, **278.795 nuevas** (match por título; cota
+   superior). Fuente exportada: `G:\\rism\\rism_works_strict.csv` y `..._new.csv`. Si RISM se
+   integra como corpus buscable en `works` → favorece **op1** (forma única `works`+`works_resources`,
+   búsqueda conjunta); si queda como autoridad/evidencia → favorece **op2** (edición CPDL). Ver
+   `docsNew/estudio-representations-vs-resources.md`.
+   **Índice externo RISM completado (2026-09-19)**: `rism_sources` 1.565.667 (con `source_type`,
+   `subjects`, `notes`, `institution_id`, `standard_title_id`, `other_persons`, `incipit_count` —
+   2.457.350 incipits) + `rism_source_links` **701.553** enlaces `856` en **351.705** fuentes (22 %).
+   De las 356.811 obras estrictas, **192.028 (54 %)** tienen ≥1 enlace a digitalización.
+   **Decisión: op2** (representaciones solo para ediciones CPDL; RISM como tabla externa, no en `works`).
+8. **Jobs de actualización CPDL/RISM** (2026-09-19, pendiente): preparar trabajos programados que
+   refresquen `cpdl_*`/ediciones y el corpus RISM (`import_rism_sources.py` + `canonicalize_rism_persons.py`)
+   según se actualicen las fuentes (idempotentes, con conteo y sustitución).
+9. **Asignación de compositor/anónimo desde RISM** (2026-09-19, medido):
+   - Compositores: viable pero acotado — 1.646 atribuciones usadas (281 `resolved` + 1.365 `inferred`),
+     con **falsos positivos en repertorio tradicional** (God Save the King, Frère Jacques) → exige
+     guardas (título tradicional, exigir `240`, rol no-copista) antes de escribir.
+   - **Anónimos: no viable por título** — 50.813 fuentes RISM anónimas pero **0 con `240`** (sin
+     título uniforme), así que 0 casan con nuestras obras; requeriría incipit/otros campos.
+   - **Guardas + dry-run implementados (2026-09-19)**: `scripts/propose_rism_composers.py` →
+     `docsNew/dry-run-rism-compositores.md` y `G:\\rism\\rism_composer_proposals.csv`. Guardas:
+     `240` uniforme · un solo compositor · persona «Composer» · `Verified`/`Ascertained` · sin
+     marcador tradicional. Resultado: **1.223 obras propuestas** (52 títulos `resolved` + 394
+     `inferred`); bloqueados: 1.739 títulos por varios compositores (tradicional), 1.771 no-composer,
+     394 baja fiabilidad. Sin escribir nada.
+   - **Revisión manual (2026-09-19)**: 52 títulos `resolved` → **44 accept (124 obras), 2 review,
+     6 reject**. Escritura **reversible** ejecutada: de las 124 aceptadas, **42 obras** tenían persona
+     nuestra existente y se escribieron (`works_person_roles` rol 1) con historial en
+     `work_attribution_history` (`operation=assign|replace|revert`); **82 aceptadas sin persona
+     nuestra → revisión** (no se crean personas). Circuito verificado: apply → auditoría → revert →
+     re-apply. Decisiones en `G:\\rism\\rism_decisions.csv`; escritor
+     `scripts/apply_rism_attributions.py` (dry-run por defecto).
+   - **BATCH2 (2026-09-19)**: enlace `RISM person → persons` por identificador (GND/VIAF) medido en
+     `docsNew/rism-enlace-82.md`: de las 82 aceptadas sin persona, **52 enlazadas por VIAF**, 1 por
+     nombre, 1 ambigua, 28 sin identidad. **Aplicadas 29** (solo VIAF, excluido Haydn): Byrd 20,
+     Foster 2, Matos 2, Beethoven 2, Lasso 1, Schubert 1, Dowland 1. Historial `assign`: 29; Haydn
+     `assign`=0. Total RISM vivo: **71 obras** (42 + 29).
+   - **Pendiente de limpieza de datos**: la persona `f1f53fb0…` (Haydn) está **mal fusionada**
+     (nombre de Michael, 26 alias y VIAF de Joseph) → decidir renombrar a Joseph o separar Michael
+     antes de aplicar sus 23 obras. Y hay **174 personas con nombre `Arranged from …`/`from …`**
+     (incluida `Arranged from Stephen Foster`, que recibió 2 asignaciones) → limpieza/merge a revisar.
+   - **Corrección Haydn aplicada (2026-09-19)**: `scripts/correct_haydn_person.py` (dry-run →
+     apply). `f1f53fb0…` → **`Joseph Haydn`** (given/family/sort + 1732/1809, `reviewed`, motivo del
+     import); **3 alias de Michael movidos** a `96714c71…` (Michael Haydn); identidades (VIAF/QID/
+     MBID/ISNI) conservadas; roles intactos (476/2/313); 1 sola persona «Joseph Haydn». Historial en
+     `persons_correction_history` (before/after JSON, `operation=correct|revert`). Después, las
+     **23 asignaciones Haydn** con `operation='assign'` → BATCH2 = **52**, total RISM vivo = **94**
+     (42 + 52). Pendiente: las 174 `from/Arranged from`, 28 `sin_identidad`, 1 ambigua, 1 nombre,
+     394 `inferred`.
+10. **`works_person_import`** (386.004 filas, 56.426 nombres distintos): contra `persons` **34.042
+    (60 %)**, sin match **21.745 (38,5 %)**, solo en RISM **627**, ambiguos en RISM 480. RISM aporta
+    poco aquí; el grueso sin match no está en RISM (ruido de import, p. ej. "Set of QuadrillesNo3").
+11. **Calidad de nombres en `persons`** (2026-09-20, en curso). Reapertura de `persons` por los
+    nombres importados del texto de obra (PDMX): **988 filas sospechosas** de 45.217. Diagnóstico en
+    `docsNew/diagnostico-persons-limpieza.md`.
+    - **Fase 1 aplicada y verificada**: **216** ocultadas (`persons_visible = 0`) + **10**
+      renombradas (prefijo `:`/`'`/`?` y fechas `(18501922)`→`(1850-1922)`), con
+      `persons_correction_history` y ciclo revert/re-apply. Visibles 44.740 → **44.524**.
+      Script `scripts/cleanup_persons_phase1.py` (`--apply` / `--revert <batch>`).
+    - Casos de la captura del usuario identificados: estaban en **inglés** (`'No 12'` = «¿Número 12?»,
+      `!! Go to stettings` = «¡¡Vaya a la configuración!!», `?Raisin Band?` = «¿Banda de pasas?»).
+    - **Criterio fijado**: banda/ensemble **con nombre** = **artista** → se queda en `persons`
+      (roles 1/10). `ensembles` es catálogo de **tipos** vocales (`ensembles_code` UNIQUE +
+      `ensemble_voices`), no de agrupaciones con nombre.
+    - **Codificación**: `utf8mb4` correcto; las **244** filas mojibake no se recuperan
+      reinterpretando la cadena (3/244) → hay que releer el nombre de la fuente.
+    - **Pendiente**: placeholders (4 filas, 2.015 obras) → `works.works_attr_type`
+      (`TRADICIONAL`/`ATRIBUIDA`) + `works_attribution_note`, sin crear persona; fase 2 (dividir
+      pares pegados y bloques de crédito, 10 diferidos); mojibake (244).
+12. **`GET /api/v1/persons?role=…`** (pedido 2026-09-20): sustituye a la antigua API de composer.
+    Multivalor (`composer,arranger`) y roles `composer`, `arranger`, `performer`, `editor`; con la
+    regla de que **`composer` devuelve solo personas con ≥1 obra**. Pendiente de implementar.
+
 
 ---
 
@@ -296,3 +397,53 @@ Pendiente (paso posterior): **nombres de método** del puerto (`rename_composer`
 `update_composer`, `prune_zero_work_composers`…), del módulo `composer_admin`, las **rutas**
 `/api/admin/composers*` y `/api/v1/composers*`, y los nombres de módulo `composer_*`. No
 afectan al contrato de datos ya renombrado.
+
+---
+
+## 10. Publicación de la API: validación end-to-end (2026-09-18)
+
+Objetivo: comprobar que la app arranca y responde **contra la BBDD nueva** (no contra fakes),
+que es el requisito para publicar. API levantada con el venv real sobre `osap-storage`
+(`config.yaml`) en `127.0.0.1:8000`.
+
+**Smoke test completo (sin fallos)**
+- **34/34** endpoints GET: provider (`/api/version`, `/api/lookup`, `/api/search`,
+  `/api/resource/{id}`), `/api/v1/*` (works, composers, catalogues, cpdl, files, providers,
+  archives, statistics), admin (composers, works, tables, epochs).
+- **10/10** rutas HTML/web: `/`, `/about`, `/works`, `/works/{id}`, `/search`, `/statistics`,
+  `/admin`, `/admin/obras`, `/admin/maestros`, `/api`.
+- **7/7** desplegables de relaciones de la obra (`persons`, `roles`, `genres`, `instruments`,
+  `languages`, `voices`, `ensembles`).
+- Frontend: `tsc --noEmit` limpio y `vite build` correcto (mismos hashes de assets).
+
+**Bugs reales encontrados y corregidos** (los tests unitarios no los veían porque usan fakes):
+
+1. **`files` devolvía 500** — `FileRead.sha256: str` no admitía `NULL`, y `files.sha256` está a
+   `NULL` en las **254.035** filas (pendiente §7 #2). Afectaba a `/api/v1/files` y
+   `/api/v1/files/{id}`. Corregido en `api/schemas.py` (`str | None`) y
+   `domain/entities/file.py` (`sha256: str | None`, `storage_key()` con error explícito si
+   falta); `VerifyItem.expected_sha256` también pasa a opcional.
+2. **`/api/admin/works` devolvía 500** — `_to_detail` pasaba el DTO del caso de uso
+   (que envuelve `.work`) a `WorkAdminDetail.model_validate`, que espera los campos planos.
+   Corregido aplanando explícitamente el `Work` + listas en `api/routes/admin_works.py`.
+
+**Tests de regresión** (`tests/integration/test_api_contracts.py`, +3):
+
+    $env:OSAP_TEST_DB = "1"; $env:OSAP_TEST_DB_NAME = "osap-storage_test"
+    .venv\\Scripts\\python.exe -m pytest -q    # 265 pasan (unit + integración juntos)
+
+- `test_files_endpoint_tolerates_null_sha256`
+- `test_admin_works_endpoints_read_new_schema`
+- `test_work_relations_add_and_remove` (alta/baja reversible de un género)
+
+**Aislamiento de tests corregido**: `test_admin_composers`, `test_provider_contract` y
+`test_voting` fijaban `OSAP_CONFIG` con `os.environ[...] =` (sin restaurar), así que al correr
+unit + integración en la misma sesión heredaban una config temporal (`db_user: dev`) y toda la
+integración fallaba con *Access denied*. Ahora usan `monkeypatch.setenv` (también
+`test_admin_visibility`, que importa el helper). La suite completa corre en un solo comando.
+
+**Observaciones menores** (no bloquean publicar):
+- El desplegable de personas sirve ~44.7k opciones sin paginación ni búsqueda en servidor;
+  conviene un selector con búsqueda cuando se retome la Fase 7.
+- Los endpoints de escritura se validan en la copia `osap-storage_test`; no se mutó la BBDD
+  principal durante el smoke test.

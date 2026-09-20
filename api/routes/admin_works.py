@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import asdict
+
 from application.use_cases.work_admin import (
     GetWorkAdmin,
     ListWorksAdmin,
     UpdateWorkAdmin,
 )
+from application.use_cases.work_admin import WorkAdminDetail as WorkAdminDetailData
 from domain.entities.work import Work
 from fastapi import APIRouter, Depends, Query
 
@@ -18,8 +21,20 @@ from api.schemas import WorkAdminDetail, WorkAdminListResult, WorkAdminUpdateReq
 router = APIRouter(prefix="/api/admin/works", tags=["admin-works"])
 
 
-def _to_detail(d: object) -> WorkAdminDetail:
-    return WorkAdminDetail.model_validate(d)
+def _to_detail(d: WorkAdminDetailData) -> WorkAdminDetail:
+    w = d.work
+    if w.id is None:
+        raise ValueError("work has no id")
+    return WorkAdminDetail.model_validate(
+        {
+            **asdict(w),
+            "tags_csv": w.tags,
+            "tags": d.tags,
+            "genres": d.genres,
+            "instruments": d.instruments,
+            "parts_names": d.parts_names,
+        }
+    )
 
 
 @router.get(

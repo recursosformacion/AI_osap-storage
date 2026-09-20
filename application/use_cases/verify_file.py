@@ -18,7 +18,7 @@ from domain.ports.storage import StorageBackendRegistry
 class VerifyItem:
     provider_id: int
     provider_name: str
-    expected_sha256: str
+    expected_sha256: str | None
     computed_sha256: str | None
     ok: bool
 

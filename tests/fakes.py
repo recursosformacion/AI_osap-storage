@@ -1136,7 +1136,9 @@ class InMemoryWorkRepository(WorkRepository):
     async def get_by_work_key(self, work_key: str) -> Work | None:
         return next((w for w in self._items.values() if w.work_key == work_key), None)
 
-    async def search(self, query: str, *, limit: int = 50, offset: int = 0) -> list[Work]:
+    async def search(
+        self, query: str, *, limit: int = 50, offset: int = 0, origins: list[str] | None = None
+    ) -> list[Work]:
         q = query.lower()
         matches = [
             w
@@ -1145,10 +1147,14 @@ class InMemoryWorkRepository(WorkRepository):
         ]
         return sorted(matches, key=lambda w: w.id or 0)[offset : offset + limit]
 
-    async def all_(self, *, limit: int = 100, offset: int = 0) -> list[Work]:
+    async def all_(
+        self, *, limit: int = 100, offset: int = 0, origins: list[str] | None = None
+    ) -> list[Work]:
         return await self.list_all(limit=limit, offset=offset)
 
-    async def list_all(self, *, limit: int = 1000, offset: int = 0) -> list[Work]:
+    async def list_all(
+        self, *, limit: int = 1000, offset: int = 0, origins: list[str] | None = None
+    ) -> list[Work]:
         items = sorted(self._items.values(), key=lambda w: w.id or 0)
         return items[offset : offset + limit]
 

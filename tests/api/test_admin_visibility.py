@@ -12,7 +12,7 @@ import pytest
 from domain.entities.composer import Composer, ComposerStatus
 from domain.services.composer_names import normalize_composer_name
 from fastapi.testclient import TestClient
-from tests.api.test_admin_composers import _app, _container, _settings
+from tests.api.test_admin_composers import _app, _container
 from tests.fakes import InMemoryComposerRepository
 
 
@@ -36,9 +36,9 @@ def _repo() -> InMemoryComposerRepository:
 
 
 @pytest.fixture
-def client(tmp_path):
+def client(settings):
     repo = _repo()
-    return TestClient(_app(_container(_settings(tmp_path), repo)))
+    return TestClient(_app(_container(settings, repo)))
 
 
 def _ids(resp) -> list[str]:
@@ -90,9 +90,9 @@ def test_busqueda_combinada_con_cada_filtro(client):
         "Juli Garreta i Arboix", "Juli Garreta", "Garreta, Juli"}
 
 
-def test_cambiar_filtro_no_modifica_bd(tmp_path):
+def test_cambiar_filtro_no_modifica_bd(settings):
     repo = _repo()
-    app = _app(_container(_settings(tmp_path), repo))
+    app = _app(_container(settings, repo))
     client = TestClient(app)
     before = {c.id: (c.visible, c.status) for c in repo._composers.values()}
     for scope in ("visible", "hidden", "all", "visible"):
@@ -102,9 +102,9 @@ def test_cambiar_filtro_no_modifica_bd(tmp_path):
     assert after == before
 
 
-def test_no_visibles_seleccionables_para_fusion(tmp_path):
+def test_no_visibles_seleccionables_para_fusion(settings):
     repo = _repo()
-    client = TestClient(_app(_container(_settings(tmp_path), repo)))
+    client = TestClient(_app(_container(settings, repo)))
     # el target puede ser un candidato no visible y el source un visible
     resp = client.post("/api/admin/composers/v-b/merge", json={"source_ids": ["h-c"]})
     assert resp.status_code == 200

@@ -2,18 +2,22 @@ from __future__ import annotations
 
 from typing import Any
 
+from application.use_cases.rism_search import SearchRismSources
 from application.use_cases.works import GetWork, ResourceSummary, SearchWorks, SearchWorksFull, WorkDetail
 from domain.entities.work import display_composer
 from domain.ports.archive_repositories import ArchiveEntryRepository
+from domain.ports.representation_repository import RepresentationRepository
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from infrastructure.config import Settings
 
 from api.dependencies import (
     GetWorkDep,
+    SearchRismSourcesDep,
     SearchWorksDep,
     SearchWorksFullDep,
     get_archive_entry_repo,
+    get_representation_repo,
     get_settings,
 )
 from api.schemas import (
@@ -23,6 +27,7 @@ from api.schemas import (
     ProviderSearchResult,
     ProviderVersion,
     ProviderWorkRead,
+    RismSourceRead,
 )
 from api.urls import build_resource_url
 
@@ -40,9 +45,28 @@ def _mime(fmt: str | None) -> str | None:
 
 
 def _resource_id(r: ResourceSummary) -> str:
-    if r.file_id:
+    if r.id is not None:
+        return str(r.id)
+    if r.file_id is not None:
         return str(r.file_id)
-    return f"res-{r.relative_path.split('/')[-1]}"
+    ref = (r.relative_path or r.name or "").split("/")[-1]
+    return f"res-{ref}"
+
+
+def _resource(r: ResourceSummary, license_: str | None) -> dict:
+    rid = _resource_id(r)
+    return {
+        "id": rid,
+        "format": r.format,
+        "mime_type": _mime(r.format),
+        "available": r.available,
+        "license": license_,
+        "links": {
+            "download": f"/api/download/{rid}" if r.available else None,
+            "view": None,
+            "thumbnail": None,
+        },
+    }
 
 
 def _metadata(detail: WorkDetail) -> dict:
@@ -80,19 +104,21 @@ def _statistics() -> dict:
 
 
 def _resources(detail: WorkDetail) -> list[dict]:
+    return [_resource(r, detail.work.license) for r in detail.resources if r.available]
+
+
+def _representations(detail: WorkDetail) -> list[dict]:
     out = []
-    for r in detail.resources:
-        if not r.available:
-            continue
-        rid = _resource_id(r)
+    for rd in detail.representations:
+        license_ = rd.representation.license or detail.work.license
         out.append(
             {
-                "id": rid,
-                "format": r.format,
-                "mime_type": _mime(r.format),
-                "available": r.available,
-                "license": detail.work.license,
-                "links": {"download": f"/api/download/{rid}", "view": None, "thumbnail": None},
+                "id": rd.representation.id,
+                "origin": rd.representation.origin,
+                "type": rd.representation.type,
+                "license": rd.representation.license or None,
+                "source_name": rd.representation.source_name,
+                "resources": [_resource(r, license_) for r in rd.resources],
             }
         )
     return out
@@ -110,6 +136,7 @@ def _work(detail: WorkDetail) -> dict[str, Any]:
         "metadata": _metadata(detail),
         "statistics": _statistics(),
         "resources": _resources(detail),
+        "representations": _representations(detail),
     }
 
 
@@ -155,11 +182,27 @@ async def lookup(
 )
 async def search(
     q: str = Query("", description="Texto de búsqueda"),
+    corpus: str = Query(
+        "all",
+        pattern="^(omr|cpdl|rism|all)$",
+        description=(
+            "Corpus interno a buscar: omr (PDMX), cpdl, rism o all. "
+            "RISM es un corpus local más (sus enlaces apuntan al exterior)."
+        ),
+    ),
     limit: int = Query(50, ge=1, le=200),
     uc: SearchWorksFull = Depends(SearchWorksFullDep),
+    rism: SearchRismSources = Depends(SearchRismSourcesDep),
 ) -> ProviderSearchResult:
-    details = await uc.execute(q, limit=limit)
-    return ProviderSearchResult(works=[ProviderWorkRead.model_validate(_work(d)) for d in details])
+    result = ProviderSearchResult()
+    if corpus in ("omr", "cpdl", "all"):
+        origins = {"omr": ["PDMX"], "cpdl": ["CPDL"]}.get(corpus)
+        details = await uc.execute(q, limit=limit, origins=origins)
+        result.works = [ProviderWorkRead.model_validate(_work(d)) for d in details]
+    if corpus in ("rism", "all") and rism is not None:
+        sources = await rism.execute(q, limit=limit)
+        result.rism_sources = [RismSourceRead.model_validate(source) for source in sources]
+    return result
 
 
 @router.get(
@@ -180,17 +223,32 @@ async def resource(work_id: int, uc: GetWork = Depends(GetWorkDep)) -> ProviderR
 )
 async def download(
     resource_id: str,
+    representations: RepresentationRepository | None = Depends(get_representation_repo),
     entries: ArchiveEntryRepository = Depends(get_archive_entry_repo),
     settings: Settings = Depends(get_settings),
 ) -> RedirectResponse:
     try:
-        file_id = int(resource_id)
+        rid = int(resource_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="recurso no encontrado") from None
-    entry = await entries.get_by_file_id(file_id)
+
+    # Modelo nuevo: el id del recurso es el de `resources`.
+    resource = await representations.get_resource(rid) if representations is not None else None
+    if resource is not None:
+        if resource.url:
+            return RedirectResponse(resource.url, status_code=302)
+        url, available = build_resource_url(
+            resource.relative_path or "", resource.file_id, settings
+        )
+        if available and url:
+            return RedirectResponse(url, status_code=302)
+        raise HTTPException(status_code=404, detail="recurso no disponible")
+
+    # Compatibilidad: enlaces antiguos identificados por `files.id`.
+    entry = await entries.get_by_file_id(rid)
     if entry is None:
         raise HTTPException(status_code=404, detail="recurso no encontrado")
-    url, available = build_resource_url(entry.relative_path, file_id, settings)
+    url, available = build_resource_url(entry.relative_path, entry.file_id, settings)
     if not available or not url:
         raise HTTPException(status_code=404, detail="recurso no disponible")
     return RedirectResponse(url, status_code=302)

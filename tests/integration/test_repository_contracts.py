@@ -23,6 +23,7 @@ from infrastructure.config import Settings
 from infrastructure.db.connection import Database
 from infrastructure.repositories.sql_catalogue_repository import SqlCatalogueRepository
 from infrastructure.repositories.sql_person_repository import SqlPersonRepository
+from infrastructure.repositories.sql_representation_repository import SqlRepresentationRepository
 from infrastructure.repositories.sql_table_crud_repository import TABLES, SqlTableCrudRepository
 from infrastructure.repositories.sql_voting_repository import SqlVotingRepository
 from infrastructure.repositories.sql_work_repository import SqlWorkRepository
@@ -309,3 +310,34 @@ async def test_read_one_returns_row(db: Database) -> None:
     assert wid is not None
     row = await crud.read_one("works", int(wid))  # type: ignore[arg-type]
     assert row is not None and int(row["id"]) == int(wid)  # type: ignore[arg-type]
+
+
+# ------------------------------------------------- representations/resources
+
+
+async def test_representation_repository_reads_new_model(db: Database) -> None:
+    repo = SqlRepresentationRepository(db)
+
+    cpdl_wid = await _scalar(
+        db,
+        "SELECT representations_works_id FROM representations "
+        "WHERE representations_origin='cpdl' LIMIT 1",
+    )
+    assert cpdl_wid is not None
+    reps = await repo.list_by_work(int(cpdl_wid))
+    assert reps and all(r.works_id == int(cpdl_wid) for r in reps)
+    rep_ids = [r.id for r in reps if r.id is not None]
+    resources = await repo.list_resources_by_representation_ids(rep_ids)
+    assert all(x.representation_id in rep_ids for x in resources)
+
+    bulk = await repo.list_by_work_ids([int(cpdl_wid)])
+    assert {r.id for r in bulk} == set(rep_ids)
+
+    resource_id = await _scalar(
+        db, "SELECT id FROM works_resources WHERE works_resources_file_id IS NOT NULL LIMIT 1"
+    )
+    assert resource_id is not None
+    resource = await repo.get_resource(int(resource_id))
+    assert resource is not None and resource.file_id is not None
+    by_file = await repo.get_resource_by_file_id(resource.file_id)
+    assert by_file is not None and by_file.id == resource.id

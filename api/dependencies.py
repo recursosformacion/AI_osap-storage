@@ -34,6 +34,10 @@ def get_archive_entry_repo(request: Request):
     return cast(Container, request.app.state.container).archive_entry_repo
 
 
+def get_representation_repo(request: Request):
+    return cast(Container, request.app.state.container).representation_repo
+
+
 def _use_case(attr: str) -> Callable[[Request], Any]:
     def resolver(request: Request) -> Any:
         return cast(Container, request.app.state.container).__getattribute__(attr)
@@ -47,6 +51,10 @@ ListFilesDep = _use_case("list_files")
 StartDownloadDep = _use_case("start_download")
 GetDownloadJobDep = _use_case("get_download_job")
 GetDownloadUrlDep = _use_case("get_download_url")
+# Personas (modelo nuevo: /persons por rol)
+ListPersonsDep = _use_case("list_persons")
+GetPersonDep = _use_case("get_person")
+GetPersonWorksDep = _use_case("get_person_works")
 StreamFileDep = _use_case("stream_file")
 CreateProviderDep = _use_case("create_provider")
 GetProviderDep = _use_case("get_provider")
@@ -88,3 +96,7 @@ RecordVoteDep = _use_case("record_vote")
 GetWorkStatisticsDep = _use_case("get_work_statistics")
 GetComposerStatisticsDep = _use_case("get_composer_statistics")
 RefreshVotingStatisticsDep = _use_case("refresh_voting_statistics")
+ResolveWorkGroupingDep = _use_case("resolve_work_grouping")
+SearchRismSourcesDep = _use_case("search_rism_sources")
+RepresentationAdminDep = _use_case("representation_admin")
+ResourceAdminDep = _use_case("resource_admin")

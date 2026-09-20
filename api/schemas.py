@@ -48,7 +48,7 @@ class LocationRead(Model):
 
 class FileRead(Model):
     id: int
-    sha256: str
+    sha256: str | None = None
     name: str
     mime_type: str | None
     size_bytes: int | None
@@ -110,7 +110,7 @@ class ResolutionRead(Model):
 class VerifyItemRead(Model):
     provider_id: int
     provider_name: str
-    expected_sha256: str
+    expected_sha256: str | None
     computed_sha256: str | None
     ok: bool
 
@@ -285,6 +285,15 @@ class ProviderResourceDTO(Model):
     links: dict[str, str | None]
 
 
+class ProviderRepresentationDTO(Model):
+    id: int | None = None
+    origin: str | None = None
+    type: str | None = None
+    license: str | None = None
+    source_name: str | None = None
+    resources: list[ProviderResourceDTO] = []
+
+
 class ProviderWorkRead(Model):
     id: int
     title: str | None = None
@@ -295,10 +304,12 @@ class ProviderWorkRead(Model):
     metadata: dict[str, Any] = {}
     statistics: dict[str, Any] = {}
     resources: list[ProviderResourceDTO] = []
+    representations: list[ProviderRepresentationDTO] = []
 
 
 class ProviderSearchResult(Model):
-    works: list[ProviderWorkRead]
+    works: list[ProviderWorkRead] = []
+    rism_sources: list[RismSourceRead] = []
 
 
 class ProviderResourceResult(Model):
@@ -556,3 +567,248 @@ class TableCrudSchema(Model):
     pk: str
     columns: list[dict[str, Any]] = []
     relations: list[dict[str, Any]] = []
+
+
+class ResolutionRuleRead(Model):
+    rule: str
+    level: str
+    outcome: str
+    evidence: dict[str, Any] = {}
+    explanation: str
+
+
+class ResolvedRepresentationRead(Model):
+    key: str
+    source_keys: list[str] = []
+    resource_ids: list[int] = []
+    attributes_common: dict[str, Any] = {}
+    attributes_divergent: dict[str, list[Any]] = {}
+
+
+class ResolvedGroupRead(Model):
+    key: str
+    work_ids: list[int] = []
+    representations: list[ResolvedRepresentationRead] = []
+    resource_ids: list[int] = []
+    identity: dict[str, str] = {}
+    attributes_common: dict[str, Any] = {}
+    attributes_divergent: dict[str, list[Any]] = {}
+
+
+class ResolutionResultRead(Model):
+    groups: list[ResolvedGroupRead] = []
+    applied: list[ResolutionRuleRead] = []
+    blocked: list[ResolutionRuleRead] = []
+    review: list[ResolutionRuleRead] = []
+
+
+class RismSourceRead(Model):
+    source_id: str
+    composer_name: str | None = None
+    uniform_title: str | None = None
+    title: str | None = None
+    reliability: str | None = None
+    source_type: str | None = None
+    shelfmark: str | None = None
+    institution_id: str | None = None
+    language: str | None = None
+    has_incipit: bool = False
+    links: list[str] = []
+
+
+class RismSearchResult(Model):
+    sources: list[RismSourceRead] = []
+
+
+class RepresentationListItem(Model):
+    id: int
+    works_id: int
+    origin: str
+    origin_id: str | None = None
+    type: str = ""
+    license: str = ""
+    source_name: str | None = None
+    resources: int = 0
+    editors: int = 0
+
+
+class RepresentationListResult(Model):
+    items: list[RepresentationListItem] = []
+    total: int = 0
+
+
+class RepresentationWorkRef(Model):
+    id: int | None = None
+    title: str | None = None
+    origin: str | None = None
+
+
+class RepresentationResourceRead(Model):
+    id: int
+    type: str = ""
+    name: str = ""
+    relative_path: str | None = None
+    status: str = ""
+    file_id: int | None = None
+    url: str | None = None
+    archive_id: int | None = None
+
+
+class RepresentationEditorRead(Model):
+    id: int
+    person_id: str | None = None
+    role_id: int | None = None
+    name: str | None = None
+    person_name: str | None = None
+
+
+class RepresentationDetailRead(Model):
+    id: int
+    works_id: int
+    origin: str
+    origin_id: str | None = None
+    cpdlno: int | None = None
+    type: str = ""
+    license: str = ""
+    source_name: str | None = None
+    work: RepresentationWorkRef | None = None
+    resources: list[RepresentationResourceRead] = []
+    editors: list[RepresentationEditorRead] = []
+
+
+class RepresentationUpsertRequest(Model):
+    works_id: int
+    origin: str
+    origin_id: str | None = None
+    cpdlno: int | None = None
+    type: str = ""
+    license: str = ""
+    source_name: str | None = None
+
+
+class ResourceListItem(Model):
+    id: int
+    work_id: int
+    representation_id: int | None = None
+    type: str = ""
+    name: str = ""
+    relative_path: str | None = None
+    status: str = ""
+    file_id: int | None = None
+    url: str | None = None
+    archive_id: int | None = None
+
+
+class ResourceListResult(Model):
+    items: list[ResourceListItem] = []
+    total: int = 0
+
+
+class ResourceWorkRef(Model):
+    id: int | None = None
+    title: str | None = None
+    origin: str | None = None
+
+
+class ResourceRepresentationRef(Model):
+    id: int | None = None
+    origin: str | None = None
+    origin_id: str | None = None
+    type: str | None = None
+    license: str | None = None
+
+
+class ResourceDetailRead(Model):
+    id: int
+    work_id: int
+    representation_id: int | None = None
+    type: str = ""
+    name: str = ""
+    relative_path: str | None = None
+    status: str = ""
+    file_id: int | None = None
+    url: str | None = None
+    archive_id: int | None = None
+    work: ResourceWorkRef | None = None
+    representation: ResourceRepresentationRef | None = None
+
+
+class ResourceUpsertRequest(Model):
+    work_id: int
+    representation_id: int | None = None
+    type: str = ""
+    name: str = ""
+    relative_path: str | None = None
+    status: str = ""
+    file_id: int | None = None
+    url: str | None = None
+    archive_id: int | None = None
+
+
+# --- persons (modelo nuevo: personas con roles) -----------------------------
+
+
+class PersonSummaryRead(Model):
+    """Fila de persona para listados (roles en clave de API: composer, arranger…)."""
+
+    id: str
+    name: str
+    sort_name: str | None = None
+    roles: list[str] = []
+    works_count: int = 0
+    aliases_count: int = 0
+    birth_year: str | None = None
+    death_year: str | None = None
+    visible: bool = True
+    review_status: str | None = None
+    biography_summary: str | None = None
+    biography_era: str | None = None
+    biography_nationality: str | None = None
+
+
+class PersonListRead(Model):
+    items: list[PersonSummaryRead] = []
+    total: int = 0
+    roles: list[str] = []
+
+
+class PersonPublicRead(Model):
+    """Ficha de persona con biografía y alias."""
+
+    id: str
+    name: str
+    given_name: str | None = None
+    family_name: str | None = None
+    sort_name: str | None = None
+    roles: list[str] = []
+    aliases: list[str] = []
+    works_count: int = 0
+    birth_year: str | None = None
+    death_year: str | None = None
+    visible: bool = True
+    status: str | None = None
+    review_status: str | None = None
+    biography_summary: str | None = None
+    biography_era: str | None = None
+    biography_nationality: str | None = None
+    biography_key_works: str | None = None
+    biography_key_fact: str | None = None
+
+
+class PersonWorkRead(Model):
+    """Obra vista desde una persona: sus roles en la obra + género e instrumentos."""
+
+    work_id: int
+    title: str | None = None
+    subtitle: str | None = None
+    catalogue: str | None = None
+    year: int | None = None
+    roles: list[str] = []
+    genres: list[str] = []
+    instruments: list[str] = []
+
+
+class PersonWorksResult(Model):
+    items: list[PersonWorkRead] = []
+    total: int = 0
+    roles: list[str] = []
