@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 
+from api.routes import persons as persons_routes
 from application.use_cases.persons import GetPerson, GetPersonWorks, ListPersons
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -16,7 +17,6 @@ from tests.api.test_admin_composers import _container
 from tests.fakes import InMemoryComposerRepository
 
 from api import errors
-from api.routes import persons as persons_routes
 
 
 class _FakePersonQueries:

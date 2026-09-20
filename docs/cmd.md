@@ -1,0 +1,1 @@
+ GET /script/check-dev.ps1 para ver el estado en segundos (puertos/PID/health + últimas líneas del restart.last.log) y %LOCALAPPDATA%\osap-dev\logs\restart.last.log para saber dónde se queda si algo se atasca.
