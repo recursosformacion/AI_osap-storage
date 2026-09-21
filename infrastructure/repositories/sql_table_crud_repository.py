@@ -107,8 +107,32 @@ class SqlTableCrudRepository(TableCrudRepository):
             )
             return [dict(r) for r in await cur.fetchall()]
 
-    async def read(self, table: str, *, limit: int, offset: int) -> list[dict]:
+    async def read_filtered(
+        self, table: str, column: str, value: str, *, limit: int, offset: int
+    ) -> list[dict]:
+        """Filas con igualdad en una columna (validada contra el esquema real)."""
         self._require_table(table)
+        if column not in await self.columns(table):
+            raise InvalidTableCrud(f"columna no válida: {column}")
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                f"SELECT * FROM `{table}` WHERE `{column}` = %s LIMIT %s OFFSET %s",
+                (value, limit, offset),
+            )
+            return [dict(r) for r in await cur.fetchall()]
+
+    async def count_filtered(self, table: str, column: str, value: str) -> int:
+        self._require_table(table)
+        if column not in await self.columns(table):
+            raise InvalidTableCrud(f"columna no válida: {column}")
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                f"SELECT COUNT(*) AS n FROM `{table}` WHERE `{column}` = %s", (value,)
+            )
+            row = await cur.fetchone()
+            return int(row["n"] or 0)
+
+    async def read(self, table: str, *, limit: int, offset: int) -> list[dict]:        self._require_table(table)
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
                 f"SELECT * FROM `{table}` LIMIT %s OFFSET %s", (limit, offset)

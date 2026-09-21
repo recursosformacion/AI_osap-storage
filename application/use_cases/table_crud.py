@@ -32,6 +32,15 @@ class TableCrud:
     async def count_search(self, table: str, q: str) -> int:
         return await self._repo.count_search(table, q)
 
+    async def read_filtered(
+        self, table: str, column: str, value: str, *, limit: int, offset: int
+    ) -> list[dict]:
+        """Lectura filtrada por igualdad en una columna (para selectores del mantenimiento)."""
+        return await self._repo.read_filtered(table, column, value, limit=limit, offset=offset)
+
+    async def count_filtered(self, table: str, column: str, value: str) -> int:
+        return await self._repo.count_filtered(table, column, value)
+
     async def read_one(self, table: str, pk_value: object) -> dict | None:
         return await self._repo.read_one(table, pk_value)
 

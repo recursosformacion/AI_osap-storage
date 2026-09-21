@@ -35,9 +35,22 @@ async def read_rows(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     q: str | None = Query(None, description="Búsqueda (LIKE) en las columnas de texto"),
+    filter: str | None = Query(
+        None, description="Filtro por columna: `columna=valor` (p. ej. persons_review_status=not_reviewed_1)"
+    ),
     uc: TableCrud = Depends(TableCrudDep),
 ) -> TableCrudRows:
-    if q and q.strip():
+    column_filter: tuple[str, str] | None = None
+    if filter and "=" in filter:
+        column, _, value = filter.partition("=")
+        if column.strip() and value.strip():
+            column_filter = (column.strip(), value.strip())
+    if column_filter is not None:
+        rows = await uc.read_filtered(
+            table, column_filter[0], column_filter[1], limit=limit, offset=offset
+        )
+        total = await uc.count_filtered(table, column_filter[0], column_filter[1])
+    elif q and q.strip():
         rows = await uc.search(table, q.strip(), limit=limit, offset=offset)
         total = await uc.count_search(table, q.strip())
     else:

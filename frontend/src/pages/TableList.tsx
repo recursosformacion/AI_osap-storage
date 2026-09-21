@@ -31,6 +31,7 @@ export default function TableList() {
   const [offset, setOffset] = useState(0)
   const [query, setQuery] = useState('')
   const [debounced, setDebounced] = useState('')
+  const [reviewFilter, setReviewFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [pendingDelete, setPendingDelete] = useState<{ pk: string; row: Row } | null>(null)
@@ -41,6 +42,10 @@ export default function TableList() {
     () => (schema ? displayColumns(table, schema.columns) : []),
     [schema, table],
   )
+  // Selector de estado de revisión: aparece si la tabla tiene una columna `*_review_status`
+  // (p. ej. `persons_review_status`) para poder ver solo lo que interesa revisar.
+  const reviewColumn = schema?.columns.find((c) => c.name.endsWith('_review_status'))?.name
+  const filterParam = reviewColumn && reviewFilter ? `${reviewColumn}=${reviewFilter}` : undefined
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -48,7 +53,7 @@ export default function TableList() {
     try {
       const [schemaResponse, rowsResponse] = await Promise.all([
         getSchema(table),
-        getRows(table, limit, offset, debounced || undefined),
+        getRows(table, limit, offset, debounced || undefined, filterParam),
       ])
       setSchema(schemaResponse)
       setRows(rowsResponse.rows)
@@ -58,7 +63,7 @@ export default function TableList() {
     } finally {
       setLoading(false)
     }
-  }, [table, limit, offset, debounced])
+  }, [table, limit, offset, debounced, filterParam])
 
   useEffect(() => {
     void load()
@@ -113,6 +118,26 @@ export default function TableList() {
               onChange={(e) => setQuery(e.target.value)}
             />
           </form>
+          {reviewColumn ? (
+            <label className="field field--inline">
+              <span>Estado de revisión</span>
+              <select
+                value={reviewFilter}
+                onChange={(e) => {
+                  setReviewFilter(e.target.value)
+                  setOffset(0)
+                }}
+              >
+                <option value="">Todas</option>
+                <option value="not_reviewed_1">not_reviewed_1 (fácil)</option>
+                <option value="not_reviewed_2">not_reviewed_2 (medio)</option>
+                <option value="not_reviewed_3">not_reviewed_3 (difícil: mojibake)</option>
+                <option value="not_reviewed">not_reviewed</option>
+                <option value="review_required">review_required</option>
+                <option value="reviewed">reviewed</option>
+              </select>
+            </label>
+          ) : null}
           <Link className="btn btn--primary" to={`/t/${encodeURIComponent(table)}/new`}>
             Nueva fila
           </Link>

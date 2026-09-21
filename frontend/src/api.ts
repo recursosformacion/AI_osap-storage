@@ -89,9 +89,11 @@ export function getRows(
   limit: number,
   offset: number,
   q?: string,
+  filter?: string,
 ): Promise<RowsResponse> {
   const query = new URLSearchParams({ limit: String(limit), offset: String(offset) })
   if (q) query.set('q', q)
+  if (filter) query.set('filter', filter)
   return request<RowsResponse>(`/${encodeURIComponent(table)}?${query.toString()}`)
 }
 
