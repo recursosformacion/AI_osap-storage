@@ -176,18 +176,59 @@ def main() -> int:
         if not args.apply:
             print("\nDRY-RUN: informe v2. No se escribe nada.")
             return 0
+        # Solo se aplican las clases seguras: las que no requieren revisión humana.
+        REVIEW = {"revisar_split", "irrepresentable", "revisar_agrupacion", "multiple"}
+        batch_id = __import__("uuid").uuid4().hex[:16]
         changed = 0
         with conn.cursor() as cur:
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS persons_cleanup_history ("
+                " id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, persons_id CHAR(36) NOT NULL, "
+                " batch_id VARCHAR(64) NOT NULL, prev_name VARCHAR(1024), new_name VARCHAR(1024), "
+                " prev_givenname VARCHAR(512), prev_familyname VARCHAR(512), "
+                " prev_sortname VARCHAR(1024), prev_birth_year VARCHAR(16), "
+                " prev_death_year VARCHAR(16), created_at DATETIME NOT NULL, "
+                " PRIMARY KEY (id), KEY idx_pch_person (persons_id), KEY idx_pch_batch (batch_id)"
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+            )
+            cur.execute(
+                "SELECT persons_id, persons_name, persons_givenname, persons_familyname, "
+                "persons_sortname, persons_birth_year, persons_death_year FROM persons"
+            )
+            current = {str(r["persons_id"]): r for r in cur.fetchall()}
+            skipped_review = 0
             for row in parsed:
+                if REVIEW & set(row["flags"]):
+                    skipped_review += 1
+                    continue
+                before = current[row["id"]]
+                new_name = row["name"] or before["persons_name"]
+                if (
+                    new_name == before["persons_name"]
+                    and row["given"] == before["persons_givenname"]
+                    and row["family"] == before["persons_familyname"]
+                    and row["sort"] == before["persons_sortname"]
+                    and (row["birth"] is None or str(row["birth"]) == str(before["persons_birth_year"]))
+                ):
+                    continue
+                cur.execute(
+                    "INSERT INTO persons_cleanup_history (persons_id, batch_id, prev_name, new_name, "
+                    "prev_givenname, prev_familyname, prev_sortname, prev_birth_year, "
+                    "prev_death_year, created_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())",
+                    (row["id"], batch_id, before["persons_name"], new_name,
+                     before["persons_givenname"], before["persons_familyname"],
+                     before["persons_sortname"], before["persons_birth_year"],
+                     before["persons_death_year"]),
+                )
                 cur.execute(
                     "UPDATE persons SET persons_name=%s, persons_givenname=%s, "
                     "persons_familyname=%s, persons_sortname=%s, persons_birth_year=%s, "
                     "persons_death_year=%s, persons_updated_at=NOW() WHERE persons_id=%s",
-                    (row["name"] or row["raw"], row["given"], row["family"], row["sort"],
+                    (new_name, row["given"], row["family"], row["sort"],
                      row["birth"], row["death"], row["id"]),
                 )
                 changed += cur.rowcount
-        print(f"aplicado: {changed}")
+        print(f"aplicado: {changed} personas (batch {batch_id}); en revisión: {skipped_review}")
     finally:
         conn.close()
     return 0
