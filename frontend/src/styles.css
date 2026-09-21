@@ -12,8 +12,8 @@
   --gold: #8a6a2f;
   --radius: 4px;
   --shadow: 0 1px 0 rgba(23, 20, 15, 0.04), 0 8px 24px -18px rgba(23, 20, 15, 0.4);
-  --font-display: 'Fraunces', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
-  --font-body: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Fraunces', 'Iowan Old Style', 'Palatino Linotype', Georgia, 'Noto Serif CJK SC', 'Songti SC', SimSun, serif;
+  --font-body: 'Inter', system-ui, 'Segoe UI', Roboto, 'Noto Sans', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans', 'Yu Gothic', 'Malgun Gothic', 'Noto Sans CJK SC', 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, Consolas, 'Courier New', monospace;
 }
 

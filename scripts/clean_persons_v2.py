@@ -64,7 +64,10 @@ _TRAILING_ANNOT = {
 _YEARS = re.compile(r"[([]?\s*(\*?)(\d{3,4})\s*[-–—/]\s*[^\d)]{0,3}(\d{3,4})\s*[)\]]?")
 _YEAR_ONE = re.compile(r"[([]\s*(\d{3,4})\s*[)\]]")
 _TRAILING_YEAR = re.compile(r"[\s,;([]\s*1[0-9]{3}\s*$")
-_MOJIBAKE = re.compile(r"[ÃÂÐÑÅ\u0080-\u00ff]{2,}|\?{2,}|[\u3000-\u9fff\u3040-\u30ff]")
+# Mojibake real (bytes decodificados mal): secuencias latinas repetidas, ???? o la barra de
+# fracción Unicode típica del destrozo. OJO: CJK, cirílico o griego **NO** son mojibake; se
+# muestran sin problema (utf8mb4) y solo pueden necesitar ajuste de split.
+_MOJIBAKE = re.compile(r"[ÃÂÐÑÅïæåä]{2,}|\?{2,}|\u2044|[\u0080-\u00bf]{3,}")
 _JUNK_CHARS = re.compile(r"[:!*#\"\\|<>\[\]{}~^`]")
 
 

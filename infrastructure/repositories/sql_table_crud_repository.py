@@ -132,7 +132,8 @@ class SqlTableCrudRepository(TableCrudRepository):
             row = await cur.fetchone()
             return int(row["n"] or 0)
 
-    async def read(self, table: str, *, limit: int, offset: int) -> list[dict]:        self._require_table(table)
+    async def read(self, table: str, *, limit: int, offset: int) -> list[dict]:
+        self._require_table(table)
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
                 f"SELECT * FROM `{table}` LIMIT %s OFFSET %s", (limit, offset)
