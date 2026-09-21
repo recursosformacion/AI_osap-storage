@@ -232,6 +232,17 @@ async def download(
     except ValueError:
         raise HTTPException(status_code=404, detail="recurso no encontrado") from None
 
+    # Orden de resolución EXPLÍCITO para que un id numérico no sea ambiguo: los enlaces
+    # publicados y el índice de osap-api usan `{storage}/api/download/{file_id}`, así que
+    # el id de FICHERO tiene prioridad. Antes se probaba `resources` primero y un id
+    # numérico podía colisionar (p. ej. 632 = id de recurso) sirviendo OTRO fichero.
+    entry = await entries.get_by_file_id(rid)
+    if entry is not None:
+        url, available = build_resource_url(entry.relative_path, entry.file_id, settings)
+        if not available or not url:
+            raise HTTPException(status_code=404, detail="recurso no disponible")
+        return RedirectResponse(url, status_code=302)
+
     # Modelo nuevo: el id del recurso es el de `resources`.
     resource = await representations.get_resource(rid) if representations is not None else None
     if resource is not None:
@@ -244,11 +255,4 @@ async def download(
             return RedirectResponse(url, status_code=302)
         raise HTTPException(status_code=404, detail="recurso no disponible")
 
-    # Compatibilidad: enlaces antiguos identificados por `files.id`.
-    entry = await entries.get_by_file_id(rid)
-    if entry is None:
-        raise HTTPException(status_code=404, detail="recurso no encontrado")
-    url, available = build_resource_url(entry.relative_path, entry.file_id, settings)
-    if not available or not url:
-        raise HTTPException(status_code=404, detail="recurso no disponible")
-    return RedirectResponse(url, status_code=302)
+    raise HTTPException(status_code=404, detail="recurso no encontrado")
