@@ -248,7 +248,7 @@ export default function RowForm({ mode }: Props) {
       )}
 
       {!loading && !isNew && table === 'works' && (
-        <WorkRelations workId={String(pk)} editing={editing} />
+        <WorkRelations workId={String(pk)} editing />
       )}
     </section>
   )
