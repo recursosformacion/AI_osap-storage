@@ -156,6 +156,7 @@ async def get_composer(
     response_model=ComposerAdminDetail,
     summary="Editar identidad de un compositor",
     description="Edita campos de identidad (name, status, visible, fechas, cluster, "
+    "given/family/sort_name, nationality, image_url, person_type, attribution_note, "
     "review_status, review_reason, musicbrainz_id). Solo se actualizan los campos enviados.",
 )
 async def update_composer(
@@ -171,6 +172,13 @@ async def update_composer(
         birth_year=payload.birth_year,
         death_year=payload.death_year,
         homepage=payload.homepage,
+        given_name=payload.given_name,
+        family_name=payload.family_name,
+        sort_name=payload.sort_name,
+        nationality=payload.nationality,
+        image_url=payload.image_url,
+        person_type=payload.person_type,
+        attribution_note=payload.attribution_note,
         cluster_id=payload.cluster_id,
         review_status=payload.review_status,
         review_reason=payload.review_reason,

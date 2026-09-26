@@ -1,0 +1,6 @@
+[
+ {"name": "C MajorThomas Ravenscroft", "action": "canonicalize", "canonical": "Thomas Ravenscroft", "set_key": "C major"},
+ {"name": "D minorThomas Ravenscroft", "action": "canonicalize", "canonical": "Thomas Ravenscroft", "set_key": "D minor"},
+ {"name": "F MajorThomas Ravenscroft", "action": "canonicalize", "canonical": "Thomas Ravenscroft", "set_key": "F major"},
+ {"name": "G MajorThomas Ravenscroft", "action": "canonicalize", "canonical": "Thomas Ravenscroft", "set_key": "G major"}
+]

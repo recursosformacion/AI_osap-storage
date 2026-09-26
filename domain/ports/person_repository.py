@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Protocol
 
 from domain.entities.person import (
@@ -50,6 +51,7 @@ class PersonRepository(Protocol):
         self, person_id: str, id_type: str, id_value: str, *,
         is_identity_anchor: bool = False, source: str = "musicbrainz",
         strength: str | None = None, channels: list[str] | None = None,
+        confidence: float = 0.0, retrieved_at: datetime | None = None,
     ) -> None:
         """Inserta un identificador (idempotente por (person_id, id_type, id_value))."""
 
@@ -138,6 +140,13 @@ class PersonRepository(Protocol):
         birth_year: str | None = None,
         death_year: str | None = None,
         homepage: str | None = None,
+        given_name: str | None = None,
+        family_name: str | None = None,
+        sort_name: str | None = None,
+        nationality: str | None = None,
+        image_url: str | None = None,
+        person_type: str | None = None,
+        attribution_note: str | None = None,
         visible: bool | None = None,
         cluster_id: str | None = None,
         review_status: str | None = None,

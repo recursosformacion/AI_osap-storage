@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from domain.entities.work import Work, WorkLists
 from domain.ports.work_repository import WorkRepository
 
@@ -34,11 +36,22 @@ _DERIVED = """
       WHERE wt.works_id = w.id) AS tags,
     (SELECT GROUP_CONCAT(DISTINCT l.languages_code ORDER BY l.languages_code SEPARATOR ', ')
        FROM work_language wl JOIN languages l ON l.id = wl.languages_id
-      WHERE wl.works_id = w.id) AS language
+      WHERE wl.works_id = w.id) AS language,
+    (SELECT GROUP_CONCAT(DISTINCT e.ensembles_code ORDER BY e.ensembles_code SEPARATOR ', ')
+       FROM work_ensembles we JOIN ensembles e ON e.id = we.ensembles_id
+      WHERE we.works_id = w.id) AS voicing
 """
 
 _SELECT_ONE = f"SELECT w.*, {_DERIVED} FROM works w"
 _SELECT_PARAMS = {"composer_role": ROLE_COMPOSER, "performer_role": ROLE_PERFORMER}
+
+
+def _terms_json(raw: str | None) -> str | None:
+    """CSV de `GROUP_CONCAT` -> JSON array (formato histórico de `Work.voicing`)."""
+    if not raw:
+        return None
+    terms = [part.strip() for part in str(raw).split(",") if part.strip()]
+    return json.dumps(terms, ensure_ascii=False) if terms else None
 
 
 def _row_to_work(row: dict) -> Work:
@@ -72,7 +85,7 @@ def _row_to_work(row: dict) -> Work:
         relative_path=row.get("works_relative_path"),
         origin=row.get("works_origin"),
         origin_id=row.get("works_origin_id"),
-        voicing=row.get("works_voicing"),
+        voicing=_terms_json(row.get("voicing")),
         created_at=row.get("works_created_at"),
         updated_at=row.get("works_updated_at"),
     )

@@ -1,0 +1,350 @@
+[
+ {
+  "name": "A MajorDaniel Read Revised",
+  "action": "canonicalize",
+  "canonical": "Daniel Read",
+  "set_key": "A major"
+ },
+ {
+  "name": "A MajorOliver Brownson",
+  "action": "canonicalize",
+  "canonical": "Oliver Brownson",
+  "set_key": "A major"
+ },
+ {
+  "name": "A MajorOliver Holden",
+  "action": "canonicalize",
+  "canonical": "Oliver Holden",
+  "set_key": "A major"
+ },
+ {
+  "name": "A MajorSamuel Holyoke",
+  "action": "canonicalize",
+  "canonical": "Samuel Holyoke",
+  "set_key": "A major"
+ },
+ {
+  "name": "A MajorStephen Jenks",
+  "action": "canonicalize",
+  "canonical": "Stephen Jenks",
+  "set_key": "A major"
+ },
+ {
+  "name": "A MajorWilliam Billings",
+  "action": "canonicalize",
+  "canonical": "William Billings",
+  "set_key": "A major"
+ },
+ {
+  "name": "B MajorWalter Janes",
+  "action": "canonicalize",
+  "canonical": "Walter Janes",
+  "set_key": "B major"
+ },
+ {
+  "name": "Bb MajorDaniel Read",
+  "action": "canonicalize",
+  "canonical": "Daniel Read",
+  "set_key": "B♭ major"
+ },
+ {
+  "name": "Bb MajorOliver Brownson",
+  "action": "canonicalize",
+  "canonical": "Oliver Brownson",
+  "set_key": "B♭ major"
+ },
+ {
+  "name": "Bb MajorOliver Holden",
+  "action": "canonicalize",
+  "canonical": "Oliver Holden",
+  "set_key": "B♭ major"
+ },
+ {
+  "name": "Bb MajorTimothy Swan",
+  "action": "canonicalize",
+  "canonical": "Timothy Swan",
+  "set_key": "B♭ major"
+ },
+ {
+  "name": "Bb MajorWilliam Billings",
+  "action": "canonicalize",
+  "canonical": "William Billings",
+  "set_key": "B♭ major"
+ },
+ {
+  "name": "C MajorDaniel Read",
+  "action": "canonicalize",
+  "canonical": "Daniel Read",
+  "set_key": "C major"
+ },
+ {
+  "name": "C MajorDaniel Read Revised",
+  "action": "canonicalize",
+  "canonical": "Daniel Read",
+  "set_key": "C major"
+ },
+ {
+  "name": "C MajorEzra Goff",
+  "action": "canonicalize",
+  "canonical": "Ezra Goff",
+  "set_key": "C major"
+ },
+ {
+  "name": "C MajorIsaac Lane",
+  "action": "canonicalize",
+  "canonical": "Isaac Lane",
+  "set_key": "C major"
+ },
+ {
+  "name": "C MajorJacob French",
+  "action": "canonicalize",
+  "canonical": "Jacob French",
+  "set_key": "C major"
+ },
+ {
+  "name": "C MajorNehemiah Shumway",
+  "action": "canonicalize",
+  "canonical": "Nehemiah Shumway",
+  "set_key": "C major"
+ },
+ {
+  "name": "C MajorSamuel Babcock",
+  "action": "canonicalize",
+  "canonical": "Samuel Babcock",
+  "set_key": "C major"
+ },
+ {
+  "name": "C MajorThomas Tallis",
+  "action": "canonicalize",
+  "canonical": "Thomas Tallis",
+  "set_key": "C major"
+ },
+ {
+  "name": "C MajorTimothy Swan",
+  "action": "canonicalize",
+  "canonical": "Timothy Swan",
+  "set_key": "C major"
+ },
+ {
+  "name": "D MajorAbraham Maxim",
+  "action": "canonicalize",
+  "canonical": "Abraham Maxim",
+  "set_key": "D major"
+ },
+ {
+  "name": "D MajorDaniel Belknap",
+  "action": "canonicalize",
+  "canonical": "Daniel Belknap",
+  "set_key": "D major"
+ },
+ {
+  "name": "D MajorDaniel Belknap Revised",
+  "action": "canonicalize",
+  "canonical": "Daniel Belknap",
+  "set_key": "D major"
+ },
+ {
+  "name": "D MajorDaniel Read",
+  "action": "canonicalize",
+  "canonical": "Daniel Read",
+  "set_key": "D major"
+ },
+ {
+  "name": "D MajorDaniel Read Revised",
+  "action": "canonicalize",
+  "canonical": "Daniel Read",
+  "set_key": "D major"
+ },
+ {
+  "name": "D MajorSamuel Holyoke",
+  "action": "canonicalize",
+  "canonical": "Samuel Holyoke",
+  "set_key": "D major"
+ },
+ {
+  "name": "D MajorStephen Jenks",
+  "action": "canonicalize",
+  "canonical": "Stephen Jenks",
+  "set_key": "D major"
+ },
+ {
+  "name": "D MajorWalter Janes",
+  "action": "canonicalize",
+  "canonical": "Walter Janes",
+  "set_key": "D major"
+ },
+ {
+  "name": "D MajorWilliam Billings",
+  "action": "canonicalize",
+  "canonical": "William Billings",
+  "set_key": "D major"
+ },
+ {
+  "name": "D MinorWilliam Billings Revised",
+  "action": "canonicalize",
+  "canonical": "William Billings",
+  "set_key": "D minor"
+ },
+ {
+  "name": "E MajorAbraham Maxim",
+  "action": "canonicalize",
+  "canonical": "Abraham Maxim",
+  "set_key": "E major"
+ },
+ {
+  "name": "E MajorEbenezer Child",
+  "action": "canonicalize",
+  "canonical": "Ebenezer Child",
+  "set_key": "E major"
+ },
+ {
+  "name": "E MajorWilliam Billings",
+  "action": "canonicalize",
+  "canonical": "William Billings",
+  "set_key": "E major"
+ },
+ {
+  "name": "E minorTimothy Swan Revised",
+  "action": "canonicalize",
+  "canonical": "Timothy Swan",
+  "set_key": "E minor"
+ },
+ {
+  "name": "Eb MajorDaniel Belknap",
+  "action": "canonicalize",
+  "canonical": "Daniel Belknap",
+  "set_key": "E♭ major"
+ },
+ {
+  "name": "Eb MajorDaniel Read Revised",
+  "action": "canonicalize",
+  "canonical": "Daniel Read",
+  "set_key": "E♭ major"
+ },
+ {
+  "name": "Eb MajorOliver Holden",
+  "action": "canonicalize",
+  "canonical": "Oliver Holden",
+  "set_key": "E♭ major"
+ },
+ {
+  "name": "F MajorAbraham Maxim",
+  "action": "canonicalize",
+  "canonical": "Abraham Maxim",
+  "set_key": "F major"
+ },
+ {
+  "name": "F MajorAbraham Wood",
+  "action": "canonicalize",
+  "canonical": "Abraham Wood",
+  "set_key": "F major"
+ },
+ {
+  "name": "F MajorAmos Bull",
+  "action": "canonicalize",
+  "canonical": "Amos Bull",
+  "set_key": "F major"
+ },
+ {
+  "name": "F MajorLouis Bourgeois",
+  "action": "canonicalize",
+  "canonical": "Louis Bourgeois",
+  "set_key": "F major"
+ },
+ {
+  "name": "F MajorOliver Brownson",
+  "action": "canonicalize",
+  "canonical": "Oliver Brownson",
+  "set_key": "F major"
+ },
+ {
+  "name": "F MajorSamuel Babcock",
+  "action": "canonicalize",
+  "canonical": "Samuel Babcock",
+  "set_key": "F major"
+ },
+ {
+  "name": "F MajorStephen Jenks",
+  "action": "canonicalize",
+  "canonical": "Stephen Jenks",
+  "set_key": "F major"
+ },
+ {
+  "name": "F MajorTimothy Swan",
+  "action": "canonicalize",
+  "canonical": "Timothy Swan",
+  "set_key": "F major"
+ },
+ {
+  "name": "F minorDaniel Read Revised",
+  "action": "canonicalize",
+  "canonical": "Daniel Read",
+  "set_key": "F minor"
+ },
+ {
+  "name": "G MajorDaniel Belknap",
+  "action": "canonicalize",
+  "canonical": "Daniel Belknap",
+  "set_key": "G major"
+ },
+ {
+  "name": "G MajorDaniel Read Revised",
+  "action": "canonicalize",
+  "canonical": "Daniel Read",
+  "set_key": "G major"
+ },
+ {
+  "name": "G MajorElijah Griswold",
+  "action": "canonicalize",
+  "canonical": "Elijah Griswold",
+  "set_key": "G major"
+ },
+ {
+  "name": "G MajorEzra Goff",
+  "action": "canonicalize",
+  "canonical": "Ezra Goff",
+  "set_key": "G major"
+ },
+ {
+  "name": "G MajorJacob French",
+  "action": "canonicalize",
+  "canonical": "Jacob French",
+  "set_key": "G major"
+ },
+ {
+  "name": "G MajorNehemiah Shumway",
+  "action": "canonicalize",
+  "canonical": "Nehemiah Shumway",
+  "set_key": "G major"
+ },
+ {
+  "name": "G MajorOliver Holden Revised",
+  "action": "canonicalize",
+  "canonical": "Oliver Holden",
+  "set_key": "G major"
+ },
+ {
+  "name": "G MajorSamuel Babcock",
+  "action": "canonicalize",
+  "canonical": "Samuel Babcock",
+  "set_key": "G major"
+ },
+ {
+  "name": "G MajorSamuel Holyoke",
+  "action": "canonicalize",
+  "canonical": "Samuel Holyoke",
+  "set_key": "G major"
+ },
+ {
+  "name": "G MajorSamuel Holyoke Revised",
+  "action": "canonicalize",
+  "canonical": "Samuel Holyoke",
+  "set_key": "G major"
+ },
+ {
+  "name": "G MajorWalter Janes Revised",
+  "action": "canonicalize",
+  "canonical": "Walter Janes",
+  "set_key": "G major"
+ }
+]

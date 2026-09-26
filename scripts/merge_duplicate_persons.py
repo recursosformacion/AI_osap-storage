@@ -84,12 +84,16 @@ def clean_name(name: str) -> str:
 
 
 def key(name: str) -> str:
+    """Clave de identidad **insensible al orden**: mismos tokens en cualquier orden.
+
+    "Mozart Wolfgang Amadeus" == "Wolfgang Amadeus Mozart". El apellido/afinidad se
+    comprueba después (misma clave + apellido + tokens compartidos), así que agrupar por
+    el conjunto ordenado de tokens no provoca falsos merges.
+    """
     tokens = re.findall(r"[a-z]+", clean_name(name).lower())
     if not tokens:
         return ""
-    if len(tokens) > 1 and tokens[-2] == "o":
-        return f"o{tokens[-1]} {''.join(t[0] for t in tokens[:-2])}".strip()
-    return f"{''.join(t[0] for t in tokens[:-1])} {tokens[-1]}".strip()
+    return " ".join(sorted(tokens))
 
 
 def similar(a: str, b: str) -> float:
@@ -118,7 +122,12 @@ async def run(db_name: str, dry_run: bool, like: str | None) -> None:
 
     async with db.connection() as conn, conn.cursor() as cur:
         await cur.execute(
-            "SELECT persons_id, persons_name, persons_source_system FROM persons"
+            "SELECT p.persons_id, p.persons_name, p.persons_source_system, "
+            "p.persons_review_status, "
+            "(SELECT COUNT(*) FROM works_person_roles r "
+            " WHERE r.works_person_roles_person_id = p.persons_id "
+            " AND r.works_person_roles_role_id = 1) AS works "
+            "FROM persons p"
         )
         persons = [dict(r) for r in await cur.fetchall()]
 
@@ -137,8 +146,12 @@ async def run(db_name: str, dry_run: bool, like: str | None) -> None:
             groups[k].append(p)
 
     for members in groups.values():
+        # Canónico = la persona **dominante por obras** (rol 1); en empate, origen
+        # (maestro > authority > …), nombre más largo e id menor. Así el merge conserva
+        # la misma persona a la que apunta el índice, no una variante con 1 obra.
         members.sort(
             key=lambda p: (
+                -int(p.get("works") or 0),
                 _PRIORITY.get(str(p["persons_source_system"] or "").lower(), 9),
                 -len(str(p["persons_name"])),
                 str(p["persons_id"]),
@@ -195,9 +208,10 @@ async def run(db_name: str, dry_run: bool, like: str | None) -> None:
         dups = []
         for m in members[1:]:
             mn = str(m["persons_name"])
-            msurname = surname(mn)
             shared = len(tokens(kn) & tokens(mn))
-            if msurname == ksurname and (shared >= 2 or similar(kn, mn) >= 0.85):
+            # La clave ya garantiza el mismo conjunto de tokens (mismo apellido incluido,
+            # en cualquier orden); basta con afinidad de nombre.
+            if shared >= 2 or similar(kn, mn) >= 0.85:
                 dups.append(m)
         if dups:
             plan(keeper, dups, "misma clave")
@@ -258,6 +272,32 @@ async def run(db_name: str, dry_run: bool, like: str | None) -> None:
             # 4) Evidencia.
             await cur.execute(
                 f"UPDATE persons_evidence SET persons_id = %s WHERE persons_id IN ({ph})",
+                [keeper_id, *dups],
+            )
+            # 4b) Vínculos con FK `ON DELETE SET NULL` (si no se repuntan, se pierden).
+            await cur.execute(
+                f"UPDATE IGNORE cpdl_edition_persons SET persons_id = %s "
+                f"WHERE persons_id IN ({ph})",
+                [keeper_id, *dups],
+            )
+            await cur.execute(
+                f"DELETE FROM cpdl_edition_persons WHERE persons_id IN ({ph})", dups
+            )
+            await cur.execute(
+                f"UPDATE IGNORE representation_persons "
+                f"SET representation_persons_person_id = %s "
+                f"WHERE representation_persons_person_id IN ({ph})",
+                [keeper_id, *dups],
+            )
+            await cur.execute(
+                f"DELETE FROM representation_persons "
+                f"WHERE representation_persons_person_id IN ({ph})",
+                dups,
+            )
+            # RISM: sin FK, pero hay que re-apuntar el compositor.
+            await cur.execute(
+                f"UPDATE rism_sources SET rism_composer_person_id = %s "
+                f"WHERE rism_composer_person_id IN ({ph})",
                 [keeper_id, *dups],
             )
             # 5) Historial y borrado.

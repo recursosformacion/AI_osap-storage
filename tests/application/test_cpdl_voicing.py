@@ -43,6 +43,22 @@ def test_elemento_numero_descartado():
     assert voicing_terms(_arr(["4/5", "ATTB,SATB"])) == ["ATTB", "SATB"]
 
 
+def test_conteo_prefijo_conserva_la_descripcion():
+    # El conteo puede ir pegado a la descripción: se quita y se conserva el resto.
+    assert voicing_terms(_arr(["4", "4 equal voices"])) == ["EQUAL VOICES"]
+    assert normalize_term("4 equal voices") == "EQUAL VOICES"
+    assert normalize_term("4vv") == ""
+    # Varias voces con el mismo texto colapsan en un solo término.
+    assert voicing_terms(_arr(["4", "3 equal voices", "2 equal voices"])) == ["EQUAL VOICES"]
+
+
+def test_conteos_puros_y_rangos_descartados():
+    # Un conteo o rango sin descripción no es término buscable.
+    for raw in ("4", "4/5", "4 or 5", "3-4", "4vv", "3vv or 4", "4+", "1 or more", "4 voices"):
+        assert voicing_terms(_arr([raw])) == [], raw
+        assert normalize_term(raw) == "", raw
+
+
 def test_no_falso_positivo_subcadena():
     terms = voicing_terms(_arr(["4", "SATB, SATB2"]))
     assert "SATB" in terms

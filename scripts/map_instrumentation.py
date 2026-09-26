@@ -3,7 +3,7 @@
 
 Fuentes:
 - `osap-storage`.`work_instruments` (textos enriquecidos, cantidad embebida "(N)")
-- `osap-storage`.`works`.`works_voicing` (CPDL)
+- `osap-storage`.`work_ensembles` + `ensemble_voices` (CPDL, voicing normalizado)
 - `osap-storage`.`works`.`works_instrumentation` (CPDL)
 
 Uso:
@@ -307,30 +307,40 @@ async def run(db_name: str, dry_run: bool, source_db: str = "osap-storage_v1") -
         for vid, q in slot["v"].items():
             wv.append((wid, vid, q, ctx))
 
-    # ---- 2. CPDL (works_voicing + works_instrumentation) ----
+    # ---- 2. CPDL (work_ensembles/ensemble_voices + works_instrumentation) ----
+    # El voicing ya está consolidado en `ensembles`/`work_ensembles` (migración 008).
     cpdl_acc: dict[int, dict] = {}
     unmatched_cpdl: dict[str, int] = {}
     async with tgt.connection() as conn, conn.cursor() as cur:
         await cur.execute(
-            "SELECT id, works_voicing, works_instrumentation FROM works "
-            "WHERE works_voicing IS NOT NULL OR works_instrumentation IS NOT NULL"
+            "SELECT we.works_id AS work_id, we.ensembles_id AS ensembles_id, "
+            "ev.voices_id AS voices_id, ev.ensemble_voices_quantity AS qty "
+            "FROM work_ensembles we "
+            "JOIN works w ON w.id = we.works_id AND w.works_origin = 'CPDL' "
+            "LEFT JOIN ensemble_voices ev ON ev.ensembles_id = we.ensembles_id"
         )
         for r in await cur.fetchall():
-            wid = int(r["id"])
-            slot = cpdl_acc.setdefault(wid, {"i": {}, "v": {}, "e": {}})
-            for col in ("works_voicing", "works_instrumentation"):
-                raw = r.get(col)
-                if not raw:
-                    continue
-                try:
-                    terms = json.loads(raw)
-                except ValueError:
-                    continue
-                if not isinstance(terms, list):
-                    continue
-                for item in terms:
-                    if isinstance(item, str):
-                        classify_cpdl(wid, item, slot, unmatched_cpdl)
+            slot = cpdl_acc.setdefault(int(r["work_id"]), {"i": {}, "v": {}, "e": {}})
+            eid = int(r["ensembles_id"])
+            slot["e"][eid] = slot["e"].get(eid, 0) + 1
+            if r.get("voices_id"):
+                vid = int(r["voices_id"])
+                slot["v"][vid] = slot["v"].get(vid, 0) + int(r["qty"] or 1)
+        await cur.execute(
+            "SELECT id, works_instrumentation FROM works "
+            "WHERE works_origin = 'CPDL' AND works_instrumentation IS NOT NULL"
+        )
+        for r in await cur.fetchall():
+            slot = cpdl_acc.setdefault(int(r["id"]), {"i": {}, "v": {}, "e": {}})
+            try:
+                terms = json.loads(r["works_instrumentation"])
+            except (ValueError, TypeError):
+                continue
+            if not isinstance(terms, list):
+                continue
+            for item in terms:
+                if isinstance(item, str):
+                    classify_cpdl(int(r["id"]), item, slot, unmatched_cpdl)
 
     new_ens = {k[1] for s in cpdl_acc.values() for k in s.get("e", {}) if isinstance(k, tuple)}
     cpdl_wi, cpdl_wv, cpdl_we = [], [], []

@@ -294,13 +294,23 @@ Son la respuesta de la API de MuseScore para cada score. El pipeline (`infrastru
 
 Es decir, los 254.077 JSON del mirror contienen justo el enriquecimiento que hoy está a NULL en `works` (tonalidad, duración, compases, páginas, partes, instrumentos, tags, thumbnails, description). **Reejecutar el enriquecimiento los persiste.**
 
-### 7.2 Voicing: resuelto — **JSON inline** (2026-09-14)
+### 7.2 Voicing: **formación vocal = `ensembles`** (2026-09-23)
 
-- Decisión: **no se normaliza**. El voicing de CPDL se guarda tal cual en `works.works_voicing` (LONGTEXT utf8mb4_bin).
-- Se eliminaron las tablas `voicings` y `works_voicings` que se habían creado.
-- Consecuencia: no hay búsqueda por término de voicing a nivel de BBDD (se puede hacer con `JSON_SEARCH`/`LIKE` sobre `works_voicing` si hiciera falta).
+- Decisión inicial (2026-09-14): JSON inline en `works.works_voicing`.
+- **Reversión (2026-09-23)**: una obra puede prepararse para varios sistemas de voces, así que el voicing sale de `works`. Se probó un catálogo `voicings`+`work_voicing` (migración 007), que resultó **duplicar `ensembles`** (349/1.408 términos ya eran `ensembles_code`).
+- **Consolidación final**: el voicing ES la formación vocal.
+  - `ensembles(ensembles_code en MAYÚSCULAS)` — catálogo único (dedupe case-insensitive).
+  - `work_ensembles` — obra↔formación (N:N).
+  - `ensemble_voices` — composición de cada formación en voces (`SSATTB` → S×2, A×1, T×2, B×1), poblada por `scripts/populate_ensemble_voices.py`.
+  - Migración `008_merge_voicings_into_ensembles` (fusiona y elimina `voicings`/`work_voicing`).
+- Efecto en la normalización: el conteo inicial deja de ser término; «4 equal voices» → `EQUAL VOICES` (antes se descartaba y dejaba 723 obras sin voicing indexable).
 
----
+### 7.3 PDMX: cada fila es una representación; la obra se obtiene por fusión (2026-09-24)
+
+- `works` guarda los registros PDMX **tal cual**: 1 fila = 1 fichero/representación (254.035). **No** se duplican como `representations`+`works_resources` (materializar 254.000 recursos sería absurdo).
+- La **obra** no se materializa en storage: se obtiene por **fusión de los registros al invocarlos** (el índice agrupa por `title_key`+`composer_id`; el front, `groupWorks`).
+- Consecuencia: 3 filas de `works` con el mismo título y compositor (p. ej. 'Edradynate House' de A C McIntyre) son 3 representaciones → **1 obra** al fusionar. Los recuentos al usuario deben usar esa fusión (`works_count` = recuento del índice), **no** el número de filas de `works`.
+- CPDL sí necesita `representations`+`works_resources` (ediciones y ficheros); PDMX no.
 
 ## 8. Dev `osap-storage` = imagen de producción (2026-09-14)
 

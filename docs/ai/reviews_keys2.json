@@ -1,0 +1,8 @@
+[
+ {"name": "A minorOliver Brownson Revised", "action": "canonicalize", "canonical": "Oliver Brownson", "set_key": "A minor"},
+ {"name": "B minorDaniel Read Revised", "action": "canonicalize", "canonical": "Daniel Read", "set_key": "B minor"},
+ {"name": "C majorWilliam Billings Revised", "action": "canonicalize", "canonical": "William Billings", "set_key": "C major"},
+ {"name": "C minorTimothy Swan Revised", "action": "canonicalize", "canonical": "Timothy Swan", "set_key": "C minor"},
+ {"name": "D majorTimothy Swan Revised", "action": "canonicalize", "canonical": "Timothy Swan", "set_key": "D major"},
+ {"name": "A Compilation of Genuine Church", "action": "canonicalize", "canonical": "Joseph Funk"}
+]

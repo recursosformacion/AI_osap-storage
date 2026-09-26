@@ -18,9 +18,14 @@ SCOPE_READ = "storage:read"
 SCOPE_WRITE = "storage:write"
 SCOPE_ADMIN = "storage:admin"
 
-# Rutas exentas de autenticación (salud, métricas y los shells de las pantallas de
-# gestión; los shells no contienen datos: el API /api/admin/* sí exige storage:admin).
-EXEMPT_PATHS = {"/api/v1/health", "/metrics", "/admin", "/admin/maestros", "/admin/obras"}
+# Rutas exentas de autenticación (salud y métricas). Los shells de gestión (`/admin`,
+# `/admin/maestros`, `/admin/obras`) NO se eximen: exigen un service token con
+# `storage:admin`, que la pantalla recibe por `?token=` (o Bearer) desde osap-api.
+EXEMPT_PATHS = {"/api/v1/health", "/metrics"}
+
+# Assets estáticos del admin (JS/CSS): no contienen datos, no requieren token.
+_ADMIN_ASSET_PREFIX = "/admin/assets/"
+_ADMIN_SHELL_PREFIX = "/admin"
 
 
 class ServiceTokenValidator:
@@ -177,17 +182,31 @@ class ServiceAuthMiddleware(BaseHTTPMiddleware):
             path in EXEMPT_PATHS
             or path.startswith("/api/v1/health")
             or path.startswith("/api/download/")
+            or path.startswith(_ADMIN_ASSET_PREFIX)
         ):
             return await call_next(request)
 
         auth_header = request.headers.get("Authorization", "")
-        if not auth_header.startswith("Bearer "):
+        bearer = auth_header[7:].strip() if auth_header.startswith("Bearer ") else ""
+
+        # Shells de gestión: no se navegan con cabecera, así que el token puede venir en
+        # `?token=`. Sin token válido (storage:admin) no se sirve la pantalla.
+        if path == _ADMIN_SHELL_PREFIX or path.startswith(_ADMIN_SHELL_PREFIX + "/"):
+            token = bearer or request.query_params.get("token", "").strip()
+            if not token:
+                return JSONResponse(status_code=401, content={"detail": "se requiere service token"})
+            try:
+                await self._validator.validate(token, SCOPE_ADMIN)
+            except ServiceAuthError as exc:
+                return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
+            return await call_next(request)
+
+        if not bearer:
             return JSONResponse(status_code=401, content={"detail": "se requiere service token"})
 
-        token = auth_header[7:].strip()
         required = _required_scope(path, request.method)
         try:
-            await self._validator.validate(token, required)
+            await self._validator.validate(bearer, required)
         except ServiceAuthError as exc:
             return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
         return await call_next(request)

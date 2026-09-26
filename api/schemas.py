@@ -361,6 +361,8 @@ class ComposerIdentifierRead(Model):
     source: str = "musicbrainz"
     strength: str | None = None
     channels: list[str] | None = None
+    confidence: float = 0.0
+    retrieved_at: datetime | None = None
 
 
 class ComposerEvidenceRead(Model):
@@ -404,6 +406,13 @@ class ComposerAdminDetail(Model):
     homepage: str | None = None
     cluster_id: str | None = None
     review_reason: str | None = None
+    given_name: str | None = None
+    family_name: str | None = None
+    sort_name: str | None = None
+    nationality: str | None = None
+    image_url: str | None = None
+    person_type: str | None = None
+    attribution_note: str | None = None
     biography_summary: str | None = None
     biography_era: str | None = None
     biography_nationality: str | None = None
@@ -426,6 +435,15 @@ class ComposerUpdateRequest(BaseModel):
     visible: bool | None = None
     birth_year: str | None = None
     death_year: str | None = None
+    given_name: str | None = Field(default=None, max_length=512)
+    family_name: str | None = Field(default=None, max_length=512)
+    sort_name: str | None = Field(default=None, max_length=1024)
+    nationality: str | None = Field(default=None, max_length=128)
+    image_url: str | None = Field(default=None, max_length=2048)
+    person_type: str | None = Field(
+        default=None, pattern="^(person|anonymous|traditional|pseudonym|corporate)$"
+    )
+    attribution_note: str | None = Field(default=None, max_length=255)
     cluster_id: str | None = None
     review_status: str | None = Field(
         default=None, pattern="^(correct|incorrect|reviewed|not_reviewed|review_required)$"
@@ -761,6 +779,9 @@ class PersonSummaryRead(Model):
     death_year: str | None = None
     visible: bool = True
     review_status: str | None = None
+    person_type: str | None = None
+    nationality: str | None = None
+    image_url: str | None = None
     biography_summary: str | None = None
     biography_era: str | None = None
     biography_nationality: str | None = None
@@ -788,6 +809,10 @@ class PersonPublicRead(Model):
     visible: bool = True
     status: str | None = None
     review_status: str | None = None
+    person_type: str | None = None
+    nationality: str | None = None
+    image_url: str | None = None
+    attribution_note: str | None = None
     biography_summary: str | None = None
     biography_era: str | None = None
     biography_nationality: str | None = None

@@ -1,0 +1,49 @@
+[
+  {"name": "Bach", "action": "canonicalize", "canonical": "Johann Sebastian Bach"},
+  {"name": "Bach Johann Sebastian", "action": "canonicalize", "canonical": "Johann Sebastian Bach"},
+  {"name": "C P E Bach", "action": "canonicalize", "canonical": "Carl Philipp Emanuel Bach"},
+
+  {"name": "Niel Gow s Collection", "action": "canonicalize", "canonical": "Niel Gow"},
+  {"name": "Neil Gow Collection", "action": "canonicalize", "canonical": "Niel Gow"},
+  {"name": "Nath Gow", "action": "canonicalize", "canonical": "Nathaniel Gow"},
+  {"name": "Nath Gow s Repository", "action": "canonicalize", "canonical": "Nathaniel Gow"},
+  {"name": "Nath Gow s Dances for", "action": "canonicalize", "canonical": "Nathaniel Gow"},
+
+  {"name": "Palestrina", "action": "canonicalize", "canonical": "Giovanni Pierluigi da Palestrina"},
+  {"name": "Giovanni Pierluigi da Palestrina c", "action": "canonicalize", "canonical": "Giovanni Pierluigi da Palestrina"},
+  {"name": "Pange lingua II- Palestrina", "action": "canonicalize", "canonical": "Giovanni Pierluigi da Palestrina"},
+  {"name": "Palestrina Bovicelli", "action": "canonicalize", "canonical": "Giovanni Pierluigi da Palestrina"},
+  {"name": "Palestrina ca", "action": "canonicalize", "canonical": "Giovanni Pierluigi da Palestrina"},
+  {"name": "Giovanni Pierluigi da Palestrina ca", "action": "canonicalize", "canonical": "Giovanni Pierluigi da Palestrina"},
+  {"name": "P Palestrina", "action": "canonicalize", "canonical": "Giovanni Pierluigi da Palestrina"},
+  {"name": "Silla Palestrina", "action": "canonicalize", "canonical": "Giovanni Pierluigi da Palestrina"},
+  {"name": "G Palestrina", "action": "canonicalize", "canonical": "Giovanni Pierluigi da Palestrina"},
+  {"name": "Palestrina G P", "action": "canonicalize", "canonical": "Giovanni Pierluigi da Palestrina"},
+  {"name": "Palestrinaedit BMarbleSAB", "action": "canonicalize", "canonical": "Giovanni Pierluigi da Palestrina"},
+  {"name": "Giovanni Pier Luigi Palestrina", "action": "canonicalize", "canonical": "Giovanni Pierluigi da Palestrina"},
+
+  {"name": "Handel George F", "action": "canonicalize", "canonical": "George Frideric Handel"},
+  {"name": "Handel George Frederick", "action": "canonicalize", "canonical": "George Frideric Handel"},
+  {"name": "Georg Frideric H\u00e4ndel op Nr", "action": "canonicalize", "canonical": "George Frideric Handel"},
+  {"name": "HandelJohn Young c", "action": "canonicalize", "canonical": "George Frideric Handel"},
+  {"name": "Handel Georg Friederich", "action": "canonicalize", "canonical": "George Frideric Handel"},
+  {"name": "Handel just guessing", "action": "canonicalize", "canonical": "George Frideric Handel"},
+  {"name": "G H H\u00e4ndel", "action": "canonicalize", "canonical": "George Frideric Handel"},
+  {"name": "George Frideric k Handel Spellings vary", "action": "canonicalize", "canonical": "George Frideric Handel"},
+  {"name": "Musik G F H\u00e4ndel", "action": "canonicalize", "canonical": "George Frideric Handel"},
+  {"name": "George Frideric Handel HMV", "action": "canonicalize", "canonical": "George Frideric Handel"},
+  {"name": "George F Handel Molly Cline", "action": "canonicalize", "canonical": "George Frideric Handel"},
+  {"name": "Geoge F Handel", "action": "canonicalize", "canonical": "George Frideric Handel"},
+
+  {"name": "Austria Joseph Haydn", "action": "canonicalize", "canonical": "Joseph Haydn"},
+  {"name": "F J Haydn\ufffdOp", "action": "canonicalize", "canonical": "Joseph Haydn"},
+  {"name": "Haydn s", "action": "canonicalize", "canonical": "Joseph Haydn"},
+  {"name": "Haydn-Pochon", "action": "canonicalize", "canonical": "Joseph Haydn"},
+  {"name": "Johann Michael Haydnedit BMarble", "action": "canonicalize", "canonical": "Michael Haydn"},
+
+  {"name": "Siehe wie fein und lieblich ists- Sch\u00fctz", "action": "canonicalize", "canonical": "Heinrich Sch\u00fctz"},
+  {"name": "Venite ad me omnes- Sch\u00fctz", "action": "canonicalize", "canonical": "Heinrich Sch\u00fctz"},
+
+  {"name": "Turlough O'Carolan", "action": "canonicalize", "canonical": "Turlough O Carolan"},
+  {"name": "Turlough O CarolanMODERATO", "action": "canonicalize", "canonical": "Turlough O Carolan"}
+]

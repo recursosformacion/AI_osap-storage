@@ -28,6 +28,23 @@ class PersonResolutionDecision:
     REJECTED = "rejected"
 
 
+class PersonType:
+    """Tipo de entidad que `Person` representa.
+
+    - `person`: entidad humana real o imaginaria.
+    - `anonymous`: atribución anónima (sin nombre).
+    - `traditional`: obra tradicional/folclórica sin autor conocido.
+    - `pseudonym`: nombre artístico sin identidad conocida.
+    - `corporate`: entidad colectiva (orquesta, editorial, etc.).
+    """
+
+    PERSON = "person"
+    ANONYMOUS = "anonymous"
+    TRADITIONAL = "traditional"
+    PSEUDONYM = "pseudonym"
+    CORPORATE = "corporate"
+
+
 @dataclass
 class PersonResolution:
     """Trazabilidad de una recuperación de identidad de compositor de una obra.
@@ -60,6 +77,11 @@ class Person:
     Añade: `visible` (1 = utilizable públicamente), `birth_year`/`death_year`,
     `cluster_id` (unidad de identidad), `review_reason` (motivo conservado) y
     `source_system` (maestro|app).
+
+    Los campos `given_name`/`family_name`/`sort_name` provienen de la autoridad
+    externa y se normalizan en la importación. `person_type` distingue
+    personas reales de atribuciones anónimas/tradicionales/pseudónimo/corporativas.
+    `attribution_note` conserva el texto original cuando `person_type != person`.
     """
 
     id: str
@@ -70,6 +92,13 @@ class Person:
     visible: bool = True
     birth_year: str | None = None
     death_year: str | None = None
+    given_name: str | None = None
+    family_name: str | None = None
+    sort_name: str | None = None
+    nationality: str | None = None
+    image_url: str | None = None
+    person_type: str = PersonType.PERSON
+    attribution_note: str | None = None
     cluster_id: str | None = None
     review_reason: str | None = None
     source_system: str = "maestro"
@@ -118,6 +147,8 @@ class PersonIdentifier:
     source: str = "musicbrainz"
     strength: str | None = None
     channels: list[str] | None = None
+    confidence: float = 0.0
+    retrieved_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -172,6 +203,11 @@ class PersonSummary:
     works_count: int = 0
     review_status: str = "not_reviewed"
     visible: bool = True
+    given_name: str | None = None
+    family_name: str | None = None
+    sort_name: str | None = None
+    nationality: str | None = None
+    person_type: str = PersonType.PERSON
     biography_summary: str | None = None
     biography_era: str | None = None
     biography_nationality: str | None = None
@@ -196,6 +232,13 @@ class PersonDetail:
     homepage: str | None = None
     cluster_id: str | None = None
     review_reason: str | None = None
+    given_name: str | None = None
+    family_name: str | None = None
+    sort_name: str | None = None
+    nationality: str | None = None
+    image_url: str | None = None
+    person_type: str = PersonType.PERSON
+    attribution_note: str | None = None
     biography_summary: str | None = None
     biography_era: str | None = None
     biography_nationality: str | None = None

@@ -232,7 +232,7 @@ export function metaOf(table: string): TableMeta {
 export function displayColumns(table: string, schema: SchemaColumn[], max = 7): string[] {
   const meta = TABLES[table]
   if (meta?.columns?.length) return meta.columns
-  return schema.filter((c) => c.name !== 'works_voicing' && c.name !== 'works_instrumentation')
+  return schema.filter((c) => c.name !== 'works_instrumentation')
     .slice(0, max)
     .map((c) => c.name)
 }

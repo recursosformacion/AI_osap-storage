@@ -1,0 +1,314 @@
+[
+ {
+  "name": "A minorAbraham Maxim",
+  "action": "canonicalize",
+  "canonical": "Abraham Maxim",
+  "set_key": "A minor"
+ },
+ {
+  "name": "A minorAbraham Wood",
+  "action": "canonicalize",
+  "canonical": "Abraham Wood",
+  "set_key": "A minor"
+ },
+ {
+  "name": "A minorAmerican",
+  "action": "canonicalize",
+  "canonical": "American",
+  "set_key": "A minor"
+ },
+ {
+  "name": "A minorAnanias Davisson",
+  "action": "canonicalize",
+  "canonical": "Ananias Davisson",
+  "set_key": "A minor"
+ },
+ {
+  "name": "A minorDaniel Belknap",
+  "action": "canonicalize",
+  "canonical": "Daniel Belknap",
+  "set_key": "A minor"
+ },
+ {
+  "name": "A minorDaniel Read",
+  "action": "canonicalize",
+  "canonical": "Daniel Read",
+  "set_key": "A minor"
+ },
+ {
+  "name": "A minorEbenezer Child",
+  "action": "canonicalize",
+  "canonical": "Ebenezer Child",
+  "set_key": "A minor"
+ },
+ {
+  "name": "A minorEzra Goff",
+  "action": "canonicalize",
+  "canonical": "Ezra Goff",
+  "set_key": "A minor"
+ },
+ {
+  "name": "A minorJacob French",
+  "action": "canonicalize",
+  "canonical": "Jacob French",
+  "set_key": "A minor"
+ },
+ {
+  "name": "A minorJustin Morgan",
+  "action": "canonicalize",
+  "canonical": "Justin Morgan",
+  "set_key": "A minor"
+ },
+ {
+  "name": "A minorSamuel Babcock",
+  "action": "canonicalize",
+  "canonical": "Samuel Babcock",
+  "set_key": "A minor"
+ },
+ {
+  "name": "A minorTimothy Swan",
+  "action": "canonicalize",
+  "canonical": "Timothy Swan",
+  "set_key": "A minor"
+ },
+ {
+  "name": "B minorAbraham Wood",
+  "action": "canonicalize",
+  "canonical": "Abraham Wood",
+  "set_key": "B minor"
+ },
+ {
+  "name": "B minorDaniel Belknap",
+  "action": "canonicalize",
+  "canonical": "Daniel Belknap",
+  "set_key": "B minor"
+ },
+ {
+  "name": "B minorEbenezer Child",
+  "action": "canonicalize",
+  "canonical": "Ebenezer Child",
+  "set_key": "B minor"
+ },
+ {
+  "name": "B minorElijah Griswold",
+  "action": "canonicalize",
+  "canonical": "Elijah Griswold",
+  "set_key": "B minor"
+ },
+ {
+  "name": "B minorJames P Carrell",
+  "action": "canonicalize",
+  "canonical": "James P. Carrell",
+  "set_key": "B minor"
+ },
+ {
+  "name": "B minorSamuel Babcock",
+  "action": "canonicalize",
+  "canonical": "Samuel Babcock",
+  "set_key": "B minor"
+ },
+ {
+  "name": "C minorAbraham Wood",
+  "action": "canonicalize",
+  "canonical": "Abraham Wood",
+  "set_key": "C minor"
+ },
+ {
+  "name": "C minorOliver Holden",
+  "action": "canonicalize",
+  "canonical": "Oliver Holden",
+  "set_key": "C minor"
+ },
+ {
+  "name": "C minorSamuel Holyoke",
+  "action": "canonicalize",
+  "canonical": "Samuel Holyoke",
+  "set_key": "C minor"
+ },
+ {
+  "name": "C minorStephen Jenks",
+  "action": "canonicalize",
+  "canonical": "Stephen Jenks",
+  "set_key": "C minor"
+ },
+ {
+  "name": "C minorWalter Janes",
+  "action": "canonicalize",
+  "canonical": "Walter Janes",
+  "set_key": "C minor"
+ },
+ {
+  "name": "D minorAbraham Wood",
+  "action": "canonicalize",
+  "canonical": "Abraham Wood",
+  "set_key": "D minor"
+ },
+ {
+  "name": "D minorAmos Bull",
+  "action": "canonicalize",
+  "canonical": "Amos Bull",
+  "set_key": "D minor"
+ },
+ {
+  "name": "D minorOliver Brownson",
+  "action": "canonicalize",
+  "canonical": "Oliver Brownson",
+  "set_key": "D minor"
+ },
+ {
+  "name": "D minorOliver Holden",
+  "action": "canonicalize",
+  "canonical": "Oliver Holden",
+  "set_key": "D minor"
+ },
+ {
+  "name": "D minorSamuel Babcock",
+  "action": "canonicalize",
+  "canonical": "Samuel Babcock",
+  "set_key": "D minor"
+ },
+ {
+  "name": "D minorThomas Tallis",
+  "action": "canonicalize",
+  "canonical": "Thomas Tallis",
+  "set_key": "D minor"
+ },
+ {
+  "name": "D minorTimothy Swan",
+  "action": "canonicalize",
+  "canonical": "Timothy Swan",
+  "set_key": "D minor"
+ },
+ {
+  "name": "E minorAbraham Wood",
+  "action": "canonicalize",
+  "canonical": "Abraham Wood",
+  "set_key": "E minor"
+ },
+ {
+  "name": "E minorAmos Bull",
+  "action": "canonicalize",
+  "canonical": "Amos Bull",
+  "set_key": "E minor"
+ },
+ {
+  "name": "E minorAnanias Davisson",
+  "action": "canonicalize",
+  "canonical": "Ananias Davisson",
+  "set_key": "E minor"
+ },
+ {
+  "name": "E minorJacob French",
+  "action": "canonicalize",
+  "canonical": "Jacob French",
+  "set_key": "E minor"
+ },
+ {
+  "name": "E minorJoseph Stone",
+  "action": "canonicalize",
+  "canonical": "Joseph Stone",
+  "set_key": "E minor"
+ },
+ {
+  "name": "E minorOliver Brownson",
+  "action": "canonicalize",
+  "canonical": "Oliver Brownson",
+  "set_key": "E minor"
+ },
+ {
+  "name": "E minorStephen Jenks",
+  "action": "canonicalize",
+  "canonical": "Stephen Jenks",
+  "set_key": "E minor"
+ },
+ {
+  "name": "E minorWalter Janes",
+  "action": "canonicalize",
+  "canonical": "Walter Janes",
+  "set_key": "E minor"
+ },
+ {
+  "name": "Eb majorDaniel Read",
+  "action": "canonicalize",
+  "canonical": "Daniel Read",
+  "set_key": "E♭ major"
+ },
+ {
+  "name": "F majorDaniel Read",
+  "action": "canonicalize",
+  "canonical": "Daniel Read",
+  "set_key": "F major"
+ },
+ {
+  "name": "F minorDaniel Belknap",
+  "action": "canonicalize",
+  "canonical": "Daniel Belknap",
+  "set_key": "F minor"
+ },
+ {
+  "name": "F minorEbenezer Child",
+  "action": "canonicalize",
+  "canonical": "Ebenezer Child",
+  "set_key": "F minor"
+ },
+ {
+  "name": "F minorJacob French",
+  "action": "canonicalize",
+  "canonical": "Jacob French",
+  "set_key": "F minor"
+ },
+ {
+  "name": "F minorJames P Carrell",
+  "action": "canonicalize",
+  "canonical": "James P. Carrell",
+  "set_key": "F minor"
+ },
+ {
+  "name": "F minorOliver Holden",
+  "action": "canonicalize",
+  "canonical": "Oliver Holden",
+  "set_key": "F minor"
+ },
+ {
+  "name": "F minorWalter Janes",
+  "action": "canonicalize",
+  "canonical": "Walter Janes",
+  "set_key": "F minor"
+ },
+ {
+  "name": "F minorWilliam Billings",
+  "action": "canonicalize",
+  "canonical": "William Billings",
+  "set_key": "F minor"
+ },
+ {
+  "name": "G minorDaniel Read",
+  "action": "canonicalize",
+  "canonical": "Daniel Read",
+  "set_key": "G minor"
+ },
+ {
+  "name": "G minorOliver Holden",
+  "action": "canonicalize",
+  "canonical": "Oliver Holden",
+  "set_key": "G minor"
+ },
+ {
+  "name": "G minorTimothy Swan",
+  "action": "canonicalize",
+  "canonical": "Timothy Swan",
+  "set_key": "G minor"
+ },
+ {
+  "name": "G minorWalter Janes",
+  "action": "canonicalize",
+  "canonical": "Walter Janes",
+  "set_key": "G minor"
+ },
+ {
+  "name": "G minorWilliam Billings",
+  "action": "canonicalize",
+  "canonical": "William Billings",
+  "set_key": "G minor"
+ }
+]

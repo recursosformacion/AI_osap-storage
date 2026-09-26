@@ -10,17 +10,17 @@ from infrastructure.db.connection import Database
 
 
 def _voicing(raw: str | None) -> tuple[str, ...]:
+    """Acepta el CSV de `GROUP_CONCAT` (actual) o un JSON array (histórico)."""
     if not raw:
         return ()
+    text = str(raw).strip()
     try:
-        data = json.loads(raw)
+        data = json.loads(text)
     except (ValueError, TypeError):
-        text = raw.strip()
-        return (text,) if text else ()
+        return tuple(part.strip() for part in text.split(",") if part.strip())
     if isinstance(data, list):
         return tuple(str(item).strip() for item in data if str(item).strip())
-    text = str(data).strip()
-    return (text,) if text else ()
+    return (str(data).strip(),) if str(data).strip() else ()
 
 
 def _canonical(person_id: str | None, merged: dict[str, str]) -> str | None:
@@ -74,7 +74,9 @@ class SqlResolutionSource(ResolutionSource):
                 "COALESCE(r.representations_license, w.works_license) AS license, "
                 "w.id AS work_id, w.works_title AS title, "
                 "w.works_catalogue AS catalogue, w.works_musical_key AS musical_key, "
-                "w.works_voicing AS voicing, "
+                "(SELECT GROUP_CONCAT(DISTINCT e.ensembles_code ORDER BY e.ensembles_code "
+                "SEPARATOR ', ') FROM work_ensembles we JOIN ensembles e "
+                "ON e.id = we.ensembles_id WHERE we.works_id = w.id) AS voicing, "
                 "(SELECT p.persons_name FROM works_person_roles rp "
                 " JOIN persons p ON p.persons_id = rp.works_person_roles_person_id "
                 " WHERE rp.works_person_roles_work_id = w.id "

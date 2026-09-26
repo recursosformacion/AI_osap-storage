@@ -92,6 +92,8 @@ class SqlPersonQueryRepository:
                 "p.persons_sortname AS sort_name, p.persons_birth_year AS birth_year, "
                 "p.persons_death_year AS death_year, p.persons_visible AS visible, "
                 "p.persons_status AS status, p.persons_review_status AS review_status, "
+                "p.persons_type AS person_type, p.persons_nationality AS nationality, "
+                "p.persons_image_url AS image_url, "
                 "p.persons_biography_summary AS biography_summary, "
                 "p.persons_biography_era AS biography_era, "
                 "p.persons_biography_nationality AS biography_nationality, "

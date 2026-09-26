@@ -17,6 +17,7 @@ from domain.entities.composer import (
     ComposerWorkRef,
     MergeComposersResult,
 )
+from domain.entities.person import PersonType
 from domain.exceptions import DuplicateComposerAlias, EntityNotFound, InvalidMerge
 from domain.ports.composer_repository import ComposerRepository
 from domain.services.composer_names import normalize_composer_name
@@ -28,11 +29,15 @@ from infrastructure.db.connection import Database
 _COMPOSER_COLS = (
     "persons_id AS id, persons_name AS name, persons_status AS status, "
     "persons_visible AS visible, persons_birth_year AS birth_year, "
-    "persons_death_year AS death_year, persons_review_reason AS review_reason, "
+    "persons_death_year AS death_year, persons_givenname AS given_name, "
+    "persons_familyname AS family_name, persons_sortname AS sort_name, "
+    "persons_review_reason AS review_reason, "
     "persons_source_system AS source_system, persons_merged_into AS merged_into, "
     "persons_merged_at AS merged_at, persons_review_status AS review_status, "
     "persons_reviewed_at AS reviewed_at, persons_created_at AS created_at, "
-    "persons_updated_at AS updated_at"
+    "persons_updated_at AS updated_at, "
+    "persons_nationality AS nationality, persons_image_url AS image_url, "
+    "persons_type AS person_type, persons_attribution_note AS attribution_note"
 )
 _ALIAS_COLS = (
     "id, person_id AS person_id, person_aliases_alias AS alias, "
@@ -45,7 +50,8 @@ _IDENTIFIER_COLS = (
     "id, persons_id AS person_id, identity_type AS id_type, "
     "identity_value AS id_value, identity_source AS source, "
     "identity_is_anchor AS is_identity_anchor, "
-    "identity_strength AS strength, identity_channels AS channels"
+    "identity_strength AS strength, identity_channels AS channels, "
+    "identity_confidence AS confidence, identity_retrieved_at AS retrieved_at"
 )
 _EVIDENCE_COLS = (
     "id, persons_id AS person_id, persons_evidence_rule AS rule, "
@@ -70,6 +76,13 @@ def _row_to_composer(row: dict) -> Composer:
         visible=bool(row.get("visible", 1)),
         birth_year=row.get("birth_year"),
         death_year=row.get("death_year"),
+        given_name=row.get("given_name"),
+        family_name=row.get("family_name"),
+        sort_name=row.get("sort_name"),
+        nationality=row.get("nationality"),
+        image_url=row.get("image_url"),
+        person_type=row.get("person_type") or PersonType.PERSON,
+        attribution_note=row.get("attribution_note"),
         cluster_id=row.get("cluster_id"),
         review_reason=review_reason,
         source_system=row.get("source_system") or "maestro",
@@ -134,6 +147,8 @@ def _row_to_identifier(row: dict) -> ComposerIdentifier:
         source=row.get("source") or "musicbrainz",
         strength=row.get("strength"),
         channels=_json_list(row.get("channels")),
+        confidence=float(row.get("confidence")) if row.get("confidence") is not None else 0.0,
+        retrieved_at=row.get("retrieved_at"),
     )
 
 
@@ -392,6 +407,9 @@ class SqlPersonRepository(ComposerRepository):
                 "SELECT c.persons_id AS id, c.persons_name AS name, "
                 "c.persons_status AS status, c.persons_review_status AS review_status, "
                 "c.persons_visible AS visible, "
+                "c.persons_givenname AS given_name, c.persons_familyname AS family_name, "
+                "c.persons_sortname AS sort_name, "
+                "c.persons_type AS person_type, c.persons_nationality AS nationality, "
                 "(SELECT COUNT(*) FROM persons_aliases a WHERE a.person_id = c.persons_id) AS aliases_count, "
                 "(SELECT COUNT(*) FROM works_person_roles r "
                 " WHERE r.works_person_roles_person_id = c.persons_id "
@@ -416,6 +434,11 @@ class SqlPersonRepository(ComposerRepository):
                     biography_summary=r.get("biography_summary"),
                     biography_era=r.get("biography_era"),
                     biography_nationality=r.get("biography_nationality"),
+                    given_name=r.get("given_name"),
+                    family_name=r.get("family_name"),
+                    sort_name=r.get("sort_name"),
+                    nationality=r.get("nationality"),
+                    person_type=r.get("person_type") or PersonType.PERSON,
                 )
                 for r in await cur.fetchall()
             ]
@@ -498,8 +521,9 @@ class SqlPersonRepository(ComposerRepository):
                 await cur.execute(
                     "INSERT INTO persons_identity "
                     "(persons_id, identity_name, identity_name_norm, identity_type, "
-                    " identity_value, identity_source, identity_is_anchor) "
-                    "VALUES (%s, %s, %s, 'musicbrainz', %s, 'maestro', 1)",
+                    " identity_value, identity_source, identity_is_anchor, "
+                    " identity_confidence, identity_retrieved_at) "
+                    "VALUES (%s, %s, %s, 'musicbrainz', %s, 'maestro', 1, 0.0, NOW(6))",
                     (person_id, name, normalize_composer_name(name)[:128], musicbrainz_id),
                 )
             await cur.execute(
@@ -596,6 +620,7 @@ class SqlPersonRepository(ComposerRepository):
         self, person_id: str, id_type: str, id_value: str, *,
         is_identity_anchor: bool = False, source: str = "musicbrainz",
         strength: str | None = None, channels: list[str] | None = None,
+        confidence: float = 0.0, retrieved_at: datetime | None = None,
     ) -> None:
         import json as _json
 
@@ -623,10 +648,12 @@ class SqlPersonRepository(ComposerRepository):
             await cur.execute(
                 "INSERT INTO persons_identity "
                 "(persons_id, identity_name, identity_name_norm, identity_type, identity_value, "
-                " identity_is_anchor, identity_source, identity_strength, identity_channels) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                " identity_is_anchor, identity_source, identity_strength, identity_channels, "
+                " identity_confidence, identity_retrieved_at) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                 (person_id, name, normalize_composer_name(name)[:128], id_type, id_value,
-                 1 if is_identity_anchor else 0, source, strength, ch),
+                 1 if is_identity_anchor else 0, source, strength, ch,
+                 confidence, retrieved_at),
             )
 
     async def add_evidence(
@@ -690,6 +717,13 @@ class SqlPersonRepository(ComposerRepository):
         birth_year: str | None = None,
         death_year: str | None = None,
         homepage: str | None = None,
+        given_name: str | None = None,
+        family_name: str | None = None,
+        sort_name: str | None = None,
+        nationality: str | None = None,
+        image_url: str | None = None,
+        person_type: str | None = None,
+        attribution_note: str | None = None,
         visible: bool | None = None,
         cluster_id: str | None = None,
         review_status: str | None = None,
@@ -708,6 +742,27 @@ class SqlPersonRepository(ComposerRepository):
         if death_year is not None:
             sets.append("persons_death_year = %s")
             params.append(death_year)
+        if given_name is not None:
+            sets.append("persons_givenname = %s")
+            params.append(given_name)
+        if family_name is not None:
+            sets.append("persons_familyname = %s")
+            params.append(family_name)
+        if sort_name is not None:
+            sets.append("persons_sortname = %s")
+            params.append(sort_name)
+        if nationality is not None:
+            sets.append("persons_nationality = %s")
+            params.append(nationality)
+        if image_url is not None:
+            sets.append("persons_image_url = %s")
+            params.append(image_url)
+        if person_type is not None:
+            sets.append("persons_type = %s")
+            params.append(person_type)
+        if attribution_note is not None:
+            sets.append("persons_attribution_note = %s")
+            params.append(attribution_note)
         if visible is not None:
             sets.append("persons_visible = %s")
             params.append(1 if visible else 0)
@@ -736,11 +791,12 @@ class SqlPersonRepository(ComposerRepository):
         if name is not None:
             from domain.services.composer_names import normalize_composer_name
 
-            await cur.execute(
-                "INSERT IGNORE INTO persons_aliases (person_id, person_aliases_alias, "
-                "person_aliases_normalized_alias) VALUES (%s, %s, %s)",
-                (person_id, name, normalize_composer_name(name)),
-            )
+            async with self._db.connection() as conn, conn.cursor() as cur:
+                await cur.execute(
+                    "INSERT IGNORE INTO persons_aliases (person_id, person_aliases_alias, "
+                    "person_aliases_normalized_alias) VALUES (%s, %s, %s)",
+                    (person_id, name, normalize_composer_name(name)),
+                )
 
     async def get_biography(self, person_id: str) -> ComposerDetail | None:
         return await self.get_detail(person_id)
@@ -845,6 +901,10 @@ class SqlPersonRepository(ComposerRepository):
                 "c.persons_death_year AS death_year, NULL AS homepage, NULL AS cluster_id, "
                 "c.persons_review_reason AS review_reason, c.persons_created_at AS created_at, "
                 "c.persons_updated_at AS updated_at, "
+                "c.persons_givenname AS given_name, c.persons_familyname AS family_name, "
+                "c.persons_sortname AS sort_name, c.persons_nationality AS nationality, "
+                "c.persons_image_url AS image_url, c.persons_type AS person_type, "
+                "c.persons_attribution_note AS attribution_note, "
                 "c.persons_biography_summary AS biography_summary, "
                 "c.persons_biography_era AS biography_era, "
                 "c.persons_biography_nationality AS biography_nationality, "
@@ -889,7 +949,8 @@ class SqlPersonRepository(ComposerRepository):
                 "SELECT id, persons_id AS person_id, identity_type AS id_type, "
                 "identity_value AS id_value, identity_source AS source, "
                 "identity_is_anchor AS is_identity_anchor, "
-                "identity_strength AS strength, identity_channels AS channels "
+                "identity_strength AS strength, identity_channels AS channels, "
+                "identity_confidence AS confidence, identity_retrieved_at AS retrieved_at "
                 "FROM persons_identity WHERE persons_id = %s ORDER BY id",
                 (person_id,),
             )
@@ -924,6 +985,13 @@ class SqlPersonRepository(ComposerRepository):
                 homepage=row.get("homepage"),
                 cluster_id=row.get("cluster_id"),
                 review_reason=row.get("review_reason"),
+                given_name=row.get("given_name"),
+                family_name=row.get("family_name"),
+                sort_name=row.get("sort_name"),
+                nationality=row.get("nationality"),
+                image_url=row.get("image_url"),
+                person_type=row.get("person_type") or PersonType.PERSON,
+                attribution_note=row.get("attribution_note"),
                 biography_summary=row.get("biography_summary"),
                 biography_era=row.get("biography_era"),
                 biography_nationality=row.get("biography_nationality"),
@@ -1035,12 +1103,14 @@ class SqlPersonRepository(ComposerRepository):
                 # Copia identificadores al target.
                 await cur.execute(
                     "INSERT INTO persons_identity "
-                    "(persons_id, identity_type, identity_value, "
+                    "(persons_id, identity_name, identity_name_norm, identity_type, identity_value, "
                     " identity_is_anchor, identity_source, "
-                    " identity_strength, identity_channels) "
-                    "SELECT %s, identity_type, identity_value, "
+                    " identity_strength, identity_channels, "
+                    " identity_confidence, identity_retrieved_at) "
+                    "SELECT %s, identity_name, identity_name_norm, identity_type, identity_value, "
                     "identity_is_anchor, identity_source, "
-                    "identity_strength, identity_channels "
+                    "identity_strength, identity_channels, "
+                    "identity_confidence, identity_retrieved_at "
                     "FROM persons_identity src WHERE src.persons_id = %s",
                     (target_id, sid),
                 )

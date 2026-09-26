@@ -1,0 +1,5 @@
+[
+  {"name": "Attr. variously to Mozart or Wenzel M\u00fcller", "action": "canonicalize", "canonical": "Wolfgang Amadeus Mozart"},
+  {"name": "G. Zorzi W.A.Mozart", "action": "canonicalize", "canonical": "Wolfgang Amadeus Mozart"},
+  {"name": "Handel Mozart", "action": "canonicalize", "canonical": "Wolfgang Amadeus Mozart"}
+]

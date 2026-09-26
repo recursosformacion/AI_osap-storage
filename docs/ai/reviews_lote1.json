@@ -1,0 +1,148 @@
+[
+  {
+    "name": "Orlando di Lasso",
+    "action": "person_ok",
+    "summary": "Orlande de Lassus u Orlando di Lasso (c. 1532–1594) fue un compositor franco-flamenco del Renacimiento tardío, uno de los más prolíficos de su época (más de 2.000 obras).",
+    "era": "Renacimiento",
+    "nationality": "Franco-flamenca",
+    "key_works": ["Prophetiae Sibyllarum", "Psalmi Davidis poenitentiales", "Motetes y chansons"],
+    "key_fact": "Trabajó en la corte de Múnich (Alberto V) y su obra abarca motetes, madrigales, chansons y misas."
+  },
+  {
+    "name": "Johann Sebastian Bach",
+    "action": "person_ok",
+    "summary": "Johann Sebastian Bach (1685–1750) fue un compositor y organista alemán del Barroco, considerado una de las cimas de la música occidental.",
+    "era": "Barroco",
+    "nationality": "Alemana",
+    "key_works": ["Conciertos de Brandeburgo", "Misa en si menor", "Pasión según San Mateo", "El clave bien temperado"],
+    "key_fact": "Fue Kantor de la iglesia de Santo Tomás de Leipzig desde 1723 hasta su muerte."
+  },
+  {
+    "name": "J S Bach",
+    "action": "duplicate",
+    "duplicate_of": "Johann Sebastian Bach"
+  },
+  {
+    "name": "Luca Marenzio",
+    "action": "person_ok",
+    "summary": "Luca Marenzio (c. 1553–1599) fue un compositor italiano del Renacimiento tardío, célebre por sus libros de madrigales.",
+    "era": "Renacimiento",
+    "nationality": "Italiana",
+    "key_works": ["Libros de madrigales (I–IX)", "Madrigali spirituali"],
+    "key_fact": "Fue llamado «il più dolce cigno» (el cisne más dulce) por sus contemporáneos."
+  },
+  {
+    "name": "George Frideric Handel",
+    "action": "person_ok",
+    "summary": "Georg Friedrich Händel / George Frideric Handel (1685–1759) fue un compositor alemán nacionalizado británico, figura central del Barroco tardío.",
+    "era": "Barroco",
+    "nationality": "Alemana (británica por naturalización)",
+    "key_works": ["Messiah", "Water Music", "Music for the Royal Fireworks", "Giulio Cesare"],
+    "key_fact": "Se naturalizó británico en 1727 y desarrolló casi toda su carrera en Londres."
+  },
+  {
+    "name": "Joseph Haydn",
+    "action": "person_ok",
+    "summary": "Franz Joseph Haydn (1732–1809) fue un compositor austriaco del Clasicismo, llamado «padre de la sinfonía» y del cuarteto de cuerda.",
+    "era": "Clasicismo",
+    "nationality": "Austriaca",
+    "key_works": ["Sinfonías de Londres", "La creación", "Las estaciones", "Cuartetos de cuerda Op. 76"],
+    "key_fact": "Trabajó casi treinta años al servicio de la familia Esterházy."
+  },
+  {
+    "name": "Joseph Barnby",
+    "action": "person_ok",
+    "summary": "Joseph Barnby (1838–1896) fue un compositor, organista y director de coro inglés, autor de himnos muy difundidos.",
+    "era": "Romanticismo",
+    "nationality": "Británica",
+    "key_works": ["When Morning Gilds the Skies", "Sweet and Low"],
+    "key_fact": "Dirigió la Royal Albert Hall Choral Society y fue ennoblecido en 1892."
+  },
+  {
+    "name": "Wolfgang Amadeus Mozart",
+    "action": "person_ok",
+    "summary": "Wolfgang Amadeus Mozart (1756–1791) fue un compositor austriaco del Clasicismo, autor de más de 600 obras en todos los géneros.",
+    "era": "Clasicismo",
+    "nationality": "Austriaca",
+    "key_works": ["Don Giovanni", "Las bodas de Fígaro", "La flauta mágica", "Réquiem"],
+    "key_fact": "Fue niño prodigio: compuso desde los cinco años y realizó giras por Europa con su familia."
+  },
+  {
+    "name": "Johannes Brahms",
+    "action": "person_ok",
+    "summary": "Johannes Brahms (1833–1897) fue un compositor y pianista alemán del Romanticismo, continuador de la tradición clásica.",
+    "era": "Romanticismo",
+    "nationality": "Alemana",
+    "key_works": ["Un réquiem alemán", "Cuatro sinfonías", "Danzas húngaras"],
+    "key_fact": "Robert Schumann lo presentó en 1853 como el llamado a continuar el legado de Beethoven."
+  },
+  {
+    "name": "Jacobus Handl",
+    "action": "person_ok",
+    "summary": "Jacobus Handl, también Jacobus Gallus (1550–1591), fue un compositor esloveno del Renacimiento tardío activo en Bohemia y Austria.",
+    "era": "Renacimiento",
+    "nationality": "Eslovena (Carniola)",
+    "key_works": ["Opus musicum", "Harmoniae morales", "Moralia"],
+    "key_fact": "Su apodo latino «Gallus» (gallo) procede de su nombre esloveno Petelin."
+  },
+  {
+    "name": "Heny Purcell",
+    "action": "correct",
+    "corrected_name": "Henry Purcell",
+    "summary": "Henry Purcell (c. 1659–1695) fue un compositor inglés del Barroco, el más importante de su país antes de Elgar.",
+    "era": "Barroco",
+    "nationality": "Británica",
+    "key_works": ["Dido and Aeneas", "Come Ye Sons of Art", "Hail, Bright Cecilia"],
+    "key_fact": "Fue organista de la Abadía de Westminster y está enterrado junto al órgano de la abadía."
+  },
+  {
+    "name": "Franz Schubert",
+    "action": "person_ok",
+    "summary": "Franz Schubert (1797–1828) fue un compositor austriaco del Romanticismo temprano, maestro del lied.",
+    "era": "Romanticismo",
+    "nationality": "Austriaca",
+    "key_works": ["Winterreise", "Sinfonía n.º 8 «Inacabada»", "Ave Maria", "Quinteto La trucha"],
+    "key_fact": "Compuso más de 600 canciones y murió a los 31 años, el mismo año que Beethoven."
+  },
+  {
+    "name": "Giaches de Wert",
+    "action": "person_ok",
+    "summary": "Giaches de Wert (c. 1535–1596) fue un compositor flamenco del Renacimiento tardío, activo en Italia.",
+    "era": "Renacimiento",
+    "nationality": "Flamenca",
+    "key_works": ["Libros de madrigales", "Il duodecimo libro de madrigali"],
+    "key_fact": "Su estilo madrigalístico influyó decisivamente en Claudio Monteverdi."
+  },
+  {
+    "name": "Tiburtio Massaino",
+    "action": "person_ok",
+    "summary": "Tiburtio Massaino (c. 1550–c. 1609) fue un compositor y fraile agustino italiano de finales del Renacimiento.",
+    "era": "Renacimiento",
+    "nationality": "Italiana",
+    "key_works": ["Motetes", "Sacrae cantiones"],
+    "key_fact": "Trabajó en Piacenza, Salzburgo y Praga, entre otras cortes y catedrales."
+  },
+  {
+    "name": "John Robson Sweney",
+    "action": "person_ok",
+    "summary": "John Robson Sweney (1837–1899) fue un compositor estadounidense de música de himnos y melodías gospel.",
+    "era": "Siglo XIX",
+    "nationality": "Estadounidense",
+    "key_works": ["Himnos con letra de Fanny Crosby", "Tell Me the Old, Old Story"],
+    "key_fact": "Colaboró habitualmente con William J. Kirkpatrick en la edición de cancioneros."
+  },
+  {
+    "name": "André Vierendeels",
+    "action": "correct",
+    "corrected_name": "André Vierendeels",
+    "summary": "André Vierendeels (siglo XX–XXI) fue un músico y arreglista belga, autor de numerosas transcripciones y arreglos para conjunto.",
+    "era": "Contemporáneo",
+    "nationality": "Belga",
+    "key_works": ["Arreglos y transcripciones para viento y metales"],
+    "key_fact": "Gran parte de su catálogo son adaptaciones de obras anteriores para formaciones instrumentales."
+  },
+  {
+    "name": "Teton Sioux band",
+    "action": "not_person"
+  }
+]

@@ -6,11 +6,12 @@ corpus CPDL pasa a ser filas de `works` con `works_origin='CPDL'` y
 
 Extrae de cada página:
 - `title`, `composer`, `catalogue_hint`, `arrangement_hint`
-- `voicing`, `instrumentation`, `genre`, `language` (arrays)
+- `voicing` (todas las plantillas `{{Voicing}}`), `instrumentation`, `genre`, `language`
 - `license`, `n_editions`, `payload_json` (ediciones)
 
 Escribe:
-- `works` (origin/origin_id/title/catalogue/license/voicing)
+- `works` (origin/origin_id/title/catalogue/license)
+- `ensembles` + `work_ensembles` (voicing = formación vocal; una obra puede tener varias)
 - `works_person_import` (composer, sin resolver)
 - `languages` + `work_language` (idiomas)
 
@@ -34,6 +35,7 @@ from xml.etree import ElementTree
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from application.services.cpdl_voicing import voicing_terms  # noqa: E402
 from infrastructure.config import Settings  # noqa: E402
 from infrastructure.db.connection import Database  # noqa: E402
 
@@ -102,8 +104,11 @@ def _tmpl(text: str, name: str) -> str:
 
 
 def _tmpl_multi(text: str, name: str) -> list[str]:
-    m = re.search(r"\{\{\s*" + re.escape(name) + r"\|([^}]*)\}\}", text)
-    return [_clean(p) for p in m.group(1).split("|") if _clean(p)] if m else []
+    """Todos los valores de las plantillas `{{name|...}}` (no solo la primera)."""
+    out: list[str] = []
+    for body in re.findall(r"\{\{\s*" + re.escape(name) + r"\|([^}]*)\}\}", text, re.I):
+        out.extend(_clean(p) for p in body.split("|") if _clean(p))
+    return out
 
 
 def _parse_page(page_id: int, title: str, text: str) -> dict:
@@ -178,6 +183,7 @@ async def _ingest(paths: list[Path], db_name: str, dry_run: bool) -> None:
 
     seen: set[int] = set()
     lang_ids: dict[str, int] = {}
+    ensemble_ids: dict[str, int] = {}
     works = 0
     skipped = 0
 
@@ -212,20 +218,40 @@ async def _ingest(paths: list[Path], db_name: str, dry_run: bool) -> None:
                     """
                     INSERT INTO works
                         (works_origin, works_origin_id, works_title, works_catalogue,
-                         works_license, works_voicing, works_instrumentation)
-                    VALUES ('CPDL', %s, %s, %s, %s, %s, %s)
+                         works_license, works_instrumentation)
+                    VALUES ('CPDL', %s, %s, %s, %s, %s)
                     """,
                     (
                         str(page_id),
                         rec["title"],
                         rec["catalogue_hint"],
                         rec["license"],
-                        json.dumps(rec["voicing"], ensure_ascii=False),
                         json.dumps(rec["instrumentation"], ensure_ascii=False),
                     ),
                 )
                 work_id = cur.lastrowid
                 works += 1
+
+                for term in voicing_terms(json.dumps(rec["voicing"], ensure_ascii=False)):
+                    code = term.upper()
+                    eid = ensemble_ids.get(code)
+                    if eid is None:
+                        await cur.execute(
+                            "INSERT IGNORE INTO ensembles (ensembles_code, ensembles_name) "
+                            "VALUES (%s, %s)",
+                            (code, code),
+                        )
+                        await cur.execute(
+                            "SELECT id FROM ensembles WHERE ensembles_code = %s", (code,)
+                        )
+                        eid = int((await cur.fetchone())["id"])
+                        ensemble_ids[code] = eid
+                    await cur.execute(
+                        "INSERT IGNORE INTO work_ensembles "
+                        "(works_id, ensembles_id, work_ensembles_quantity) "
+                        "VALUES (%s, %s, 1)",
+                        (work_id, eid),
+                    )
 
                 if rec["composer"]:
                     await cur.execute(

@@ -499,18 +499,21 @@ class InMemoryComposerRepository(ComposerRepository):
         self, person_id: str, id_type: str, id_value: str, *,
         is_identity_anchor: bool = False, source: str = "musicbrainz",
         strength: str | None = None, channels: list[str] | None = None,
+        confidence: float = 0.0, retrieved_at: datetime | None = None,
     ) -> None:
         for i in self._identifiers.get(person_id, []):
             if i.id_type == id_type and i.id_value == id_value:
                 if is_identity_anchor:
                     i = ComposerIdentifier(person_id=person_id, id_type=id_type,
                                            id_value=id_value, is_identity_anchor=True,
-                                           source=source, strength=strength, channels=channels)
+                                           source=source, strength=strength, channels=channels,
+                                           confidence=confidence, retrieved_at=retrieved_at)
                 return
         self._identifiers.setdefault(person_id, []).append(
             ComposerIdentifier(person_id=person_id, id_type=id_type, id_value=id_value,
                                is_identity_anchor=is_identity_anchor, source=source,
-                               strength=strength, channels=channels))
+                               strength=strength, channels=channels,
+                               confidence=confidence, retrieved_at=retrieved_at))
 
     async def add_evidence(
         self, person_id: str, *, rule: str, decision: str, reason: str,
@@ -675,6 +678,13 @@ class InMemoryComposerRepository(ComposerRepository):
         birth_year: str | None = None,
         death_year: str | None = None,
         homepage: str | None = None,
+        given_name: str | None = None,
+        family_name: str | None = None,
+        sort_name: str | None = None,
+        nationality: str | None = None,
+        image_url: str | None = None,
+        person_type: str | None = None,
+        attribution_note: str | None = None,
         visible: bool | None = None,
         cluster_id: str | None = None,
         review_status: str | None = None,
@@ -705,6 +715,20 @@ class InMemoryComposerRepository(ComposerRepository):
             composer.musicbrainz_id = musicbrainz_id
         if status is not None:
             composer.status = status
+        if given_name is not None:
+            composer.given_name = given_name
+        if family_name is not None:
+            composer.family_name = family_name
+        if sort_name is not None:
+            composer.sort_name = sort_name
+        if nationality is not None:
+            composer.nationality = nationality
+        if image_url is not None:
+            composer.image_url = image_url
+        if person_type is not None:
+            composer.person_type = person_type
+        if attribution_note is not None:
+            composer.attribution_note = attribution_note
 
     async def get_biography(self, person_id: str):
         return await self.get_detail(person_id)
