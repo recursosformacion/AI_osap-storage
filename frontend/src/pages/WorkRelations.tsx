@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 
+// Editor de las tablas de enlace de una obra: cada relación es una FILA con sus selects
+// (persona + rol, o el valor de la tabla) y una "X" para borrarla; debajo hay una fila en
+// blanco para añadir. Cambiar un select equivale a modificar (se borra la relación antigua
+// y se crea la nueva). Es la vía de mantenimiento de las tablas de enlaces.
+
 const API = '/api/admin/works'
 
 interface RelItem {
@@ -59,8 +64,7 @@ interface Props {
 export default function WorkRelations({ workId, editing }: Props) {
   const [relations, setRelations] = useState<Record<string, RelItem[]>>({})
   const [options, setOptions] = useState<Record<string, Option[]>>({})
-  const [selection, setSelection] = useState<Record<string, string>>({})
-  const [roleSelection, setRoleSelection] = useState<Record<string, string>>({})
+  const [draft, setDraft] = useState<Record<string, { value: string; role: string }>>({})
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -104,16 +108,26 @@ export default function WorkRelations({ workId, editing }: Props) {
     }
   }, [])
 
-  async function add(panel: string) {
-    const value = selection[panel]
+  function entityOptions(panel: string): Option[] {
+    return panel === 'person_roles' ? options['persons'] ?? [] : options[panel] ?? []
+  }
+
+  /** Opciones del select incluyendo siempre el valor actual (aunque no venga en la lista). */
+  function withCurrent(list: Option[], value: string | number | null | undefined, label?: string | null): Option[] {
+    if (value === null || value === undefined || value === '') return list
+    const key = String(value)
+    if (list.some((o) => String(o.value) === key)) return list
+    return [{ value: key, label: label ?? key }, ...list]
+  }
+
+  async function add(panel: string, value: string, role?: string) {
     if (!value) return
     setBusy(true)
     setError(null)
     try {
       const body: Record<string, unknown> = { id: value }
-      if (panel === 'person_roles') body.role_id = roleSelection[panel] || ''
+      if (panel === 'person_roles') body.role_id = role || ''
       await sendJson(`${API}/${encodeURIComponent(workId)}/relations/${panel}`, 'POST', body)
-      setSelection((prev) => ({ ...prev, [panel]: '' }))
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo añadir')
@@ -137,12 +151,38 @@ export default function WorkRelations({ workId, editing }: Props) {
     }
   }
 
-  function itemText(panel: string, item: RelItem): string {
-    const parts = [item.label ?? String(item.ref_id ?? '')]
-    if (panel === 'person_roles' && item.role_name) parts.push(`— ${item.role_name}`)
-    if (panel === 'instruments' && item.quantity && item.quantity > 1) parts.push(`×${item.quantity}`)
-    if (panel === 'voices' && item.context) parts.push(`(${item.context})`)
-    return parts.join(' ')
+  /** Modificar = borrar la relación actual y crear la nueva. */
+  async function modify(panel: string, item: RelItem, nextValue: string, nextRole?: string) {
+    if (nextRole !== undefined && nextRole === '') return
+    setBusy(true)
+    setError(null)
+    try {
+      const delBody: Record<string, unknown> = { id: item.ref_id }
+      if (panel === 'person_roles') delBody.role_id = item.role_id
+      await sendJson(`${API}/${encodeURIComponent(workId)}/relations/${panel}`, 'DELETE', delBody)
+      const addBody: Record<string, unknown> = { id: nextValue }
+      if (panel === 'person_roles') addBody.role_id = nextRole ?? item.role_id ?? ''
+      await sendJson(`${API}/${encodeURIComponent(workId)}/relations/${panel}`, 'POST', addBody)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo modificar')
+      await load()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function setDraftField(panel: string, field: 'value' | 'role', value: string) {
+    setDraft((prev) => {
+      const cur = prev[panel] ?? { value: '', role: '' }
+      const next = { ...cur, [field]: value }
+      // Al elegir el valor principal, si no requiere rol o ya hay rol, se añade directamente.
+      if (field === 'value' && value && (panel !== 'person_roles' || next.role)) {
+        void add(panel, value, next.role)
+        return { ...prev, [panel]: { value: '', role: '' } }
+      }
+      return { ...prev, [panel]: next }
+    })
   }
 
   return (
@@ -153,6 +193,9 @@ export default function WorkRelations({ workId, editing }: Props) {
       {PANELS.map((panel) => {
         const items = relations[panel.key] ?? []
         const personRole = panel.key === 'person_roles'
+        const ents = entityOptions(panel.key)
+        const roles = options['roles'] ?? []
+        const d = draft[panel.key] ?? { value: '', role: '' }
         return (
           <div className="rel" key={panel.key}>
             <h3 className="rel__title">
@@ -161,38 +204,15 @@ export default function WorkRelations({ workId, editing }: Props) {
               {panel.hint && <em className="rel__hint">{panel.hint}</em>}
             </h3>
 
-            <ul className="rel__items">
-              {items.length === 0 && <li className="rel__empty">Sin relaciones.</li>}
-              {items.map((item) => (
-                <li key={`${panel.key}-${item.ref_id}-${item.role_id ?? ''}`} className="rel__item">
-                  <span>{itemText(panel.key, item)}</span>
-                  {editing && (
-                    <button
-                      type="button"
-                      className="btn btn--danger btn--tiny"
-                      disabled={busy}
-                      onClick={() => remove(panel.key, item)}
-                      title="Quitar"
-                    >
-                      ×
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-
-            {editing && (
-              <div className="rel__add">
+            {/* Una fila por relación existente: selects (valor + rol) y X para borrar. */}
+            {items.map((item) => (
+              <div className="rel__add" key={`${panel.key}-${item.ref_id}-${item.role_id ?? ''}`}>
                 <select
-                  value={selection[panel.key] ?? ''}
-                  onChange={(e) =>
-                    setSelection((prev) => ({ ...prev, [panel.key]: e.target.value }))
-                  }
+                  value={String(item.ref_id ?? '')}
+                  disabled={!editing || busy}
+                  onChange={(e) => void modify(panel.key, item, e.target.value, item.role_id != null ? String(item.role_id) : undefined)}
                 >
-                  <option value="">
-                    {personRole ? '— elegir persona —' : '— elegir —'}
-                  </option>
-                  {(options[personRole ? 'persons' : panel.key] ?? []).map((o) => (
+                  {withCurrent(ents, item.ref_id, item.label).map((o) => (
                     <option key={String(o.value)} value={String(o.value)}>
                       {o.label ?? o.value}
                     </option>
@@ -200,13 +220,55 @@ export default function WorkRelations({ workId, editing }: Props) {
                 </select>
                 {personRole && (
                   <select
-                    value={roleSelection[panel.key] ?? ''}
-                    onChange={(e) =>
-                      setRoleSelection((prev) => ({ ...prev, [panel.key]: e.target.value }))
-                    }
+                    value={String(item.role_id ?? '')}
+                    disabled={!editing || busy}
+                    onChange={(e) => void modify(panel.key, item, String(item.ref_id ?? ''), e.target.value)}
                   >
                     <option value="">— rol —</option>
-                    {(options['roles'] ?? []).map((o) => (
+                    {roles.map((o) => (
+                      <option key={String(o.value)} value={String(o.value)}>
+                        {o.label ?? o.value}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {editing && (
+                  <button
+                    type="button"
+                    className="btn btn--danger btn--tiny"
+                    disabled={busy}
+                    onClick={() => void remove(panel.key, item)}
+                    title="Quitar"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+
+            {/* Fila en blanco para añadir. */}
+            {editing && (
+              <div className="rel__add rel__add--new">
+                <select
+                  value={d.value}
+                  disabled={busy}
+                  onChange={(e) => setDraftField(panel.key, 'value', e.target.value)}
+                >
+                  <option value="">{personRole ? '— elegir persona —' : '— elegir —'}</option>
+                  {ents.map((o) => (
+                    <option key={String(o.value)} value={String(o.value)}>
+                      {o.label ?? o.value}
+                    </option>
+                  ))}
+                </select>
+                {personRole && (
+                  <select
+                    value={d.role}
+                    disabled={busy}
+                    onChange={(e) => setDraftField(panel.key, 'role', e.target.value)}
+                  >
+                    <option value="">— rol —</option>
+                    {roles.map((o) => (
                       <option key={String(o.value)} value={String(o.value)}>
                         {o.label ?? o.value}
                       </option>
@@ -216,10 +278,14 @@ export default function WorkRelations({ workId, editing }: Props) {
                 <button
                   type="button"
                   className="btn btn--primary btn--tiny"
-                  disabled={busy || !selection[panel.key] || (personRole && !roleSelection[panel.key])}
-                  onClick={() => add(panel.key)}
+                  disabled={busy || !d.value || (personRole && !d.role)}
+                  onClick={() => {
+                    void add(panel.key, d.value, d.role)
+                    setDraft((prev) => ({ ...prev, [panel.key]: { value: '', role: '' } }))
+                  }}
+                  title="Añadir"
                 >
-                  Añadir
+                  +
                 </button>
               </div>
             )}
