@@ -130,6 +130,18 @@ async def admin_page(token: str = Query(default="")) -> HTMLResponse:
 
 
 @router.get(
+    "/admin/mantenimiento",
+    response_class=HTMLResponse,
+    summary="Mantenimiento (opciones) de storage",
+    description="Página curada de opciones de mantenimiento de osap-storage (Compositores, "
+    "Obras, Tablas), distinta del multimantenimiento de la SPA. osap-api la enlaza como "
+    "'Mantenimiento'.",
+)
+async def admin_mantenimiento_page(token: str = Query(default="")) -> HTMLResponse:
+    return HTMLResponse(admin_view.admin_maintenance_page(token=token))
+
+
+@router.get(
     "/admin/maestros",
     response_class=HTMLResponse,
     summary="Mantenimiento compositores (CRUD convencional)",
