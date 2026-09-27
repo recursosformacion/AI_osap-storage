@@ -176,12 +176,13 @@ class ServiceAuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable):
         path = request.url.path
-        # Exento de auth: health, metrics y el endpoint público de descarga de recursos
-        # (/api/download/{id} solo redirige al CDN/R2; no expone rutas ni hashes internos).
+        # Exento de auth: health, metrics y los assets estáticos del admin.
+        # OJO: `/api/download/{id}` NO se exime: exige service token `storage:read` para que
+        # una llamada externa no pueda saltarse la cuota de OMR de osap-api. La descarga
+        # legítima la hace osap-api (que añade su token) tras comprobar la cuota.
         if (
             path in EXEMPT_PATHS
             or path.startswith("/api/v1/health")
-            or path.startswith("/api/download/")
             or path.startswith(_ADMIN_ASSET_PREFIX)
         ):
             return await call_next(request)

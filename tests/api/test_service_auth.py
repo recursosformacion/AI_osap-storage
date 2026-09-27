@@ -63,6 +63,10 @@ def _make_app(priv: str, pub: str) -> FastAPI:
     async def metrics():
         return {"ok": True}
 
+    @app.get("/api/download/{resource_id}")
+    async def download(resource_id: str):
+        return {"ok": True}
+
     return app
 
 
@@ -71,6 +75,16 @@ def test_health_and_metrics_exempt():
     client = TestClient(_make_app(priv, pub))
     assert client.get("/api/v1/health").status_code == 200
     assert client.get("/metrics").status_code == 200
+
+
+def test_download_requires_service_token():
+    """`/api/download/{id}` ya NO está exento: sin token no se puede saltar la cuota."""
+    priv, pub = _make_keys()
+    client = TestClient(_make_app(priv, pub))
+    assert client.get("/api/download/1").status_code == 401
+    token = _sign(priv, scopes="storage:read")
+    resp = client.get("/api/download/1", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200
 
 
 def test_no_token_401():
