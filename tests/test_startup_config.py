@@ -20,6 +20,7 @@ _VALID: dict[str, object] = {
     "app": {"env": "production"},
     "db": {"host": "db", "name": "osap_storage", "user": "osap", "password": "secret"},
     "repository": {"provider": "local"},
+    "auth": {"enabled": True},
 }
 
 

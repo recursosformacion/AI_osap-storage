@@ -60,8 +60,8 @@ providers:
         base_url: https://zenodo.org/records/XXXX
 
 # Autenticación de servicio (service-auth-v1).
-# Desactivada por defecto (auth.enabled: false). Al desplegar la frontera de seguridad,
-# se activa con el JWKS de osap-auth y la audiencia de storage.
+# En desarrollo se desactiva explícitamente; en producción la validación exige
+# auth.enabled: true y el JWKS de osap-auth con la audiencia de storage.
 auth:
   enabled: false
   issuer: https://auth.openmusicrepository.com

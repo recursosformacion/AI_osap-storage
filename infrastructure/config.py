@@ -44,23 +44,39 @@ def missing_required_keys(data: dict[str, Any]) -> list[str]:
     return missing
 
 
+def auth_enabled_value(data: dict[str, Any]) -> bool | None:
+    """Valor de `auth.enabled` leído del YAML, o `None` si no está declarado."""
+    auth = data.get("auth")
+    if isinstance(auth, dict):
+        value = auth.get("enabled")
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() not in {"0", "false", "no", "off", ""}
+    return None
+
+
 def validate_startup_config(config_path: Path | None = None) -> None:
     """Valida la configuración al arrancar.
 
     En producción (o si no hay marca explícita de entorno) falla cerrado ante cualquier
-    clave obligatoria ausente; en desarrollo/test solo registra un aviso.
+    clave obligatoria ausente y exige `auth.enabled: true`; en desarrollo/test solo avisa
+    y permite `auth.enabled: false` de forma explícita.
     """
     path = config_path or Path(os.environ.get("OSAP_CONFIG", PROJECT_ROOT / "config.yaml"))
     data: dict[str, Any] = {}
     if path.exists():
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    missing = missing_required_keys(data)
-    if resolve_config_env(data) == "production" and missing:
+    env = resolve_config_env(data)
+    errors = missing_required_keys(data)
+    if env == "production" and auth_enabled_value(data) is not True:
+        errors.append("auth.enabled (debe ser true en producción)")
+    if env == "production" and errors:
         raise SystemExit(
-            f"[osap-storage] configuración inválida ({path}): faltan {', '.join(missing)}"
+            f"[osap-storage] configuración inválida ({path}): {', '.join(errors)}"
         )
-    if missing:
-        logger.warning("[osap-storage] configuración incompleta (%s): faltan %s", path, ", ".join(missing))
+    if errors:
+        logger.warning("[osap-storage] configuración incompleta (%s): %s", path, ", ".join(errors))
 
 
 
@@ -203,7 +219,7 @@ class Settings(BaseSettings):
     bootstrap_create_default_provider: bool
 
     # Autenticación de servicio (service-auth-v1). Desactivada por defecto hasta desplegar.
-    auth_enabled: bool = False
+    auth_enabled: bool = True
     auth_issuer: str = ""
     auth_audience: str = ""
     auth_jwks_url: str = ""

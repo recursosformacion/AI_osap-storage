@@ -10,6 +10,13 @@
 app:
   env: production
 
+# Autenticación de servicio (obligatoria en producción: auth.enabled debe ser true).
+auth:
+  enabled: true
+  issuer: https://auth.openmusicrepository.com
+  audience: osap-api
+  jwks_url: https://auth.openmusicrepository.com/auth-api/auth/.well-known/jwks.json
+
 db:
   host: 127.0.0.1
   port: 3306
