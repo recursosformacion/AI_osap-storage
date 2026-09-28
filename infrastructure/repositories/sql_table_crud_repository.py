@@ -54,6 +54,25 @@ TABLES: dict[str, str] = {
 # (no tienen una clave de fila única): ensemble_voices, roles_categoria,
 # work_ensembles, work_genres, work_instruments, work_language, work_tag, work_voices.
 
+# Columnas que el CRUD genérico nunca puede escribir: auditoría, derivadas y estado
+# sensible de personas (visibilidad, revisión y merge). Se excluyen silenciosamente del
+# payload para no romper PUTs del admin que reenvían la fila completa.
+NON_WRITABLE_COLUMNS: frozenset[str] = frozenset(
+    {
+        "created_at",
+        "updated_at",
+        "sha256",
+        "persons_visible",
+        "persons_status",
+        "persons_review_status",
+        "persons_review_reason",
+        "persons_reviewed_at",
+        "persons_merged_into",
+        "persons_merged_at",
+    }
+)
+
+
 
 class SqlTableCrudRepository(TableCrudRepository):
     def __init__(self, db: Database) -> None:
@@ -227,11 +246,28 @@ class SqlTableCrudRepository(TableCrudRepository):
 
     async def delete(self, table: str, pk_value: object) -> int:
         pk = await self.pk_column(table)
+        if await self._has_cascading_dependents(table):
+            raise InvalidTableCrud(
+                f"borrado genérico no permitido en `{table}`: tiene dependencias "
+                "ON DELETE CASCADE (usar el flujo dedicado)"
+            )
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
                 f"DELETE FROM `{table}` WHERE `{pk}` = %s", (pk_value,)
             )
             return cur.rowcount
+
+    async def _has_cascading_dependents(self, table: str) -> bool:
+        """True si otra tabla referencia a `table` con ON DELETE CASCADE."""
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT COUNT(*) AS n FROM information_schema.referential_constraints "
+                "WHERE constraint_schema = DATABASE() AND referenced_table_name = %s "
+                "AND delete_rule = 'CASCADE'",
+                (table,),
+            )
+            row = await cur.fetchone()
+        return bool(row and int(row["n"] or 0) > 0)
 
     def _require_table(self, table: str) -> None:
         if table not in TABLES:
@@ -240,4 +276,4 @@ class SqlTableCrudRepository(TableCrudRepository):
     async def _valid_columns(self, table: str, data: dict) -> list[str]:
         self._require_table(table)
         allowed = set(await self.columns(table))
-        return [k for k in data if k in allowed]
+        return [k for k in data if k in allowed and k not in NON_WRITABLE_COLUMNS]
