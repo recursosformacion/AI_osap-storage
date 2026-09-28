@@ -110,10 +110,12 @@ class ServiceTokenValidator:
         Lanza `ServiceAuthError` si el token no es un service token válido o no tiene scope.
         """
         try:
-            unverified = jwt.decode(token, options={"verify_signature": False})
+            header = jwt.get_unverified_header(token)
         except jwt.InvalidTokenError as exc:
             raise ServiceAuthError(401, "token inválido") from exc
-        kid = unverified.get("kid") or self._kid
+        # El `kid` vive en la cabecera JWT, no en el payload: seleccionar por él es lo que
+        # permite publicar varias claves (rotación con solape).
+        kid = header.get("kid") or self._kid
         try:
             key = await self._get_verification_key(kid)
         except Exception as exc:  # noqa: BLE001
