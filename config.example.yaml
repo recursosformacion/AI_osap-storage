@@ -11,6 +11,8 @@
 # ============================================================
 
 # Base de datos (MariaDB/MySQL)
+app:
+  env: development
 db:
   host: 127.0.0.1
   port: 3306

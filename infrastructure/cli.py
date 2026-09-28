@@ -4,13 +4,10 @@ import argparse
 import asyncio
 import csv
 import json
-import os
 import sys
 from dataclasses import asdict, is_dataclass
-from pathlib import Path
 from typing import Any
 
-import yaml
 from application.use_cases.import_pdmx import PdmxImportResult
 from application.use_cases.materialize_archive import MaterializeArchiveCommand
 from application.use_cases.materialize_file import MaterializeFileCommand
@@ -19,7 +16,7 @@ from application.use_cases.register_existing_file import RegisterExistingFileCom
 from application.use_cases.register_resources import RegisterMirrorResourcesCommand
 from domain.entities.import_source import ImportSource
 
-from infrastructure.config import Settings
+from infrastructure.config import Settings, validate_startup_config
 from infrastructure.container import Container, build_container
 from infrastructure.doctor import run_doctor
 from infrastructure.importers.pdmx_csv import read_pdmx_csv
@@ -575,18 +572,7 @@ def main() -> None:
     except (AttributeError, ValueError):
         pass
     args = build_parser().parse_args()
-    try:
-        from osap.bootstrap.configuration import validate_generic_service_config
-    except ImportError:
-        validate_generic_service_config = None  # type: ignore[assignment]
-
-    if validate_generic_service_config is not None:
-        config_path = Path(os.environ.get("OSAP_CONFIG", Path(__file__).resolve().parent.parent / "config.yaml"))
-        data: dict[str, Any] = {}
-        if config_path.exists():
-            data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-        validate_generic_service_config("osap-storage", data, config_path)
-
+    validate_startup_config()
     container = build_container(Settings())  # type: ignore[call-arg]
     asyncio.run(_run(args, container))
 

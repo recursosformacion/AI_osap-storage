@@ -4,13 +4,11 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
 
 import uvicorn
-import yaml
 from fastapi import FastAPI
 from infrastructure.bootstrap import ensure_default_provider
-from infrastructure.config import Settings
+from infrastructure.config import Settings, validate_startup_config
 from infrastructure.container import Container, build_container
 from infrastructure.db.migrate import migrate
 
@@ -47,17 +45,7 @@ from api.routes import persons as persons_routes
 
 
 def _validate_config() -> None:
-    try:
-        from osap.bootstrap.configuration import validate_generic_service_config
-    except ImportError:
-        return
-
-    config_path = Path(os.environ.get("OSAP_CONFIG", Path(__file__).resolve().parent.parent / "config.yaml"))
-    data: dict[str, Any] = {}
-    if config_path.exists():
-        data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-
-    validate_generic_service_config("osap-storage", data, config_path)
+    validate_startup_config()
 
 
 def create_app() -> FastAPI:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -8,6 +9,59 @@ import yaml
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+logger = logging.getLogger(__name__)
+
+# Claves obligatorias en producción. Sin estas, el servicio no debe arrancar (fail-closed).
+_REQUIRED_KEYS: dict[str, tuple[str, ...]] = {
+    "db": ("host", "name", "user", "password"),
+    "repository": ("provider",),
+}
+
+
+def resolve_config_env(data: dict[str, Any]) -> str:
+    """Entorno efectivo: `OSAP_ENV` > `app.env` del YAML > production (fail-closed)."""
+    explicit = os.environ.get("OSAP_ENV", "").strip().lower()
+    if explicit:
+        return explicit
+    app = data.get("app")
+    if isinstance(app, dict):
+        value = app.get("env")
+        if isinstance(value, str) and value.strip():
+            return value.strip().lower()
+    return "production"
+
+
+def missing_required_keys(data: dict[str, Any]) -> list[str]:
+    """Devuelve las claves obligatorias ausentes o vacías (`seccion.clave`)."""
+    missing: list[str] = []
+    for section, keys in _REQUIRED_KEYS.items():
+        block = data.get(section)
+        for key in keys:
+            value = block.get(key) if isinstance(block, dict) else None
+            if value is None or (isinstance(value, str) and not value.strip()):
+                missing.append(f"{section}.{key}")
+    return missing
+
+
+def validate_startup_config(config_path: Path | None = None) -> None:
+    """Valida la configuración al arrancar.
+
+    En producción (o si no hay marca explícita de entorno) falla cerrado ante cualquier
+    clave obligatoria ausente; en desarrollo/test solo registra un aviso.
+    """
+    path = config_path or Path(os.environ.get("OSAP_CONFIG", PROJECT_ROOT / "config.yaml"))
+    data: dict[str, Any] = {}
+    if path.exists():
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    missing = missing_required_keys(data)
+    if resolve_config_env(data) == "production" and missing:
+        raise SystemExit(
+            f"[osap-storage] configuración inválida ({path}): faltan {', '.join(missing)}"
+        )
+    if missing:
+        logger.warning("[osap-storage] configuración incompleta (%s): faltan %s", path, ", ".join(missing))
+
 
 
 class YamlConfigSource:
