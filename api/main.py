@@ -35,6 +35,7 @@ from api.routes import (
     pages,
     provider,
     providers,
+    public_statistics,
     resolution,
     search,
     statistics,
@@ -116,6 +117,7 @@ def create_app() -> FastAPI:
     app.include_router(entries.router)
     app.include_router(archives.router)
     app.include_router(statistics.router)
+    app.include_router(public_statistics.router)
     app.include_router(works.router)
     app.include_router(provider.router)
     app.include_router(admin_composers.router)

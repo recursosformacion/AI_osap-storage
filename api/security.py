@@ -21,11 +21,25 @@ SCOPE_ADMIN = "storage:admin"
 # Rutas exentas de autenticación (salud y métricas). Los shells de gestión (`/admin`,
 # `/admin/maestros`, `/admin/obras`) NO se eximen: exigen un service token con
 # `storage:admin`, que la pantalla recibe por `?token=` (o Bearer) desde osap-api.
-EXEMPT_PATHS = {"/api/v1/health", "/metrics"}
+EXEMPT_PATHS = {"/api/v1/health", "/metrics", "/api/v1/public/statistics", "/statistics"}
 
 # Assets estáticos del admin (JS/CSS): no contienen datos, no requieren token.
 _ADMIN_ASSET_PREFIX = "/admin/assets/"
 _ADMIN_SHELL_PREFIX = "/admin"
+
+
+def is_exempt_path(path: str) -> bool:
+    """True si la ruta no exige service token.
+
+    Exención por **ruta exacta**: la superficie pública de catálogo
+    (`/api/v1/public/statistics`, `/statistics`) queda abierta, mientras que el endpoint
+    interno `/api/v1/statistics` y el resto del host siguen protegidos (protect-all).
+    """
+    return (
+        path in EXEMPT_PATHS
+        or path.startswith("/api/v1/health")
+        or path.startswith(_ADMIN_ASSET_PREFIX)
+    )
 
 
 class ServiceTokenValidator:
@@ -188,11 +202,7 @@ class ServiceAuthMiddleware(BaseHTTPMiddleware):
         # OJO: `/api/download/{id}` NO se exime: exige service token `storage:read` para que
         # una llamada externa no pueda saltarse la cuota de OMR de osap-api. La descarga
         # legítima la hace osap-api (que añade su token) tras comprobar la cuota.
-        if (
-            path in EXEMPT_PATHS
-            or path.startswith("/api/v1/health")
-            or path.startswith(_ADMIN_ASSET_PREFIX)
-        ):
+        if is_exempt_path(path):
             return await call_next(request)
 
         auth_header = request.headers.get("Authorization", "")

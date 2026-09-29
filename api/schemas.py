@@ -134,6 +134,16 @@ class StatisticsRead(Model):
     updated_at: datetime | None
 
 
+class StatisticsPublicRead(Model):
+    """Superficie pública de catálogo (sin métricas internas de operación)."""
+
+    archives: int
+    entries: int
+    files: int
+    bytes: int
+    computed_at: datetime | None
+
+
 class WorkRead(Model):
     id: int
     composer: str | None = None

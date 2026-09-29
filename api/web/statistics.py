@@ -8,10 +8,6 @@ def statistics_page(stats) -> str:
         ("Archives", stats.archives),
         ("Archive entries", stats.entries),
         ("Files indexed", stats.files),
-        ("Downloaded mirrors", stats.downloaded_tar),
-        ("Materialized", stats.materialized),
-        ("Pending", stats.pending),
-        ("Bytes", f"{stats.bytes:,}"),
         ("Repository size", f"{stats.bytes / 1e9:.1f} GB" if stats.bytes else "—"),
     ]
     table = "".join(f"<tr><td>{label}</td><td>{value}</td></tr>" for label, value in rows)
