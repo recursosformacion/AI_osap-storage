@@ -22,6 +22,7 @@ from api.routes import (
     admin_representations,
     admin_resources,
     admin_tables,
+    admin_work_person_ai,
     admin_work_persons,
     admin_work_relations,
     admin_works,
@@ -126,6 +127,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_tables.router)
     app.include_router(admin_work_relations.router)
     app.include_router(admin_work_persons.router)
+    app.include_router(admin_work_person_ai.router)
     app.include_router(admin_representations.router)
     app.include_router(admin_resources.router)
     app.include_router(resolution.router)

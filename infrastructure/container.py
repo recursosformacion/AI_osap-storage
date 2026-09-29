@@ -61,6 +61,12 @@ from application.use_cases.voting import (
     RefreshVotingStatistics,
 )
 from application.use_cases.work_admin import GetWorkAdmin, ListWorksAdmin, UpdateWorkAdmin
+from application.use_cases.work_attribution_ai import (
+    GetWorkAttributionProposal,
+    ListWorkAttributionProposals,
+    ProposeWorkAttribution,
+    ReviewProposal,
+)
 from application.use_cases.works import GetWork, SearchWorks, SearchWorksFull
 from domain.entities.storage_provider import ProviderType
 from domain.ports.archive_repositories import ArchiveEntryRepository, ArchiveRepository
@@ -84,6 +90,7 @@ from domain.services.composer_resolver import ComposerResolver
 from domain.services.file_registration import FileRegistrationService
 from domain.services.integrity import IntegrityService
 
+from infrastructure.ai.resolver_factory import build_attribution_resolver
 from infrastructure.archives.factory import ArchiveReaderFactory
 from infrastructure.config import Settings
 from infrastructure.db.connection import Database
@@ -119,6 +126,9 @@ from infrastructure.repositories.sql_rism_source_repository import SqlRismSource
 from infrastructure.repositories.sql_statistics_repository import SqlStatisticsRepository
 from infrastructure.repositories.sql_table_crud_repository import SqlTableCrudRepository
 from infrastructure.repositories.sql_voting_repository import SqlVotingRepository
+from infrastructure.repositories.sql_work_attribution_ai_repository import (
+    SqlWorkAttributionAiRepository,
+)
 from infrastructure.repositories.sql_work_repository import SqlWorkRepository
 from infrastructure.tasks.asyncio_scheduler import AsyncioTaskScheduler
 
@@ -210,6 +220,11 @@ class Container:
     list_persons: ListPersons | None = None
     get_person: GetPerson | None = None
     get_person_works: GetPersonWorks | None = None
+    # Atribución asistida por IA: propuesta y revisión humana (todos opcionales).
+    propose_work_attribution: ProposeWorkAttribution | None = None
+    review_proposal: ReviewProposal | None = None
+    list_work_attribution_proposals: ListWorkAttributionProposals | None = None
+    get_work_attribution_proposal: GetWorkAttributionProposal | None = None
 
 
 def build_container(settings: Settings) -> Container:
@@ -324,6 +339,13 @@ def build_container(settings: Settings) -> Container:
     move_alias = MoveAlias(composer_repo)
     promote_alias = PromoteAlias(composer_repo)
     set_attribution = SetAttribution(composer_repo)
+    work_attribution_ai_repo = SqlWorkAttributionAiRepository(db)
+    propose_work_attribution = ProposeWorkAttribution(
+        work_attribution_ai_repo, build_attribution_resolver()
+    )
+    review_proposal = ReviewProposal(work_attribution_ai_repo)
+    list_work_attribution_proposals = ListWorkAttributionProposals(work_attribution_ai_repo)
+    get_work_attribution_proposal = GetWorkAttributionProposal(work_attribution_ai_repo)
     composer_review_stats = ComposerReviewStats(
         composer_repo,
         identifiers=composer_repo,
@@ -434,4 +456,8 @@ def build_container(settings: Settings) -> Container:
         list_persons=list_persons,
         get_person=get_person,
         get_person_works=get_person_works,
+        propose_work_attribution=propose_work_attribution,
+        review_proposal=review_proposal,
+        list_work_attribution_proposals=list_work_attribution_proposals,
+        get_work_attribution_proposal=get_work_attribution_proposal,
     )
