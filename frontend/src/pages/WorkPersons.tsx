@@ -32,6 +32,7 @@ function tokenParam(): string {
 export default function WorkPersons() {
   const [rows, setRows] = useState<Row[]>([])
   const [total, setTotal] = useState(0)
+  const [roleOptions, setRoleOptions] = useState<{ value: string; label: string }[]>([])
   const [q, setQ] = useState('')
   const [role, setRole] = useState('')
   const [missing, setMissing] = useState(false)
@@ -62,6 +63,20 @@ export default function WorkPersons() {
     void load()
   }, [load])
 
+  // Roles disponibles (distinct de la tabla `roles`) para el desplegable.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const data = await getJson<{ options: { value: number; label: string }[] }>(
+          '/api/admin/works/options/roles',
+        )
+        setRoleOptions(data.options.map((o) => ({ value: String(o.value), label: o.label })))
+      } catch {
+        // Sin desplegable, el filtro queda vacío (no bloquea el listado).
+      }
+    })()
+  }, [])
+
   const token = tokenParam()
 
   return (
@@ -86,11 +101,14 @@ export default function WorkPersons() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
-          <input
-            placeholder="Rol exacto (composer, arranger…)"
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-          />
+          <select value={role} onChange={(e) => setRole(e.target.value)}>
+            <option value="">(todos los roles)</option>
+            {roleOptions.map((o) => (
+              <option key={o.value} value={o.label}>
+                {o.label}
+              </option>
+            ))}
+          </select>
           <label style={{ margin: 0 }}>
             <input type="checkbox" checked={missing} onChange={(e) => setMissing(e.target.checked)} />{' '}
             Solo obras sin persona
