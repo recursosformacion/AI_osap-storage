@@ -4,6 +4,7 @@ import Menu from './pages/Menu'
 import Representations from './pages/Representations'
 import RowForm from './pages/RowForm'
 import TableList from './pages/TableList'
+import WorkPersons from './pages/WorkPersons'
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Menu />} />
           <Route path="/representations" element={<Representations />} />
+          <Route path="/work-persons" element={<WorkPersons />} />
           <Route path="/t/:table" element={<TableList />} />
           <Route path="/t/:table/new" element={<RowForm mode="new" />} />
           <Route path="/t/:table/:pk" element={<RowForm />} />
