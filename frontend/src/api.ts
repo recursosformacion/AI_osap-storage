@@ -1,3 +1,5 @@
+import { authHeaders } from './auth'
+
 export type JsonPrimitive = string | number | boolean | null
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue }
 export type Row = Record<string, JsonValue | undefined>
@@ -57,6 +59,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders(),
       ...init?.headers,
     },
   })
@@ -131,7 +134,7 @@ const REP_API = '/api/admin/representations'
 async function requestUrl<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers: { 'Content-Type': 'application/json', ...authHeaders(), ...init?.headers },
   })
   if (!response.ok) {
     let message = `La API respondió con el estado ${response.status}.`
