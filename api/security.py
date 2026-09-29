@@ -9,7 +9,7 @@ import httpx
 import jwt
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, PlainTextResponse
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +178,12 @@ class ServiceAuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable):
         path = request.url.path
+        # robots.txt: se sirve sin auth indicando que el host no debe indexarse.
+        if path == "/robots.txt":
+            return PlainTextResponse(
+                "User-agent: *\nDisallow: /\n",
+                headers={"X-Robots-Tag": "noindex"},
+            )
         # Exento de auth: health, metrics y los assets estáticos del admin.
         # OJO: `/api/download/{id}` NO se exime: exige service token `storage:read` para que
         # una llamada externa no pueda saltarse la cuota de OMR de osap-api. La descarga
