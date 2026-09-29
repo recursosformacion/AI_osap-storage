@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import { authHeaders, resolveToken } from '../auth'
+
 // Listado de la relación obra ↔ persona (works_person_roles + persons + roles).
 // Permite investigar qué persona está asociada a qué obra y en calidad de qué,
 // y llegar a la ficha de la obra (SPA /t/works/:id) o de la persona (página curada
@@ -17,14 +19,14 @@ interface Row {
 }
 
 async function getJson<T>(url: string): Promise<T> {
-  const response = await fetch(url)
+  const response = await fetch(url, { headers: { ...authHeaders() } })
   if (!response.ok) throw new Error(`Error ${response.status}`)
   return (await response.json()) as T
 }
 
-function tokenQuery(): string {
-  const token = new URLSearchParams(window.location.search).get('token')
-  return token ? `&token=${encodeURIComponent(token)}` : ''
+function tokenParam(): string {
+  const token = resolveToken()
+  return token ? `?token=${encodeURIComponent(token)}` : ''
 }
 
 export default function WorkPersons() {
@@ -60,7 +62,7 @@ export default function WorkPersons() {
     void load()
   }, [load])
 
-  const token = tokenQuery()
+  const token = tokenParam()
 
   return (
     <section>
@@ -120,9 +122,9 @@ export default function WorkPersons() {
                 <td>{r.person_name ?? <em className="muted">— sin persona —</em>}</td>
                 <td>{r.role_name ?? <em className="muted">— sin rol —</em>}</td>
                 <td className="tools">
-                  <a href={`/admin/t/works/${r.work_id}${token ? token.replace('&', '?') : ''}`}>→ Obra</a>
+                  <a href={`/admin/t/works/${r.work_id}${token}`}>→ Obra</a>
                   {r.person_id ? (
-                    <a href={`/admin/maestros?id=${encodeURIComponent(r.person_id)}&mode=view${token}`}>
+                    <a href={`/admin/maestros?id=${encodeURIComponent(r.person_id)}&mode=view${token.replace('?', '&')}`}>
                       → Persona
                     </a>
                   ) : null}
