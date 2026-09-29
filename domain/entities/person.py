@@ -201,6 +201,8 @@ class PersonSummary:
     status: str
     aliases_count: int = 0
     works_count: int = 0
+    works_total: int = 0
+    roles: str | None = None
     review_status: str = "not_reviewed"
     visible: bool = True
     given_name: str | None = None

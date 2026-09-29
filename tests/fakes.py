@@ -592,7 +592,7 @@ class InMemoryComposerRepository(ComposerRepository):
 
     async def list_summaries(
         self, *, limit: int, offset: int, q: str | None = None, review: str | None = None,
-        visible: str = "visible",
+        visible: str = "visible", include_all: bool = False,
     ) -> list[ComposerSummary]:
         items = list(self._composers.values())
         if visible == "visible":
@@ -631,9 +631,9 @@ class InMemoryComposerRepository(ComposerRepository):
         ]
 
     async def count(self, q: str | None = None, review: str | None = None,
-                    visible: str = "visible") -> int:
+                    visible: str = "visible", include_all: bool = False) -> int:
         return len(await self.list_summaries(limit=10**9, offset=0, q=q, review=review,
-                                             visible=visible))
+                                             visible=visible, include_all=include_all))
 
     async def set_review_status(self, person_id: str, review_status: str) -> None:
         composer = self._composers.get(person_id)

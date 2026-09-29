@@ -109,9 +109,15 @@ async def list_composers(
     ),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    include_all: bool = Query(
+        default=False,
+        description="Incluye también personas sin obra con rol compositor (por defecto, solo compositores).",
+    ),
     uc: ListComposers = Depends(ListComposersDep),
 ) -> ComposerAdminListResult:
-    result = await uc.execute(limit=limit, offset=offset, q=q, review=review, visible=visible)
+    result = await uc.execute(
+        limit=limit, offset=offset, q=q, review=review, visible=visible, include_all=include_all
+    )
     return ComposerAdminListResult(
         items=[ComposerAdminRead.model_validate(i) for i in result.items],
         total=result.total,

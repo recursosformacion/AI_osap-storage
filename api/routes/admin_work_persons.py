@@ -21,9 +21,14 @@ router = APIRouter(prefix="/api/admin/work-persons", tags=["admin-works"])
 _TITLE = "COALESCE(NULLIF(w.works_title, ''), NULLIF(w.works_song_name, ''), CONCAT('Obra #', w.id))"
 
 
-def _filters(q: str | None, role: str | None, missing: bool) -> tuple[str, list[Any]]:
+def _filters(
+    q: str | None, role: str | None, missing: bool, person_id: str | None
+) -> tuple[str, list[Any]]:
     where: list[str] = []
     params: list[Any] = []
+    if person_id and person_id.strip() and not missing:
+        where.append("r.works_person_roles_person_id = %s")
+        params.append(person_id.strip())
     if missing:
         where.append("r.works_person_roles_id IS NULL")
     if q and q.strip():
@@ -40,12 +45,13 @@ def _filters(q: str | None, role: str | None, missing: bool) -> tuple[str, list[
 async def work_persons(
     q: str | None = Query(default=None),
     role: str | None = Query(default=None, description="Filtra por rol (composer, arranger…)"),
+    person_id: str | None = Query(default=None, description="Filtra por persona (exacto)"),
     missing: bool = Query(default=False, description="Solo obras SIN ninguna persona/rol"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Database = Depends(get_db),
 ):
-    where, params = _filters(q, role, missing)
+    where, params = _filters(q, role, missing, person_id)
     base_from = (
         "FROM works w "
         "LEFT JOIN works_person_roles r ON r.works_person_roles_work_id = w.id "

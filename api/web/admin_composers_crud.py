@@ -164,10 +164,15 @@ async function saveId(){
 function renderRows(){
   const area = $("area");
   if (!state.items.length){ area.innerHTML = '<div class="muted">Sin compositores.</div>'; return; }
-  let h = "<table><thead><tr><th>ID</th><th>Name</th><th>Nac.</th><th>Muerte</th><th>Visible</th><th></th></tr></thead><tbody>";
+  let h = "<table><thead><tr><th>ID</th><th>Name</th><th>Nac.</th><th>Muerte</th><th>Obras</th><th>Configuración</th><th>Visible</th><th></th></tr></thead><tbody>";
   for (const c of state.items){
+    const cfg = c.works_total > 0 ? esc(c.roles || "") : '<span class="muted">Sin obras</span>';
+    const works = c.works_total > 0
+      ? `<a href="/admin/work-persons?token=${encodeURIComponent(token())}&person_id=${encodeURIComponent(c.id)}">${c.works_total}</a>`
+      : "0";
     h += `<tr><td>${esc(c.id)}</td><td><strong>${esc(c.name)}</strong></td>
       <td>${esc(c.birth_year || "")}</td><td>${esc(c.death_year || "")}</td>
+      <td>${works}</td><td>${cfg}</td>
       <td>${c.visible ? "sí" : "no"}</td>
       <td><div class="tools">
         <button class="ghost" onclick="openMode('view','${esc(c.id)}')">Ver</button>
@@ -180,7 +185,7 @@ function renderRows(){
 function openMode(m, id){ location = "?token="+encodeURIComponent(token())+"&mode="+m+"&id="+encodeURIComponent(id); }
 async function loadList(){
   if (!token()) return msg("Introduce el service token.", true);
-  const p = new URLSearchParams({ visible: "all", limit: String(state.limit), offset: String(state.offset) });
+  const p = new URLSearchParams({ visible: "all", include_all: "1", limit: String(state.limit), offset: String(state.offset) });
   const qv = $("q").value.trim(); if (qv) p.set("q", qv);
   try{
     const d = await api("/api/admin/composers?"+p, { headers: auth() });

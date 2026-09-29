@@ -32,12 +32,14 @@ class ListComposers:
 
     async def execute(
         self, *, limit: int, offset: int, q: str | None = None, review: str | None = None,
-        visible: str = "visible",
+        visible: str = "visible", include_all: bool = False,
     ) -> ComposerListResult:
         items = await self._composers.list_summaries(
-            limit=limit, offset=offset, q=q, review=review, visible=visible
+            limit=limit, offset=offset, q=q, review=review, visible=visible, include_all=include_all
         )
-        total = await self._composers.count(q=q, review=review, visible=visible)
+        total = await self._composers.count(
+            q=q, review=review, visible=visible, include_all=include_all
+        )
         return ComposerListResult(items=items, total=total)
 
 

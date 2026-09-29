@@ -373,13 +373,16 @@ class SqlPersonRepository(ComposerRepository):
 
     async def list_summaries(
         self, *, limit: int, offset: int, q: str | None = None, review: str | None = None,
-        visible: str = "visible",
+        visible: str = "visible", include_all: bool = False,
     ) -> list[ComposerSummary]:
-        where: list[str] = [
-            "EXISTS (SELECT 1 FROM works_person_roles r "
-            "WHERE r.works_person_roles_person_id = c.persons_id "
-            "AND r.works_person_roles_role_id = 1)"
-        ]
+        where: list[str] = []
+        if not include_all:
+            # Por defecto solo personas con obra en rol compositor (comportamiento previo).
+            where.append(
+                "EXISTS (SELECT 1 FROM works_person_roles r "
+                "WHERE r.works_person_roles_person_id = c.persons_id "
+                "AND r.works_person_roles_role_id = 1)"
+            )
         params: list = []
         if visible == "visible":
             where.append("c.persons_visible = 1")
@@ -414,6 +417,11 @@ class SqlPersonRepository(ComposerRepository):
                 "(SELECT COUNT(*) FROM works_person_roles r "
                 " WHERE r.works_person_roles_person_id = c.persons_id "
                 " AND r.works_person_roles_role_id = 1) AS works_count, "
+                "(SELECT COUNT(DISTINCT r.works_person_roles_work_id) FROM works_person_roles r "
+                " WHERE r.works_person_roles_person_id = c.persons_id) AS works_total, "
+                "(SELECT GROUP_CONCAT(DISTINCT ro.role_name ORDER BY ro.role_name SEPARATOR ', ') "
+                " FROM works_person_roles r JOIN roles ro ON ro.id = r.works_person_roles_role_id "
+                " WHERE r.works_person_roles_person_id = c.persons_id) AS roles, "
                 "c.persons_biography_summary AS biography_summary, "
                 "c.persons_biography_era AS biography_era, "
                 "c.persons_biography_nationality AS biography_nationality "
@@ -431,6 +439,8 @@ class SqlPersonRepository(ComposerRepository):
                     visible=bool(r.get("visible", 1)),
                     aliases_count=int(r["aliases_count"] or 0),
                     works_count=int(r["works_count"] or 0),
+                    works_total=int(r.get("works_total") or 0),
+                    roles=r.get("roles"),
                     biography_summary=r.get("biography_summary"),
                     biography_era=r.get("biography_era"),
                     biography_nationality=r.get("biography_nationality"),
@@ -444,12 +454,14 @@ class SqlPersonRepository(ComposerRepository):
             ]
 
     async def count(self, q: str | None = None, review: str | None = None,
-                    visible: str = "visible") -> int:
-        where: list[str] = [
-            "EXISTS (SELECT 1 FROM works_person_roles r "
-            "WHERE r.works_person_roles_person_id = c.persons_id "
-            "AND r.works_person_roles_role_id = 1)"
-        ]
+                    visible: str = "visible", include_all: bool = False) -> int:
+        where: list[str] = []
+        if not include_all:
+            where.append(
+                "EXISTS (SELECT 1 FROM works_person_roles r "
+                "WHERE r.works_person_roles_person_id = c.persons_id "
+                "AND r.works_person_roles_role_id = 1)"
+            )
         params: list = []
         if visible == "visible":
             where.append("c.persons_visible = 1")

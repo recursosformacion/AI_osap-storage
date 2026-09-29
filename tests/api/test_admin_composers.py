@@ -148,8 +148,8 @@ def test_list_composers_paginated(client):
     assert body["total"] == 3
     assert len(body["items"]) == 2
     assert set(body["items"][0].keys()) == {
-        "id", "name", "status", "aliases_count", "works_count", "review_status",
-        "visible", "birth_year", "death_year",
+        "id", "name", "status", "aliases_count", "works_count", "works_total", "roles",
+        "review_status", "visible", "birth_year", "death_year",
         "biography_summary", "biography_era", "biography_nationality",
     }
 

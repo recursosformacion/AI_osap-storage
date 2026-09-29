@@ -349,6 +349,8 @@ class ComposerAdminRead(Model):
     status: str
     aliases_count: int = 0
     works_count: int = 0
+    works_total: int = 0
+    roles: str | None = None
     review_status: str = "pending"
     visible: bool = True
     birth_year: str | None = None

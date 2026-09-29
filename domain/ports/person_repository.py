@@ -101,15 +101,18 @@ class PersonRepository(Protocol):
 
     async def list_summaries(
         self, *, limit: int, offset: int, q: str | None = None, review: str | None = None,
-        visible: str = "visible",
+        visible: str = "visible", include_all: bool = False,
     ) -> list[PersonSummary]:
         """Lista personas (paginado). `visible` = visible|hidden|all:
         visible → visible=1 · hidden → visible=0 (candidatas y fusionadas) ·
         all → todas (incl. merged). Si `q`, filtra por nombre/alias.
-        Si `review`, filtra por review_status (correct/false/pending)."""
+        Si `review`, filtra por review_status (correct/false/pending).
+        `include_all=True` incluye también personas sin obra con rol compositor
+        (por defecto se listan solo quienes tienen esa atribución)."""
 
     async def count(
-        self, q: str | None = None, review: str | None = None, visible: str = "visible"
+        self, q: str | None = None, review: str | None = None, visible: str = "visible",
+        include_all: bool = False,
     ) -> int:
         """Cuenta personas (mismo criterio de filtro que `list_summaries`)."""
 
