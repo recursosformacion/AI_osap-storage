@@ -41,6 +41,20 @@ def _filters(
     return (" AND ".join(where) if where else "1=1"), params
 
 
+@router.get("/roles", summary="Roles realmente usados en works_person_roles")
+async def used_roles(db: Database = Depends(get_db)):
+    """Distinct de roles presentes en `works_person_roles` (solo los usados)."""
+    sql = (
+        "SELECT ro.id AS value, ro.role_name AS label, COUNT(*) AS total "
+        "FROM works_person_roles r JOIN roles ro ON ro.id = r.works_person_roles_role_id "
+        "GROUP BY ro.id, ro.role_name ORDER BY ro.id"
+    )
+    async with db.connection() as conn, conn.cursor() as cur:
+        await cur.execute(sql)
+        options = [dict(row) for row in await cur.fetchall()]
+    return {"options": options}
+
+
 @router.get("", summary="Relación obra → persona")
 async def work_persons(
     q: str | None = Query(default=None),

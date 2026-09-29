@@ -68,7 +68,7 @@ export default function WorkPersons() {
     void (async () => {
       try {
         const data = await getJson<{ options: { value: number; label: string }[] }>(
-          '/api/admin/works/options/roles',
+          '/api/admin/work-persons/roles',
         )
         setRoleOptions(data.options.map((o) => ({ value: String(o.value), label: o.label })))
       } catch {
