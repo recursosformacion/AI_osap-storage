@@ -63,3 +63,25 @@ class DuplicateVote(DomainError):
 
 class InvalidTableCrud(DomainError):
     """Operación de CRUD genérico no permitida (tabla/columna inválida)."""
+
+
+class ProposalStateError(DomainError):
+    """La propuesta no está en `pending`: no admite revisión ni transición.
+
+    `status` puede ser None cuando la transición falló por una carrera (otra revisión la
+    cambió entre la lectura y la escritura).
+    """
+
+    def __init__(self, status: str | None = None) -> None:
+        detail = f" (status={status})" if status else ""
+        super().__init__(f"proposal is not pending{detail}")
+        self.status = status
+
+
+class ProposalAssignmentError(DomainError):
+    """La fila de `works_person_roles` no se insertó: la propuesta no puede quedar aceptada.
+
+    Evita aceptar una propuesta sin relación real (INSERT IGNORE silencioso) o auditar una
+    asignación que no existe.
+    """
+
