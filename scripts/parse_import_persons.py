@@ -6,7 +6,8 @@ escribe en `works_person_roles` ni crea personas.
 
 Uso:
     python -m scripts.parse_import_persons                # dry-run (por defecto): solo métricas
-    python -m scripts.parse_import_persons --apply        # vuelca a import_person_parse (idempotente)
+    python -m scripts.parse_import_persons --apply        # refresca import_person_parse
+                                                         # (tabla derivada: se vacía y se reescribe)
     python -m scripts.parse_import_persons --limit 5000   # muestra
     python -m scripts.parse_import_persons --json out.json
 
@@ -24,7 +25,7 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from application.services.import_person_parser import parse_import_name, role_id_for
+from application.services.import_person_parser import looks_contaminated, parse_import_name, role_id_for
 from domain.services.composer_names import normalize_composer_name
 from infrastructure.config import Settings
 from infrastructure.db.connection import Database
@@ -32,22 +33,29 @@ from infrastructure.db.connection import Database
 _IGNORED_IMPORT_ROLES = {"artist"}
 
 
-async def _load_catalogue(db: Database) -> dict[str, str | None]:
-    """Mapa nombre normalizado -> persons_id (None si hay más de una coincidencia).
+async def _load_catalogue(db: Database) -> tuple[dict[str, str | None], dict[str, str], dict[str, str]]:
+    """Catálogo para resolver: (nombre normalizado -> id | None, id -> clave lógica, id -> nombre).
 
     Solo se aceptan personas **existentes, activas y no fusionadas**: los alias pueden apuntar a
     personas retiradas tras una fusión (`persons_merged_into`) y eso rompería la FK del staging.
+
+    La clave lógica (`person_key`) es un ancla tipada (`viaf:…`, `musicbrainz:…`) o, en su
+    defecto, `name:<normalizado>`: estable entre entornos, a diferencia del UUID.
     """
     mapping: dict[str, str | None] = {}
+    anchor_key: dict[str, str] = {}
+    name_by_id: dict[str, str] = {}
     async with db.connection() as conn, conn.cursor() as cur:
         await cur.execute(
             "SELECT persons_id, persons_name FROM persons "
             "WHERE persons_merged_into IS NULL AND persons_status = 'active'"
         )
         for row in await cur.fetchall():
+            person_id = str(row["persons_id"])
+            name_by_id[person_id] = str(row["persons_name"])
             key = normalize_composer_name(str(row["persons_name"]))
             if key:
-                mapping[key] = str(row["persons_id"]) if key not in mapping else None
+                mapping[key] = person_id if key not in mapping else None
         await cur.execute(
             "SELECT a.person_id, a.person_aliases_normalized_alias FROM persons_aliases a "
             "JOIN persons p ON p.persons_id = a.person_id "
@@ -57,7 +65,21 @@ async def _load_catalogue(db: Database) -> dict[str, str | None]:
             key = str(row["person_aliases_normalized_alias"] or "")
             if key and key not in mapping:
                 mapping[key] = str(row["person_id"])
-    return mapping
+        await cur.execute(
+            "SELECT persons_id, identity_type, identity_value, identity_name_norm FROM persons_identity "
+            "WHERE identity_is_anchor = 1"
+        )
+        for row in await cur.fetchall():
+            person_id = str(row["persons_id"])
+            tipo = str(row["identity_type"] or "").strip().lower()
+            valor = str(row["identity_value"] or "").strip()
+            if tipo in ("viaf", "musicbrainz", "mbid", "isni") and valor:
+                anchor_key[person_id] = f"{tipo}:{valor}"
+            elif person_id not in anchor_key:
+                norm = str(row["identity_name_norm"] or "").strip()
+                if norm:
+                    anchor_key[person_id] = f"name:{norm}"
+    return mapping, anchor_key, name_by_id
 
 
 async def main() -> int:
@@ -69,7 +91,7 @@ async def main() -> int:
 
     settings = Settings()  # type: ignore[call-arg]
     db = Database(settings)
-    catalogue = await _load_catalogue(db)
+    catalogue, anchor_key, name_by_id = await _load_catalogue(db)
 
     sql = (
         "SELECT id, works_id, works_person_import_name AS name, "
@@ -88,6 +110,9 @@ async def main() -> int:
     resolved = 0
     new_person = 0
     ambiguous = 0
+    sanitized = 0
+    target_contaminated = 0
+    needs_review = 0
     roles_sin_rol: set[str] = set()
     nombres_nuevos: dict[str, int] = defaultdict(int)
     obras_persona: set[int] = set()
@@ -123,21 +148,36 @@ async def main() -> int:
             })
             continue
         for person in parsed.persons:
-            norm = normalize_composer_name(person.name)[:191]
+            clean = person.name
+            norm = normalize_composer_name(clean)[:191]
             if not norm:
                 continue
+            flags = list(person.flags)
+            if flags:
+                sanitized += 1
             roles[person.role_key] += 1
             obras_persona.add(int(row["works_id"]))
             role_id = role_id_for(person.role_key)
+            person_id: str | None = None
             if norm in catalogue:
-                person_id = catalogue[norm]
-                status = "resolved" if person_id else "new_person"
-                if person_id:
-                    resolved += 1
-                else:
+                candidate = catalogue[norm]
+                if candidate is None:
+                    status = "ambiguous"
                     ambiguous += 1
+                elif looks_contaminated(name_by_id.get(candidate, "")):
+                    # La FK casaría, pero la ficha del catálogo está sucia: no es una resolución
+                    # fiable. Se conserva como candidato para que lo decida la revisión.
+                    person_id = candidate
+                    status = "review_target_contaminated"
+                    target_contaminated += 1
+                else:
+                    person_id = candidate
+                    status = "resolved_sanitized" if flags else "resolved"
+                    resolved += 1
+            elif "truncated_prefix" in flags:
+                status = "needs_review"
+                needs_review += 1
             else:
-                person_id = None
                 status = "new_person"
                 new_person += 1
                 nombres_nuevos[norm] += 1
@@ -145,9 +185,13 @@ async def main() -> int:
                 # El rol del texto no existe en el catálogo (p. ej. 'adapter'): cola de decisión.
                 status = "role_missing"
                 roles_sin_rol.add(person.role_key)
+            person_key = (anchor_key.get(person_id) if person_id else None) or f"name:{norm}"
             pendientes.append({
                 "kind": "person", "works_id": int(row["works_id"]), "import_row_id": int(row["id"]),
-                "person_name_raw": person.name[:512], "person_name_norm": norm,
+                "person_name_raw": str(row["name"])[:512], "person_name_clean": clean[:512],
+                "person_name_norm": norm,
+                "sanitize_flags": json.dumps(flags, ensure_ascii=False)[:255] if flags else None,
+                "person_key": person_key,
                 "role_key": person.role_key, "role_id": role_id,
                 "attribution_status": None, "person_id": person_id, "source": row["source"],
                 "evidence": person.evidence, "status": status,
@@ -164,6 +208,9 @@ async def main() -> int:
         "personas_resueltas_en_catalogo": resolved,
         "personas_nuevas": new_person,
         "nombres_ambiguos": ambiguous,
+        "personas_con_saneamiento": sanitized,
+        "resoluciones_a_ficha_contaminada": target_contaminated,
+        "necesitan_revision_por_truncamiento": needs_review,
         "roles_sin_rol_en_catalogo": sorted(roles_sin_rol),
         "nombres_nuevos_unicos": len(nombres_nuevos),
         "filas_staging": len(pendientes),
@@ -174,24 +221,31 @@ async def main() -> int:
     if args.apply:
         insert_sql = (
             "INSERT INTO import_person_parse "
-            "(works_id, import_row_id, kind, person_name_raw, person_name_norm, role_key, role_id, "
-            " attribution_status, person_id, source, evidence_json, status) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
-            "ON DUPLICATE KEY UPDATE kind=VALUES(kind), role_id=VALUES(role_id), "
-            "attribution_status=VALUES(attribution_status), person_id=VALUES(person_id), "
-            "evidence_json=VALUES(evidence_json), status=VALUES(status)"
+            "(works_id, import_row_id, kind, person_name_raw, person_name_clean, person_name_norm, "
+            " sanitize_flags, person_key, role_key, role_id, attribution_status, person_id, source, "
+            " evidence_json, status) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+            "ON DUPLICATE KEY UPDATE kind=VALUES(kind), person_name_clean=VALUES(person_name_clean), "
+            "sanitize_flags=VALUES(sanitize_flags), person_key=VALUES(person_key), "
+            "role_id=VALUES(role_id), attribution_status=VALUES(attribution_status), "
+            "person_id=VALUES(person_id), evidence_json=VALUES(evidence_json), status=VALUES(status)"
         )
         params = [
             (
                 item["works_id"], item["import_row_id"], item["kind"], item["person_name_raw"],
-                item["person_name_norm"] or "", item["role_key"], item["role_id"],
-                item["attribution_status"], item["person_id"], item["source"],
+                item.get("person_name_clean"), item["person_name_norm"] or "",
+                item.get("sanitize_flags"), item.get("person_key"),
+                item["role_key"], item["role_id"], item["attribution_status"], item["person_id"],
+                item["source"],
                 json.dumps([{"type": "import_parse", "text": item["evidence"]}], ensure_ascii=False),
                 item["status"],
             )
             for item in pendientes
         ]
         async with db.transaction() as conn, conn.cursor() as cur:
+            # Tabla derivada: se refresca entera para que no queden filas de esquemas/nombres
+            # anteriores (el índice único cambia al cambiar `person_name_norm`).
+            await cur.execute("DELETE FROM import_person_parse")
             for start in range(0, len(params), 1000):
                 await cur.executemany(insert_sql, params[start: start + 1000])
         informe["aplicado"] = True

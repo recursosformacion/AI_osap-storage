@@ -91,10 +91,75 @@ _GLUED_LOWER = re.compile(
 _EXPRESSION = re.compile(r"\bwith (spirit|feeling|vigour|vigor|energy|expression|soul|gusto)\b", re.I)
 # Texto que describe procedencia/derivación, no autoría ("after X", "from Y", "based on Z").
 _DERIVATION = re.compile(
-    r"^\s*(after|based on|from|adapted from|as sung by|collected from|per the version of|"
-    r"a version of|taken from)\b",
+    r"^\s*(after|based on|from|adapted from|arranged from|anged from|as sung by|collected from|"
+    r"per the version of|a version of|taken from)\b",
     re.I,
 )
+# Conectores/ruido que contaminan el nombre extraído (fase 3B: saneamiento semántico).
+_LEAD_CONNECTOR = re.compile(
+    r"^\s*(?:by|from|after|based\s+on|adapted\s+from|arranged\s+from|anged\s+from|arr\.?\s+by|"
+    r"composed\s+by|collected\s+from|as\s+sung\s+by|per\s+the\s+version\s+of|a\s+version\s+of|"
+    r"taken\s+from)\s+",
+    re.I,
+)
+_ADAPT_IN_PARENS = re.compile(
+    r"\((?:\s*(?:adapted|arranged|transcribed|orchestrated|based|from|after)\b)[^)]*\)",
+    re.I,
+)
+# Fragmentos de nombre con la primera letra perdida ("chior Frank" ← "…choir Frank"): se marcan
+# pero NO se recortan (recortar sería adivinar); van a revisión sin resolución automática.
+# Los conectores rotos ("anged from …") sí se tratan como conector en `_LEAD_CONNECTOR`.
+_TRUNCATED_PREFIX = re.compile(r"^\s*(?:chior|vin|ar-)\b", re.I)
+
+
+def looks_contaminated(name: str) -> bool:
+    """True si un nombre (de origen o de una ficha del catálogo) tiene marcas de artefacto."""
+    text = (name or "").strip()
+    if not text:
+        return False
+    return bool(
+        _LEAD_CONNECTOR.match(text)
+        or _ADAPT_IN_PARENS.search(text)
+        or _TRUNCATED_PREFIX.match(text)
+        or "//" in text
+        or re.search(r"[“”]", text)
+        or _URL.search(text)
+        or re.search(r"\d", text)
+    )
+
+
+def sanitize_person_name(raw: str) -> tuple[str, list[str]]:
+    """Nombre limpio de persona + marcas de lo que se tuvo que limpiar (fase 3B).
+
+    No decide identidad: solo deja el nombre presentable y señala la contaminación para que la
+    revisión (o la comprobación) sepa si la resolución es fiable.
+    """
+    flags: list[str] = []
+    text = (raw or "").strip()
+    if _SYM.search(text) or _XML.search(text):
+        flags.append("xml_stripped")
+    text = _SYM.sub(" ", text)
+    text = _XML.sub(" ", text)
+    if _URL.search(text):
+        flags.append("url_stripped")
+    text = _URL.sub(" ", text)
+    if _EXPRESSION.search(text):
+        flags.append("expression_stripped")
+    text = _EXPRESSION.sub(" ", text)
+    if _ADAPT_IN_PARENS.search(text):
+        flags.append("adaptation_text_stripped")
+    text = _ADAPT_IN_PARENS.sub(" ", text)
+    while _LEAD_CONNECTOR.match(text):
+        flags.append("lead_connector_stripped")
+        text = _LEAD_CONNECTOR.sub("", text, count=1)
+    if _TRUNCATED_PREFIX.match(text):
+        flags.append("truncated_prefix")
+    if "//" in text:
+        flags.append("slashes")
+        text = text.split("//")[0]
+    if re.search(r"[“”]", text):
+        flags.append("quotes_stripped")
+    return _clean_person(text), flags
 # Atribuciones no personales que pueden venir con coletilla: "trad Shetland", "anon. s. XIV".
 _ATTRIBUTION_ANY = re.compile(
     r"\b(anon\.?|anonymous|anónim[oa]|anonim[oa]|desconocid[oa]|desconhecid[oa]|traditional|tradicional|"
@@ -132,6 +197,7 @@ class ParsedPerson:
     role_key: str
     evidence: str
     position: int = 0
+    flags: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -200,12 +266,12 @@ def parse_import_name(raw: str | None, import_role: str = "composer") -> ParsedR
     persons: list[ParsedPerson] = []
     for role_key, pattern in _ROLE_MARKERS:
         for marker in pattern.finditer(text):
-            candidate = _extract_after(marker, text)
+            candidate, flags = sanitize_person_name(_extract_after(marker, text))
             if _looks_like_name(candidate):
                 persons.append(
                     ParsedPerson(name=candidate, role_key=role_key,
                                  evidence=f"rol explícito en el texto: {text[:120]}",
-                                 position=marker.start())
+                                 position=marker.start(), flags=tuple(flags))
                 )
 
     # 1b) Atribución no personal, sola o acompañada de personas ("traditional carol arr. X").
@@ -222,41 +288,59 @@ def parse_import_name(raw: str | None, import_role: str = "composer") -> ParsedR
         return ParsedRow(kind="person", persons=_dedupe(persons), attribution_status=inline_attribution,
                          reason="con atribución no personal asociada" if inline_attribution else None)
 
-    # 2) Texto de procedencia/derivación sin autoría propia: "after Chief F. O'Neill", "from X".
+    # 2) Texto de procedencia/derivación: se extrae el nombre y se marca la contaminación.
     if _DERIVATION.match(text):
-        return ParsedRow(kind="junk", reason=f"procedencia derivada, no autoría: {text[:120]}")
+        candidate, flags = sanitize_person_name(text)
+        if _looks_like_name(candidate):
+            role_key = _IMPORT_ROLE_TO_KEY.get(import_role, "composer")
+            return ParsedRow(
+                kind="person",
+                persons=[ParsedPerson(candidate, role_key, f"texto de procedencia: {text[:120]}",
+                                      flags=tuple([*flags, "derived_from_text"]))],
+            )
+        return ParsedRow(kind="junk", reason=f"procedencia derivada no resoluble: {text[:120]}")
 
     # 3) Sufijo entre paréntesis: "Koji Kondo / xMrPianox (Arranger)".
     suffix = _SUFFIX_ROLE.search(text)
     if suffix:
         role_key = _SUFFIX_ROLE_KEYS.get(suffix.group(1).lower().rstrip("."), "composer")
         base = _SUFFIX_ROLE.sub(" ", text)
-        parts = [p for p in (_clean_person(part) for part in _SPLIT_PEOPLE.split(base)) if p]
-        if parts and all(_looks_like_name(p) for p in parts):
+        parts = [_sanitized(part) for part in _SPLIT_PEOPLE.split(base) if _sanitized(part)[0]]
+        if parts and all(_looks_like_name(part[0]) for part in parts):
             import_key = _IMPORT_ROLE_TO_KEY.get(import_role, "composer")
             found = [
-                ParsedPerson(p, role_key if index == len(parts) - 1 else import_key,
-                             f"sufijo de rol en el texto: {text[:120]}")
-                for index, p in enumerate(parts)
+                ParsedPerson(clean, role_key if index == len(parts) - 1 else import_key,
+                             f"sufijo de rol en el texto: {text[:120]}", flags=tuple(flags))
+                for index, (clean, flags) in enumerate(parts)
             ]
             return ParsedRow(kind="person", persons=_dedupe(found))
 
     # 4) Varias personas sin rol explícito.
-    parts = [p for p in (_clean_person(part) for part in _SPLIT_PEOPLE.split(text)) if p]
-    if len(parts) > 1 and all(_looks_like_name(p) for p in parts):
+    parts = [_sanitized(part) for part in _SPLIT_PEOPLE.split(text) if _sanitized(part)[0]]
+    if len(parts) > 1 and all(_looks_like_name(part[0]) for part in parts):
         role_key = _IMPORT_ROLE_TO_KEY.get(import_role, "composer")
         return ParsedRow(
             kind="person",
-            persons=_dedupe([ParsedPerson(p, role_key, f"varias personas en el texto: {text[:120]}") for p in parts]),
+            persons=_dedupe([
+                ParsedPerson(clean, role_key, f"varias personas en el texto: {text[:120]}",
+                             flags=tuple(flags))
+                for clean, flags in parts
+            ]),
         )
 
     # 5) Una sola persona.
-    candidate = _clean_person(text)
+    candidate, flags = sanitize_person_name(text)
     if _looks_like_name(candidate):
         role_key = _IMPORT_ROLE_TO_KEY.get(import_role, "composer")
-        return ParsedRow(kind="person", persons=[ParsedPerson(candidate, role_key, f"nombre simple: {text[:120]}")])
+        return ParsedRow(kind="person", persons=[ParsedPerson(candidate, role_key,
+                                                             f"nombre simple: {text[:120]}",
+                                                             flags=tuple(flags))])
 
     return ParsedRow(kind="junk", reason=f"no parseable: {text[:120]}")
+
+
+def _sanitized(text: str) -> tuple[str, list[str]]:
+    return sanitize_person_name(text)
 
 
 def _dedupe(persons: list[ParsedPerson]) -> list[ParsedPerson]:

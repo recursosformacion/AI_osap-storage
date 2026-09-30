@@ -5,8 +5,14 @@ Casos tomados de datos reales de `works_person_import` en producción.
 
 from __future__ import annotations
 
+import re
+
 import pytest
-from application.services.import_person_parser import parse_import_name, role_id_for
+from application.services.import_person_parser import (
+    looks_contaminated,
+    parse_import_name,
+    role_id_for,
+)
 
 
 @pytest.mark.parametrize(
@@ -149,14 +155,64 @@ def test_artista_basura_no_es_persona() -> None:
         "from the Copper Family",
         "Based on Media Vita circa 1200",
         "Adapted from Ludwig Spohr (1784-1859)",
-        "77 87 DREX GLORIAEwww.hymnary.org/text/see_the_conqueror",
     ],
 )
-def test_procedencia_derivada_no_es_persona(raw: str) -> None:
+def test_procedencia_derivada_se_sanea_y_se_marca(raw: str) -> None:
+    """Fase 3B: el texto de procedencia se sanea a un nombre y se marca como derivado."""
     row = parse_import_name(raw, "composer")
 
-    assert row.kind == "junk"
-    assert row.persons == []
+    assert row.kind == "person"
+    assert row.persons and "derived_from_text" in row.persons[0].flags
+    nombre = row.persons[0].name
+    assert not nombre.lower().startswith(("after", "from", "based on", "adapted from"))
+    assert not re.search(r"\d", nombre) and "www." not in nombre.lower()
+
+
+def test_url_con_codigos_no_es_persona() -> None:
+    assert parse_import_name("77 87 DREX GLORIAEwww.hymnary.org/text/see_the_conqueror", "composer").kind == "junk"
+
+
+@pytest.mark.parametrize(
+    ("raw", "esperado", "flag"),
+    [
+        ("by James Gill", "James Gill", "lead_connector_stripped"),
+        ("anged from John Edgar Gould", "John Edgar Gould", "lead_connector_stripped"),
+        ("From John Edgar Gould", "John Edgar Gould", "lead_connector_stripped"),
+        ("Yugo Kanno //", "Yugo Kanno", "slashes"),
+        ("C. V. Stanford(Adapted from the Gloria in Bb)", "C. V. Stanford", "adaptation_text_stripped"),
+        ("by Harold Boulton", "Harold Boulton", "lead_connector_stripped"),
+    ],
+)
+def test_familias_de_contaminacion_de_la_auditoria(raw: str, esperado: str, flag: str) -> None:
+    """Casos reales de la auditoría: se limpia el nombre y se deja constancia de la limpieza."""
+    row = parse_import_name(raw, "composer")
+
+    assert row.kind == "person"
+    assert row.persons[0].name == esperado
+    assert flag in row.persons[0].flags
+
+
+def test_truncamiento_no_se_recorta_y_se_marca() -> None:
+    """'chior Frank' no se adivina: se marca para revisión (no se resuelve a ciegas)."""
+    row = parse_import_name("chior Frank", "composer")
+
+    assert row.kind == "person"
+    assert "truncated_prefix" in row.persons[0].flags
+
+
+def test_nombre_limpio_no_lleva_marcas() -> None:
+    row = parse_import_name("Charles Wood", "composer")
+
+    assert row.persons[0].flags == ()
+
+
+def test_looks_contaminated_detecta_fichas_sucias() -> None:
+    assert looks_contaminated("by James Gill")
+    assert looks_contaminated("C. V. Stanford(Adapted from the Gloria in Bb)")
+    assert looks_contaminated("Yugo Kanno //")
+    assert looks_contaminated("chior Frank")
+    assert not looks_contaminated("Charles Wood")
+    assert not looks_contaminated("Johann Sebastian Bach")
 
 
 def test_derivacion_con_rol_explicito_conserva_la_relacion() -> None:
