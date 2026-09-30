@@ -9,7 +9,7 @@ from application.use_cases.work_attribution_ai import ProposeWorkAttribution, Re
 from domain.exceptions import ProposalAssignmentError, ProposalStateError
 from domain.ports.work_attribution_ai import AiProposal, WorkContext
 from domain.services.composer_names import normalize_composer_name
-from infrastructure.ai.errors import AiNotConfiguredError
+from infrastructure.ai.errors import AiNotConfiguredError, AiUpstreamError
 from infrastructure.ai.fake_attribution_resolver import FakeAttributionResolver
 from infrastructure.ai.resolver_factory import NullAttributionResolver
 
@@ -255,3 +255,18 @@ async def test_ia_no_configurada_error_claro() -> None:
     repo = _FakeRepo()
     with pytest.raises(AiNotConfiguredError):
         await ProposeWorkAttribution(repo, NullAttributionResolver()).execute(1)  # type: ignore[arg-type]
+
+
+async def test_fallo_de_gemini_no_guarda_propuesta_falsa() -> None:
+    """Si la IA falla (timeout/429/503 agotados), no se persiste ninguna propuesta."""
+
+    class _FailingResolver(FakeAttributionResolver):
+        async def propose(self, context: WorkContext) -> AiProposal:
+            raise AiUpstreamError("Gemini no disponible tras 3 intentos")
+
+    repo = _FakeRepo()
+    with pytest.raises(AiUpstreamError):
+        await ProposeWorkAttribution(repo, _FailingResolver()).execute(3)  # type: ignore[arg-type]
+
+    assert repo.proposals == {}
+    assert repo.accepted == []

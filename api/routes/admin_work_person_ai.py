@@ -18,7 +18,7 @@ from application.use_cases.work_attribution_ai import (
 )
 from domain.exceptions import ProposalAssignmentError, ProposalStateError
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from infrastructure.ai.errors import AiNotConfiguredError
+from infrastructure.ai.errors import AiNotConfiguredError, AiUpstreamError
 
 from api.dependencies import (
     GetWorkAttributionProposalDep,
@@ -51,6 +51,8 @@ async def propose(
         return await uc.execute(work_id, payload.get("batch_id"), force)
     except AiNotConfiguredError as exc:
         raise _error(503, "AI_NOT_CONFIGURED", str(exc)) from exc
+    except AiUpstreamError as exc:
+        raise _error(503, "AI_UNAVAILABLE", str(exc)) from exc
     except LookupError as exc:
         raise _error(404, "NOT_FOUND", str(exc)) from exc
 
