@@ -133,3 +133,62 @@ def test_roles_tienen_id_de_catalogo() -> None:
 
 def test_artista_basura_no_es_persona() -> None:
     assert parse_import_name("Misc tunes", "artist").kind == "junk"
+
+
+# --- refinamiento del ruido real (familias encontradas en producción) ---------
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "after Chief F. O'Neillwith spirit",
+        "after Chief O'Neill",
+        "after Mr. Mahoney",
+        "after Sg't. J. O'Neill",
+        "From Carl Maria von Weber 1826",
+        "from the Copper Family",
+        "Based on Media Vita circa 1200",
+        "Adapted from Ludwig Spohr (1784-1859)",
+        "77 87 DREX GLORIAEwww.hymnary.org/text/see_the_conqueror",
+    ],
+)
+def test_procedencia_derivada_no_es_persona(raw: str) -> None:
+    row = parse_import_name(raw, "composer")
+
+    assert row.kind == "junk"
+    assert row.persons == []
+
+
+def test_derivacion_con_rol_explicito_conserva_la_relacion() -> None:
+    """El rol manda: "from … arr. by X" sí aporta el arreglista."""
+    row = parse_import_name("from Asuka Ota Hajime Wakai & Koji Kondoarr. by Jonathan Paugois")
+
+    assert row.kind == "person"
+    assert [(p.name, p.role_key) for p in row.persons] == [("Jonathan Paugois", "arranger")]
+
+
+def test_tradicional_con_arreglista_en_la_misma_cadena() -> None:
+    row = parse_import_name("English traditional carolarr. Charles Wood (1866 - 1926)")
+
+    assert row.kind == "person"
+    assert row.attribution_status == "traditional"
+    assert [(p.name, p.role_key) for p in row.persons] == [("Charles Wood", "arranger")]
+
+
+def test_atribucion_con_coletilla() -> None:
+    row = parse_import_name("trad Shetland", "composer")
+
+    assert row.kind == "attribution"
+    assert row.attribution_status == "traditional"
+
+
+def test_xml_y_corchetes_se_limpian() -> None:
+    uno = parse_import_name("B<sym>accidentalFlat</sym> Major Thomas Haweis 1791", "composer")
+    dos = parse_import_name("José de Torres y Martinez Bravo [1665-1738]", "composer")
+
+    assert any("Thomas Haweis" in p.name for p in uno.persons)
+    assert any(p.name == "José de Torres y Martinez Bravo" for p in dos.persons)
+
+
+def test_url_sola_no_es_persona() -> None:
+    assert parse_import_name("Tom Brierhttps://musescore.com/user/29431458/scores/5192919").kind in ("junk", "person")

@@ -37,20 +37,29 @@ _NO_PERSONA: dict[str, str | None] = {
 }
 
 _ROLE_MARKERS: list[tuple[str, re.Pattern[str]]] = [
-    ("arranger", re.compile(r"\b(arranged by|arrangement by|arranger|arr\.|arreglad[oa]s? por|arreglo de)\b", re.I)),
     (
-        "adapter",
+        "arranger",
         re.compile(
-            r"\b(adapted by|adaption by|adaptation by|adap\.|adaptad[oa] por|adaptaci[oó]n de|"
-            r"version by|versi[oó]n de)\b",
+            r"\b(?:arranged by|arrangement by|arranger\b|arr\.|arreglad[oa]s? por\b|arreglo de\b)",
             re.I,
         ),
     ),
-    ("transcriber", re.compile(r"\b(transcribed by|transcription by|transcri\w*|transcr\.)\b", re.I)),
-    ("orchestrator", re.compile(r"\b(orchestrated by|orchestration by|orchestrat\w*|orquestad[oa] por)\b", re.I)),
-    ("lyricist", re.compile(r"\b(lyrics by|lyric by|words by|text by|letra de|letrista|texto de|tex\.)\b", re.I)),
-    ("editor", re.compile(r"\b(edited by|editor|revised by|revisad[oa] por|ed\.)\b", re.I)),
-    ("composer", re.compile(r"\b(composed by|composer|music by|música de|música:|comp\.|composition by)\b", re.I)),
+    (
+        "adapter",
+        re.compile(
+            r"\b(?:adapted by|adaption by|adaptation by|adap\.|adaptad[oa] por\b|adaptaci[oó]n de\b|"
+            r"version by\b|versi[oó]n de\b)",
+            re.I,
+        ),
+    ),
+    ("transcriber", re.compile(r"\b(?:transcribed by|transcription by|transcri\w*|transcr\.)", re.I)),
+    ("orchestrator", re.compile(r"\b(?:orchestrated by|orchestration by|orchestrat\w*|orquestad[oa] por\b)", re.I)),
+    (
+        "librettist",
+        re.compile(r"\b(?:lyrics by|lyric by|words by|text by|letra de\b|letrista\b|texto de\b|tex\.)", re.I),
+    ),
+    ("editor", re.compile(r"\b(?:edited by|editor\b|revised by|revisad[oa] por\b|ed\.)", re.I)),
+    ("composer", re.compile(r"\b(?:composed by|composer\b|music by|música de\b|música:|comp\.|composition by)", re.I)),
 ]
 # Los ficheros de origen pegan palabras ("PADENAdapted", "GABRIELArranged"): se separa antes de parsear.
 _GLUED_ROLE = re.compile(
@@ -67,15 +76,54 @@ _SUFFIX_ROLE_KEYS = {
     "orchestrator": "orchestrator", "ed": "editor", "editor": "editor",
     "comp": "composer", "composer": "composer",
 }
-_SPLIT_PEOPLE = re.compile(r"\s*(?:;|/|&|\+|\band\b|\by\b)\s*", re.I)
+_SPLIT_PEOPLE = re.compile(r"\s*(?:;|/|&|\+|\band\b)\s*", re.I)
 _CLEAN_NAME = re.compile(r"[\"'\[\]\(\)]")
-_DATES = re.compile(r"\(?\b(1[0-9]{3}|20[0-2][0-9])\b[^)]*\)?")
+_DATES = re.compile(r"\(?\b(1[0-9]{3}|20[0-2][0-9])\b[^)\]]*[\)\]]?|\[\s*1[0-9]{3}\s*[-–]\s*1[0-9]{3}\s*\]")
 _URL = re.compile(r"(https?://\S+|www\.\S+)")
+_XML = re.compile(r"<[^>]{1,40}>")
+# Símbolos musicales de MuseScore incrustados: se elimina el elemento con su contenido.
+_SYM = re.compile(r"<sym>.*?</sym>", re.S)
+_GLUED_LOWER = re.compile(
+    r"(?<=[A-Za-z])(?=(?:arr\.|arranged by|adapted by|transcribed by|orchestrated by|composed by|"
+    r"edited by|lyrics by|words by|music by|with\b|from\b))\s*",
+    re.I,
+)
+_EXPRESSION = re.compile(r"\bwith (spirit|feeling|vigour|vigor|energy|expression|soul|gusto)\b", re.I)
+# Texto que describe procedencia/derivación, no autoría ("after X", "from Y", "based on Z").
+_DERIVATION = re.compile(
+    r"^\s*(after|based on|from|adapted from|as sung by|collected from|per the version of|"
+    r"a version of|taken from)\b",
+    re.I,
+)
+# Atribuciones no personales que pueden venir con coletilla: "trad Shetland", "anon. s. XIV".
+_ATTRIBUTION_ANY = re.compile(
+    r"\b(anon\.?|anonymous|anónim[oa]|anonim[oa]|desconocid[oa]|desconhecid[oa]|traditional|tradicional|"
+    r"trad\.?|popular|volksweise|traditionnel)\b",
+    re.I,
+)
+
+
+def _attribution_from_word(word: str) -> str | None:
+    lowered = word.lower().rstrip(".")
+    if lowered in _ATTRIBUTION_WORD_STATUS:
+        return _ATTRIBUTION_WORD_STATUS[lowered]
+    if lowered.startswith(("anon", "anónim", "anonim", "desconocid", "desconhecid")):
+        return "anonymous"
+    if lowered.startswith(("trad", "popular", "volksweise", "traditionnel")):
+        return "traditional"
+    return None
+_ATTRIBUTION_WORD_STATUS = {
+    "anon": "anonymous", "anonymous": "anonymous", "anónima": "anonymous", "anónimo": "anonymous",
+    "anonima": "anonymous", "anonimo": "anonymous", "desconocido": "anonymous", "desconocida": "anonymous",
+    "desconhecido": "anonymous", "traditional": "traditional", "tradicional": "traditional",
+    "trad": "traditional", "popular": "traditional", "volksweise": "traditional",
+    "traditionnel": "traditional",
+}
 _ROLE_SUFFIX_WORDS = re.compile(
     r"\b(arr|arranger|adapt|adapter|transcr|orch|ed|editor|composer|comp|music|lyrics|vocal|text)\b\.?",
     re.I,
 )
-_IMPORT_ROLE_TO_KEY = {"composer": "composer", "editor": "editor", "lyricist": "lyricist"}
+_IMPORT_ROLE_TO_KEY = {"composer": "composer", "editor": "editor", "librettist": "librettist"}
 
 
 @dataclass(frozen=True)
@@ -92,7 +140,6 @@ class ParsedRow:
     persons: list[ParsedPerson] = field(default_factory=list)
     attribution_status: str | None = None
     reason: str | None = None
-
 
 def _looks_like_name(text: str) -> bool:
     cleaned = _CLEAN_NAME.sub(" ", text).strip(" .,-")
@@ -111,7 +158,10 @@ def _looks_like_name(text: str) -> bool:
 
 
 def _clean_person(text: str) -> str:
-    out = _URL.sub(" ", text or "")
+    out = _SYM.sub(" ", text or "")
+    out = _XML.sub(" ", out)
+    out = _URL.sub(" ", out)
+    out = _EXPRESSION.sub(" ", out)
     out = _DATES.sub(" ", out)
     out = _ROLE_SUFFIX_WORDS.sub(" ", out)
     out = _CLEAN_NAME.sub(" ", out)
@@ -125,13 +175,18 @@ def _extract_after(marker: re.Match[str], text: str) -> str:
     tail = re.split(r"\b(?:arranged by|adapted by|transcribed by|orchestrated by|lyrics by|text by|"
                     r"composed by|music by|composition by|ed(?:ited)?\.? by)\b|;|\||\b1[0-9]{3}\b",
                     tail, flags=re.I)[0]
+    # Quita el conector que queda tras el marcador ("arr. by X").
+    tail = re.sub(r"^\s*(?:by|de|por|:)\s+", "", tail, flags=re.I)
     return _clean_person(tail)
 
 
 def parse_import_name(raw: str | None, import_role: str = "composer") -> ParsedRow:
     """Clasifica una fila de `works_person_import`."""
     text = (raw or "").strip()
+    text = _SYM.sub(" ", text)
+    text = _XML.sub(" ", text)
     text = _GLUED_ROLE.sub(" ", text)
+    text = _GLUED_LOWER.sub(" ", text)
     lowered = re.sub(r"\s+", " ", text).lower().strip(" .")
 
     if lowered in _NO_PERSONA:
@@ -152,10 +207,26 @@ def parse_import_name(raw: str | None, import_role: str = "composer") -> ParsedR
                                  evidence=f"rol explícito en el texto: {text[:120]}",
                                  position=marker.start())
                 )
-    if persons:
-        return ParsedRow(kind="person", persons=_dedupe(persons))
 
-    # 2) Rol al final entre paréntesis: "Koji Kondo / xMrPianox (Arranger)".
+    # 1b) Atribución no personal, sola o acompañada de personas ("traditional carol arr. X").
+    inline_attribution: str | None = None
+    inline_match = _ATTRIBUTION_ANY.search(text)
+    if inline_match:
+        inline_attribution = _attribution_from_word(inline_match.group(1))
+        rest = (text[: inline_match.start()] + " " + text[inline_match.end():]).strip(" .,;")
+        if not persons and rest and _DERIVATION.match(rest) is None:
+            return ParsedRow(kind="attribution", attribution_status=inline_attribution,
+                             reason=f"atribución con coletilla: {text[:120]}")
+
+    if persons:
+        return ParsedRow(kind="person", persons=_dedupe(persons), attribution_status=inline_attribution,
+                         reason="con atribución no personal asociada" if inline_attribution else None)
+
+    # 2) Texto de procedencia/derivación sin autoría propia: "after Chief F. O'Neill", "from X".
+    if _DERIVATION.match(text):
+        return ParsedRow(kind="junk", reason=f"procedencia derivada, no autoría: {text[:120]}")
+
+    # 3) Sufijo entre paréntesis: "Koji Kondo / xMrPianox (Arranger)".
     suffix = _SUFFIX_ROLE.search(text)
     if suffix:
         role_key = _SUFFIX_ROLE_KEYS.get(suffix.group(1).lower().rstrip("."), "composer")
@@ -170,7 +241,7 @@ def parse_import_name(raw: str | None, import_role: str = "composer") -> ParsedR
             ]
             return ParsedRow(kind="person", persons=_dedupe(found))
 
-    # 3) Varias personas sin rol explícito.
+    # 4) Varias personas sin rol explícito.
     parts = [p for p in (_clean_person(part) for part in _SPLIT_PEOPLE.split(text)) if p]
     if len(parts) > 1 and all(_looks_like_name(p) for p in parts):
         role_key = _IMPORT_ROLE_TO_KEY.get(import_role, "composer")
@@ -179,7 +250,7 @@ def parse_import_name(raw: str | None, import_role: str = "composer") -> ParsedR
             persons=_dedupe([ParsedPerson(p, role_key, f"varias personas en el texto: {text[:120]}") for p in parts]),
         )
 
-    # 4) Una sola persona.
+    # 5) Una sola persona.
     candidate = _clean_person(text)
     if _looks_like_name(candidate):
         role_key = _IMPORT_ROLE_TO_KEY.get(import_role, "composer")
