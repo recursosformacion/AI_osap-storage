@@ -34,14 +34,21 @@ def _error(status_code: int, code: str, message: str) -> HTTPException:
     return HTTPException(status_code=status_code, detail={"code": code, "message": message})
 
 
-@router.post("/propose/{work_id}", summary="Genera y guarda una propuesta IA para la obra")
+@router.post(
+    "/propose/{work_id}",
+    summary="Genera (o reutiliza) la propuesta IA de la obra",
+    description="Sin `force`, si la obra ya tiene propuesta devuelve la última con "
+    "`reused=true` sin llamar a la IA. Con `force=true` consulta de nuevo y guarda una "
+    "propuesta nueva (las anteriores quedan como historial).",
+)
 async def propose(
     work_id: int,
     payload: dict = Body(default_factory=dict),
+    force: bool = Query(default=False),
     uc: ProposeWorkAttribution = Depends(ProposeWorkAttributionDep),
 ):
     try:
-        return await uc.execute(work_id, payload.get("batch_id"))
+        return await uc.execute(work_id, payload.get("batch_id"), force)
     except AiNotConfiguredError as exc:
         raise _error(503, "AI_NOT_CONFIGURED", str(exc)) from exc
     except LookupError as exc:

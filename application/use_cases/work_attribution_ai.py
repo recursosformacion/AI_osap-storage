@@ -26,16 +26,26 @@ _COMPOSER_ROLE_NAME = "composer"
 
 
 class ProposeWorkAttribution:
-    """Consulta la IA para una obra y guarda una propuesta. Nunca asigna."""
+    """Consulta la IA para una obra y guarda una propuesta. Nunca asigna.
+
+    Semántica de re-propuesta (explícita, sin llamadas accidentales a Gemini):
+    - Si la obra ya tiene propuesta (`pending`, `accepted`, `uncertain` o `rejected`), se
+      devuelve esa misma con `reused=True` y **no** se consulta a la IA.
+    - Con `force=True` se consulta de nuevo y se guarda una propuesta nueva; las anteriores
+      quedan como historial (el revisor ve siempre la última, orden por id).
+    - `pending` bloquea la revisión nueva; `accepted` bloquea la aceptación repetida.
+    """
 
     def __init__(self, repo: SqlWorkAttributionAiRepository, resolver: IWorkAttributionResolver) -> None:
         self._repo = repo
         self._resolver = resolver
 
-    async def execute(self, work_id: int, batch_id: str | None = None) -> dict[str, Any]:
-        existing = await self._repo.existing_proposal_for_work(work_id)
-        if existing is not None:
-            return existing
+    async def execute(
+        self, work_id: int, batch_id: str | None = None, force: bool = False
+    ) -> dict[str, Any]:
+        latest = await self._repo.latest_proposal_for_work(work_id)
+        if latest is not None and not force:
+            return {"proposal": latest, "reused": True}
         row = await self._repo.work_context(work_id)
         if row is None:
             raise LookupError(f"obra no encontrada: {work_id}")
@@ -47,6 +57,7 @@ class ProposeWorkAttribution:
             catalogue=row.get("works_catalogue"),
             year=row.get("works_year"),
             opus=row.get("works_opus"),
+            genre=await self._repo.work_genres(work_id),
             instrumentation=row.get("works_instrumentation"),
             attr_type=row.get("works_attr_type"),
             attribution_note=row.get("works_attribution_note"),
@@ -94,7 +105,7 @@ class ProposeWorkAttribution:
             }
         )
         saved = await self._repo.get_proposal(proposal_id)
-        return saved or {"id": proposal_id}
+        return {"proposal": saved or {"id": proposal_id}, "reused": False}
 
 
 class ReviewProposal:

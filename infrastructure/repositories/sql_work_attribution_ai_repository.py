@@ -20,6 +20,15 @@ from infrastructure.db.connection import Database
 
 _MAX_MERGE_HOPS = 10
 _MAX_ALIAS_MATCHES = 50
+_MAX_GENRES = 5
+
+# Columnas del listado: sin `answer_json` (la respuesta completa del modelo solo se sirve en
+# el detalle). `evidence_json` sí viaja porque la tarjeta lo muestra para revisar de un vistazo.
+_LIST_COLUMNS = (
+    "id, work_id, batch_id, resolution, person_match, candidate_person_id, candidate_name, "
+    "role_id, role_name, status, confidence, model, prompt_version, evidence_json, review_note, "
+    "reviewed_by, reviewed_at, created_at"
+)
 
 
 def _as_json_list(value: object) -> object:
@@ -58,6 +67,17 @@ class SqlWorkAttributionAiRepository:
             result = dict(row)
             result["existing_persons"] = [str(r["persons_name"]) for r in await cur.fetchall()]
             return result
+
+    async def work_genres(self, work_id: int) -> str | None:
+        """Géneros de la obra (`work_genres` → `genres`), como lista legible para el prompt."""
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT g.name FROM work_genres wg JOIN genres g ON g.id = wg.genres_id "
+                "WHERE wg.works_id = %s ORDER BY g.name LIMIT %s",
+                (work_id, _MAX_GENRES),
+            )
+            names = [str(r["name"]) for r in await cur.fetchall()]
+        return ", ".join(names) if names else None
 
     async def find_person_candidates(self, normalized: str) -> list[dict[str, Any]]:
         """Personas canónicas que coinciden con el nombre normalizado (vía alias).
@@ -111,7 +131,8 @@ class SqlWorkAttributionAiRepository:
             await cur.execute(f"SELECT COUNT(*) AS total FROM work_person_ai_proposals {where}", params)
             total = int((await cur.fetchone())["total"])
             await cur.execute(
-                f"SELECT * FROM work_person_ai_proposals {where} ORDER BY id DESC LIMIT %s OFFSET %s",
+                f"SELECT {_LIST_COLUMNS} FROM work_person_ai_proposals {where} "
+                f"ORDER BY id DESC LIMIT %s OFFSET %s",
                 [*params, limit, offset],
             )
             return {"items": [dict(r) for r in await cur.fetchall()], "total": total}
@@ -122,11 +143,11 @@ class SqlWorkAttributionAiRepository:
             row = await cur.fetchone()
             return dict(row) if row else None
 
-    async def existing_proposal_for_work(self, work_id: int) -> dict[str, Any] | None:
+    async def latest_proposal_for_work(self, work_id: int) -> dict[str, Any] | None:
+        """Última propuesta de la obra, sea cual sea su estado (para decidir re-propuesta)."""
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT * FROM work_person_ai_proposals WHERE work_id = %s AND status <> 'rejected' "
-                "ORDER BY id DESC LIMIT 1",
+                "SELECT * FROM work_person_ai_proposals WHERE work_id = %s ORDER BY id DESC LIMIT 1",
                 (work_id,),
             )
             row = await cur.fetchone()

@@ -176,3 +176,44 @@ async def test_candidatos_sin_normalizado_no_consulta() -> None:
     repo = SqlWorkAttributionAiRepository(db)  # type: ignore[arg-type]
     assert await repo.find_person_candidates("") == []
     assert db.log == []
+
+
+async def test_generos_se_leen_de_work_genres() -> None:
+    db = _QueueDb([[{"name": "Canción"}, {"name": "Motete"}]])
+    repo = SqlWorkAttributionAiRepository(db)  # type: ignore[arg-type]
+
+    genre = await repo.work_genres(310455)
+
+    assert genre == "Canción, Motete"
+    sql = db.log[0][0]
+    assert "FROM work_genres" in sql and "JOIN genres" in sql
+
+
+async def test_generos_vacios_devuelven_none() -> None:
+    db = _QueueDb([[]])
+    repo = SqlWorkAttributionAiRepository(db)  # type: ignore[arg-type]
+    assert await repo.work_genres(1) is None
+
+
+async def test_ultima_propuesta_no_filtra_por_estado() -> None:
+    db = _QueueDb([[{"id": 9, "work_id": 1, "status": "rejected"}]])
+    repo = SqlWorkAttributionAiRepository(db)  # type: ignore[arg-type]
+
+    latest = await repo.latest_proposal_for_work(1)
+
+    assert latest is not None and latest["status"] == "rejected"
+    sql = db.log[0][0]
+    assert "status <>" not in sql
+    assert "ORDER BY id DESC LIMIT 1" in sql
+
+
+async def test_listado_no_carga_answer_json() -> None:
+    db = _QueueDb([[{"total": 1}]])
+    repo = SqlWorkAttributionAiRepository(db)  # type: ignore[arg-type]
+
+    await repo.list_proposals("pending", 50, 0)
+
+    page_sql = db.log[1][0]
+    assert "SELECT *" not in page_sql
+    assert "answer_json" not in page_sql
+    assert "evidence_json" in page_sql  # la tarjeta muestra la evidencia
