@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from infrastructure.ai.errors import AiNotConfiguredError, AiUpstreamError
 from infrastructure.ai.fake_attribution_resolver import FakeAttributionResolver
-from infrastructure.ai.gemini_attribution_resolver import GeminiWorkAttributionResolver
+from infrastructure.ai.gemini_attribution_resolver import (
+    GeminiWorkAttributionResolver,
+    parse_api_keys,
+)
 from infrastructure.ai.resolver_factory import build_attribution_resolver
 
 __all__ = [
@@ -13,4 +16,5 @@ __all__ = [
     "FakeAttributionResolver",
     "GeminiWorkAttributionResolver",
     "build_attribution_resolver",
+    "parse_api_keys",
 ]

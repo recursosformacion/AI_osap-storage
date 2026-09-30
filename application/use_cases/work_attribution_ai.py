@@ -21,7 +21,7 @@ from domain.ports.work_attribution_ai import (
     WorkContext,
 )
 from domain.services.composer_names import normalize_composer_name
-from domain.services.person_roles import ROLE_IDS
+from domain.services.person_roles import ROLE_IDS, ROLE_KEYS
 from infrastructure.repositories.sql_work_attribution_ai_repository import (
     SqlWorkAttributionAiRepository,
 )
@@ -287,8 +287,76 @@ class ReviewRelation:
     async def execute(self, relation_id: int, decision: str, reviewed_by: str | None) -> dict[str, Any]:
         if decision not in ("pending", "accepted", "rejected", "uncertain"):
             raise ValueError("decision inválida")
-        row = await self._repo.set_relation_decision(relation_id, decision)
+        row = await self._repo.set_relation_decision(relation_id, decision, reviewed_by)
         if row is None:
             raise LookupError(f"relación no encontrada: {relation_id}")
         await self._repo.mark_review_reviewed(int(row["work_id"]), reviewed_by)
         return {"id": relation_id, "work_id": row["work_id"], "decision": decision}
+
+
+class AddReviewRelation:
+    """Alta humana de una relación persona×rol.
+
+    Es la vía para lo que el modelo no encontró («aquí hay un arreglista que Gemini no vio»):
+    se guarda como `origin=human`, con `decided_by`, y entra en el artefacto de decisiones.
+
+    Reglas:
+    - exactamente `person_id` **o** `person_name`;
+    - `role_id` debe existir en el catálogo de roles;
+    - con `person_name` se resuelve con las **mismas reglas canónicas** que el resto; si no hay
+      coincidencia única se guarda con `person_id=NULL` y una evidencia de `person_match`
+      (nunca se crea persona);
+    - idempotente por `(review_id, role_id, nombre normalizado)`;
+    - **nunca** escribe en `works_person_roles`.
+    """
+
+    def __init__(self, repo: SqlWorkAttributionAiRepository) -> None:
+        self._repo = repo
+
+    async def execute(
+        self, work_id: int, *, person_id: str | None = None, person_name: str | None = None,
+        role_id: int, decision: str = "accepted", evidence: object = None,
+        reviewed_by: str | None = None,
+    ) -> dict[str, Any]:
+        if (person_id is None) == (person_name is None):
+            raise ValueError("indica person_id o person_name (exactamente uno)")
+        if int(role_id) not in ROLE_KEYS:
+            raise ValueError("role_id fuera del catálogo")
+        if decision not in ("pending", "accepted", "rejected", "uncertain"):
+            raise ValueError("decision inválida")
+        if not await self._repo.work_exists(work_id):
+            raise LookupError(f"obra no encontrada: {work_id}")
+
+        evidence_items: list[object] = list(evidence) if isinstance(evidence, list) else []
+        resolved_id: str | None
+        if person_id is not None:
+            resolved_id = str(person_id)
+            if not await self._repo.person_exists(resolved_id):
+                raise LookupError(f"persona no encontrada: {person_id}")
+            name = await self._repo.person_name(resolved_id) or resolved_id
+        else:
+            raw = str(person_name).strip()
+            if not raw:
+                raise ValueError("person_name vacío")
+            matches = await self._repo.find_person_candidates(normalize_composer_name(raw))
+            if len(matches) == 1:
+                resolved_id = str(matches[0]["id"])
+                name = str(matches[0]["name"])
+            else:
+                resolved_id = None
+                name = raw
+                evidence_items.append(
+                    {"type": "person_match", "text": "ambiguous" if len(matches) > 1 else "unresolved"}
+                )
+
+        review_id = await self._repo.ensure_review(work_id)
+        relation_id = await self._repo.upsert_human_relation(
+            review_id=review_id, work_id=work_id, person_id=resolved_id, person_name=name,
+            role_id=int(role_id), decision=decision, evidence=evidence_items, decided_by=reviewed_by,
+        )
+        if decision != "pending":
+            await self._repo.mark_review_reviewed(work_id, reviewed_by)
+        return {
+            "id": relation_id, "work_id": work_id, "person_id": resolved_id, "person_name": name,
+            "role_id": int(role_id), "decision": decision, "origin": "human",
+        }

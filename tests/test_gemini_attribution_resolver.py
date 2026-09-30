@@ -12,7 +12,10 @@ import httpx
 import pytest
 from domain.ports.work_attribution_ai import AI_ROLE_KEYS, WorkContext
 from infrastructure.ai.errors import AiNotConfiguredError, AiUpstreamError
-from infrastructure.ai.gemini_attribution_resolver import GeminiWorkAttributionResolver
+from infrastructure.ai.gemini_attribution_resolver import (
+    GeminiWorkAttributionResolver,
+    parse_api_keys,
+)
 
 _OK_BODY = {
     "candidates": [
@@ -48,7 +51,7 @@ def _body(request: httpx.Request) -> dict:
 
 def _resolver(handler, **kwargs) -> GeminiWorkAttributionResolver:  # type: ignore[no-untyped-def]
     return GeminiWorkAttributionResolver(
-        api_key="test-key",
+        api_key=kwargs.pop("api_key", "test-key"),
         transport=httpx.MockTransport(handler),
         backoff=0.0,
         **kwargs,
@@ -247,3 +250,55 @@ async def test_sin_key_no_llama_a_gemini() -> None:
         await resolver.propose(_context())
 
     assert calls == 0
+
+
+async def test_rota_entre_varias_claves_en_los_reintentos() -> None:
+    used: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        used.append(request.url.params.get("key", ""))
+        if len(used) < 3:
+            return httpx.Response(429, json={"error": {"message": "quota"}})
+        return httpx.Response(200, json=_OK_BODY)
+
+    resolver = _resolver(handler, api_key="clave-1,clave-2,clave-3", max_attempts=3)
+
+    proposal = await resolver.propose(_context())
+
+    assert used == ["clave-1", "clave-2", "clave-3"]
+    assert resolver.key_count == 3
+    assert proposal.resolution == "identified"
+
+
+async def test_una_sola_clave_repite_en_los_reintentos() -> None:
+    used: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        used.append(request.url.params.get("key", ""))
+        if len(used) < 2:
+            return httpx.Response(503, json={"error": {"message": "high demand"}})
+        return httpx.Response(200, json=_OK_BODY)
+
+    resolver = _resolver(handler, api_key="solo-una", max_attempts=3)
+
+    await resolver.propose(_context())
+
+    assert used == ["solo-una", "solo-una"]
+    assert resolver.key_count == 1
+
+
+async def test_lee_varias_claves_del_entorno(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OSAP_STORAGE_GEMINI_API_KEY", " k1 ; k2\nk3 ")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_OK_BODY)
+
+    resolver = GeminiWorkAttributionResolver(transport=httpx.MockTransport(handler))
+
+    assert resolver.key_count == 3
+
+
+def test_parse_api_keys_ignora_vacios() -> None:
+    assert parse_api_keys(" a, ,b;;c ") == ["a", "b", "c"]
+    assert parse_api_keys("") == []
+    assert parse_api_keys(None) == []

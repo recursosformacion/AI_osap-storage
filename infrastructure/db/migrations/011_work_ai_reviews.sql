@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS `work_ai_review_relations` (
   `origin` varchar(16) NOT NULL DEFAULT 'gemini' COMMENT 'gemini|existing|human',
   `confidence` decimal(4,3) DEFAULT NULL,
   `evidence_json` longtext DEFAULT NULL,
+  `decided_by` varchar(128) DEFAULT NULL,
+  `decided_at` datetime(6) DEFAULT NULL,
   `created_at` datetime(6) NOT NULL DEFAULT current_timestamp(6),
   `updated_at` datetime(6) NOT NULL DEFAULT current_timestamp(6) ON UPDATE current_timestamp(6),
   PRIMARY KEY (`id`),
@@ -76,10 +78,11 @@ DEALLOCATE PREPARE war_stmt;
 SET @warr_cols := (
   SELECT COUNT(*) FROM information_schema.columns
   WHERE table_schema = DATABASE() AND table_name = 'work_ai_review_relations'
-    AND column_name IN ('review_id', 'person_id', 'role_id', 'decision', 'origin', 'confidence')
+    AND column_name IN ('review_id', 'person_id', 'role_id', 'decision', 'origin', 'confidence',
+                        'decided_by', 'decided_at')
 );
 SET @warr_sql := IF(
-  @warr_cols = 6,
+  @warr_cols = 8,
   'DO 0',
   'SELECT * FROM `__migracion_011_abortada__work_ai_review_relations_con_esquema_inesperado`'
 );

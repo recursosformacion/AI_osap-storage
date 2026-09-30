@@ -257,6 +257,68 @@ class SqlWorkAttributionAiRepository:
                 ),
             )
 
+    async def ensure_review(self, work_id: int) -> int:
+        """Id de la revisión de la obra, creándola si no existe.
+
+        Si la obra ya tiene propuesta IA, la revisión nace con esa atribución (no con
+        `unknown`); si no existe propuesta, queda `unknown` a la espera del revisor.
+        """
+        async with self._db.transaction() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "INSERT INTO work_ai_reviews (work_id, attribution_status, status) "
+                "SELECT %s, COALESCE((SELECT p.resolution FROM work_person_ai_proposals p "
+                "  WHERE p.work_id = %s ORDER BY p.id DESC LIMIT 1), 'unknown'), 'pending' "
+                "ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)",
+                (work_id, work_id),
+            )
+            return int(cur.lastrowid or 0)
+
+    async def upsert_human_relation(
+        self, *, review_id: int, work_id: int, person_id: str | None, person_name: str,
+        role_id: int, decision: str, evidence: object, decided_by: str | None,
+    ) -> int:
+        """Alta/actualización de una relación decidida por una persona (`origin=human`).
+
+        Idempotente por el índice único `(review_id, role_id, person_name_norm)`. No crea
+        personas y no escribe en `works_person_roles`.
+        """
+        normalized = normalize_composer_name(person_name)
+        async with self._db.transaction() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "INSERT INTO work_ai_review_relations "
+                "(review_id, work_id, person_id, person_name_raw, person_name_norm, role_id, "
+                " decision, origin, confidence, evidence_json, decided_by, decided_at) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,'human',NULL,%s,%s,current_timestamp(6)) "
+                "ON DUPLICATE KEY UPDATE "
+                "  person_id=VALUES(person_id), person_name_raw=VALUES(person_name_raw), "
+                "  decision=VALUES(decision), origin='human', "
+                "  evidence_json=IF(VALUES(evidence_json) IN ('[]', 'null'), evidence_json, "
+                "    VALUES(evidence_json)), "
+                "  decided_by=VALUES(decided_by), "
+                "  decided_at=current_timestamp(6), id=LAST_INSERT_ID(id)",
+                (
+                    review_id, work_id, person_id, person_name[:512], normalized[:191], role_id,
+                    decision, json.dumps(_as_json_list(evidence), ensure_ascii=False), decided_by,
+                ),
+            )
+            return int(cur.lastrowid or 0)
+
+    async def person_exists(self, person_id: str) -> bool:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute("SELECT 1 AS ok FROM persons WHERE persons_id = %s LIMIT 1", (person_id,))
+            return (await cur.fetchone()) is not None
+
+    async def person_name(self, person_id: str) -> str | None:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute("SELECT persons_name FROM persons WHERE persons_id = %s", (person_id,))
+            row = await cur.fetchone()
+            return str(row["persons_name"]) if row else None
+
+    async def work_exists(self, work_id: int) -> bool:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute("SELECT 1 AS ok FROM works WHERE id = %s LIMIT 1", (work_id,))
+            return (await cur.fetchone()) is not None
+
     async def get_review(self, work_id: int) -> dict[str, Any] | None:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute("SELECT * FROM work_ai_reviews WHERE work_id = %s", (work_id,))
@@ -266,7 +328,8 @@ class SqlWorkAttributionAiRepository:
             review = dict(row)
             await cur.execute(
                 "SELECT id, person_id, person_name_raw, role_id, decision, origin, confidence, "
-                "evidence_json FROM work_ai_review_relations WHERE review_id = %s ORDER BY role_id, id",
+                "evidence_json, decided_by, decided_at FROM work_ai_review_relations "
+                "WHERE review_id = %s ORDER BY role_id, id",
                 (review["id"],),
             )
             review["relations"] = [dict(r) for r in await cur.fetchall()]
@@ -297,11 +360,15 @@ class SqlWorkAttributionAiRepository:
             )
             return int(cur.rowcount or 0) == 1
 
-    async def set_relation_decision(self, relation_id: int, decision: str) -> dict[str, Any] | None:
+    async def set_relation_decision(
+        self, relation_id: int, decision: str, reviewed_by: str | None = None
+    ) -> dict[str, Any] | None:
         """Decisión humana sobre una relación (persona × rol)."""
         async with self._db.transaction() as conn, conn.cursor() as cur:
             await cur.execute(
-                "UPDATE work_ai_review_relations SET decision=%s WHERE id=%s", (decision, relation_id)
+                "UPDATE work_ai_review_relations SET decision=%s, decided_by=%s, "
+                "decided_at=current_timestamp(6) WHERE id=%s",
+                (decision, reviewed_by, relation_id),
             )
             if int(cur.rowcount or 0) != 1:
                 return None

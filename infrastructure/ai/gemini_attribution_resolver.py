@@ -11,6 +11,10 @@ claves nuevas (404), de ahí el cambio de valor por defecto.
 Robustez: timeout de 60 s y hasta 3 intentos ante 429, 503 o `httpx.TimeoutException`, con
 backoff progresivo acotado. Si se agotan, lanza `AiUpstreamError` (error controlado, 503): la
 propuesta **no** se guarda, así que nunca queda una propuesta falsa.
+
+Cuota: `OSAP_STORAGE_GEMINI_API_KEY` admite **varias claves** separadas por comas (p. ej.
+`clave1,clave2,clave3`); cada intento rota a la siguiente clave, de modo que la cuota se reparte
+entre proyectos si un proveedor limita por clave.
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 
 import httpx
 from domain.ports.work_attribution_ai import (
@@ -37,6 +42,17 @@ _DEFAULT_MAX_ATTEMPTS = 3
 _DEFAULT_BACKOFF = 1.5
 _MAX_BACKOFF = 8.0
 _RETRY_STATUS = frozenset({429, 503})
+
+
+def parse_api_keys(value: str | None) -> list[str]:
+    """Una o varias claves separadas por comas, punto y coma o espacios.
+
+    Permite repartir la cuota cuando un proyecto tiene varias claves (`key1,key2,key3`).
+    Nunca se registra el valor de las claves.
+    """
+    if not value:
+        return []
+    return [part for part in re.split(r"[,;\s]+", value.strip()) if part]
 
 _INSTRUCTIONS = (
     "Eres un investigador musicológico. Dada la información de una obra musical, identifica "
@@ -148,15 +164,21 @@ class GeminiWorkAttributionResolver:
         backoff: float = _DEFAULT_BACKOFF,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        self._api_key = api_key if api_key is not None else os.environ.get("OSAP_STORAGE_GEMINI_API_KEY", "")
+        raw_keys = api_key if api_key is not None else os.environ.get("OSAP_STORAGE_GEMINI_API_KEY", "")
+        self._api_keys = parse_api_keys(raw_keys)
         self.model = model or os.environ.get("OSAP_STORAGE_GEMINI_MODEL") or _DEFAULT_MODEL
         self._timeout = timeout
         self._max_attempts = max(1, max_attempts)
         self._backoff = max(0.0, backoff)
         self._transport = transport
 
+    @property
+    def key_count(self) -> int:
+        """Número de claves configuradas (sin exponer su valor)."""
+        return len(self._api_keys)
+
     async def propose(self, context: WorkContext) -> AiProposal:
-        if not self._api_key:
+        if not self._api_keys:
             raise AiNotConfiguredError("OSAP_STORAGE_GEMINI_API_KEY no configurada")
         body = {
             "systemInstruction": {"parts": [{"text": _INSTRUCTIONS}]},
@@ -171,8 +193,10 @@ class GeminiWorkAttributionResolver:
 
         last_error = ""
         for attempt in range(1, self._max_attempts + 1):
+            # Rotación de claves: cada intento usa la siguiente (reparte la cuota/proyecto).
+            key = self._api_keys[(attempt - 1) % len(self._api_keys)]
             try:
-                data = await self._request_json(url, body)
+                data = await self._request_json(url, body, key)
             except httpx.TimeoutException as exc:
                 last_error = f"timeout ({type(exc).__name__})"
             except _RetryableStatus as exc:
@@ -183,12 +207,13 @@ class GeminiWorkAttributionResolver:
                 await asyncio.sleep(min(self._backoff * 2 ** (attempt - 1), _MAX_BACKOFF))
 
         raise AiUpstreamError(
-            f"Gemini no disponible tras {self._max_attempts} intentos ({self.model}): {last_error}"
+            f"Gemini no disponible tras {self._max_attempts} intentos ({self.model}, "
+            f"{self.key_count} clave(s)): {last_error}"
         )
 
-    async def _request_json(self, url: str, body: dict[str, object]) -> dict[str, object]:
+    async def _request_json(self, url: str, body: dict[str, object], key: str) -> dict[str, object]:
         async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as client:
-            response = await client.post(url, params={"key": self._api_key}, json=body)
+            response = await client.post(url, params={"key": key}, json=body)
         if response.status_code in _RETRY_STATUS:
             raise _RetryableStatus(f"HTTP {response.status_code}: {_brief(response.text)}")
         if response.status_code >= 400:

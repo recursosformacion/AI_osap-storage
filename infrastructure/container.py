@@ -62,6 +62,7 @@ from application.use_cases.voting import (
 )
 from application.use_cases.work_admin import GetWorkAdmin, ListWorksAdmin, UpdateWorkAdmin
 from application.use_cases.work_attribution_ai import (
+    AddReviewRelation,
     GetWorkAttributionProposal,
     GetWorkReview,
     ListWorkAttributionProposals,
@@ -234,6 +235,7 @@ class Container:
     list_work_reviews: ListWorkReviews | None = None
     set_work_attribution: SetWorkAttribution | None = None
     review_relation: ReviewRelation | None = None
+    add_review_relation: AddReviewRelation | None = None
 
 
 def build_container(settings: Settings) -> Container:
@@ -359,6 +361,7 @@ def build_container(settings: Settings) -> Container:
     list_work_reviews = ListWorkReviews(work_attribution_ai_repo)
     set_work_attribution = SetWorkAttribution(work_attribution_ai_repo)
     review_relation = ReviewRelation(work_attribution_ai_repo)
+    add_review_relation = AddReviewRelation(work_attribution_ai_repo)
     composer_review_stats = ComposerReviewStats(
         composer_repo,
         identifiers=composer_repo,
@@ -477,4 +480,5 @@ def build_container(settings: Settings) -> Container:
         list_work_reviews=list_work_reviews,
         set_work_attribution=set_work_attribution,
         review_relation=review_relation,
+        add_review_relation=add_review_relation,
     )

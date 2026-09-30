@@ -11,6 +11,7 @@ propagar el código exacto al panel de revisión.
 from __future__ import annotations
 
 from application.use_cases.work_attribution_ai import (
+    AddReviewRelation,
     GetWorkAttributionProposal,
     GetWorkReview,
     ListWorkAttributionProposals,
@@ -25,6 +26,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from infrastructure.ai.errors import AiNotConfiguredError, AiUpstreamError
 
 from api.dependencies import (
+    AddReviewRelationDep,
     GetWorkAttributionProposalDep,
     GetWorkReviewDep,
     ListWorkAttributionProposalsDep,
@@ -91,6 +93,35 @@ async def set_attribution(
         raise _error(422, "VALIDATION_ERROR", "attribution_status inválido")
     try:
         return await uc.execute(work_id, status, payload.get("note"), payload.get("reviewed_by"))
+    except LookupError as exc:
+        raise _error(404, "NOT_FOUND", str(exc)) from exc
+
+
+@router.post(
+    "/reviews/{work_id}/relations",
+    summary="Añade una relación persona×rol decidida por una persona (revisión humana)",
+    description="Permite lo que el modelo no encontró («aquí hay un arreglista»): `origin=human`, "
+    "idempotente, con `decided_by`. Acepta `person_id` o `person_name` (resuelto con las mismas "
+    "reglas canónicas; nunca crea personas) + `role_id` + `decision` + `evidence`. Nunca escribe "
+    "en `works_person_roles`.",
+)
+async def add_review_relation(
+    work_id: int,
+    payload: dict = Body(...),
+    uc: AddReviewRelation = Depends(AddReviewRelationDep),
+):
+    try:
+        return await uc.execute(
+            work_id,
+            person_id=payload.get("person_id"),
+            person_name=payload.get("person_name"),
+            role_id=int(payload.get("role_id") or 0),
+            decision=str(payload.get("decision") or "accepted"),
+            evidence=payload.get("evidence"),
+            reviewed_by=payload.get("reviewed_by"),
+        )
+    except ValueError as exc:
+        raise _error(422, "VALIDATION_ERROR", str(exc)) from exc
     except LookupError as exc:
         raise _error(404, "NOT_FOUND", str(exc)) from exc
 

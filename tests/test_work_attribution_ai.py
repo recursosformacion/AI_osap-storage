@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 from application.use_cases.work_attribution_ai import (
+    AddReviewRelation,
     GetWorkReview,
     ProposeWorkAttribution,
     ReviewProposal,
@@ -37,6 +38,8 @@ class _FakeRepo:
         self.proposals: dict[int, dict] = {}
         self.candidates: list[dict] = []
         self.candidates_by_name: dict[str, list[dict]] = {}
+        self.known_persons: dict[str, str] = {"p1": "Louise Farrenc"}
+        self.unknown_works: set[int] = set()
         self.accepted: list[dict] = []
         self.reviews: list[tuple[int, str, str | None, str | None]] = []
         self.normalized_searched: list[str] = []
@@ -130,10 +133,13 @@ class _FakeRepo:
         row.update({"attribution_status": attribution_status, "status": "reviewed"})
         return True
 
-    async def set_relation_decision(self, relation_id: int, decision: str) -> dict | None:
+    async def set_relation_decision(
+        self, relation_id: int, decision: str, reviewed_by: str | None = None
+    ) -> dict | None:
         for relation in self.review_relations:
             if int(relation.get("_id", -1)) == relation_id:
                 relation["decision"] = decision
+                relation["decided_by"] = reviewed_by
                 return {"review_id": 1, "work_id": relation["work_id"]}
         return None
 
@@ -141,6 +147,30 @@ class _FakeRepo:
         self.review_reviewed.append((work_id, reviewed_by))
         if work_id in self.review_rows:
             self.review_rows[work_id]["status"] = "reviewed"
+
+    async def ensure_review(self, work_id: int) -> int:
+        row = self.review_rows.setdefault(
+            work_id,
+            {"id": len(self.review_rows) + 1, "work_id": work_id, "status": "pending",
+             "attribution_status": "unknown", "relations": []},
+        )
+        return int(row["id"])
+
+    async def upsert_human_relation(self, **kwargs: object) -> int:
+        row = dict(kwargs)
+        row["origin"] = "human"
+        row["_id"] = len(self.review_relations) + 1
+        self.review_relations.append(row)
+        return int(row["_id"])
+
+    async def person_exists(self, person_id: str) -> bool:
+        return person_id in self.known_persons
+
+    async def person_name(self, person_id: str) -> str | None:
+        return self.known_persons.get(person_id)
+
+    async def work_exists(self, work_id: int) -> bool:
+        return work_id not in self.unknown_works
 
 
 def _resolver(**kwargs: object) -> _CapturingResolver:
@@ -464,3 +494,84 @@ async def test_decision_invalida_falla() -> None:
         await SetWorkAttribution(repo).execute(1, "inventada", None, None)  # type: ignore[arg-type]
     with pytest.raises(ValueError):
         await ReviewRelation(repo).execute(1, "inventada", None)  # type: ignore[arg-type]
+
+
+# --- alta humana de relaciones (origin=human) ---------------------------------
+
+
+async def test_alta_humana_por_person_id() -> None:
+    repo = _FakeRepo()
+
+    result = await AddReviewRelation(repo).execute(  # type: ignore[arg-type]
+        254128, person_id="p1", role_id=3, decision="accepted",
+        evidence=[{"type": "cdlp", "text": "arreglista de la colección"}], reviewed_by="e2e-admin",
+    )
+
+    assert result["origin"] == "human"
+    assert result["person_id"] == "p1"
+    assert result["person_name"] == "Louise Farrenc"  # nombre del catálogo, no el enviado
+    assert result["role_id"] == 3
+    stored = repo.review_relations[0]
+    assert stored["origin"] == "human" and stored["decision"] == "accepted"
+    assert stored["decided_by"] == "e2e-admin"
+    assert repo.review_rows[254128]["status"] == "reviewed"
+    assert repo.accepted == []  # nunca escribe en works_person_roles
+
+
+async def test_alta_humana_por_nombre_resuelto() -> None:
+    repo = _FakeRepo()
+    repo.candidates_by_name = {"louise farrenc": [{"id": "p1", "name": "Louise Farrenc"}]}
+
+    result = await AddReviewRelation(repo).execute(254128, person_name="Louise Farrenc", role_id=3)  # type: ignore[arg-type]
+
+    assert result["person_id"] == "p1"
+    assert result["decision"] == "accepted"  # por defecto, decisión humana
+    assert repo.review_relations[0]["person_id"] == "p1"
+
+
+async def test_alta_humana_por_nombre_sin_coincidencia_no_crea_persona() -> None:
+    repo = _FakeRepo()
+    repo.candidates_by_name = {"desconocido x": []}
+
+    result = await AddReviewRelation(repo).execute(254128, person_name="Desconocido X", role_id=3)  # type: ignore[arg-type]
+
+    assert result["person_id"] is None
+    assert result["person_name"] == "Desconocido X"
+    assert repo.review_relations[0]["evidence"] == [{"type": "person_match", "text": "unresolved"}]
+    assert repo.review_rows[254128]["status"] == "reviewed"
+
+
+async def test_alta_humana_por_nombre_ambiguo_queda_sin_persona() -> None:
+    repo = _FakeRepo()
+    repo.candidates_by_name = {"j smith": [{"id": "p1", "name": "J. Smith"}, {"id": "p2", "name": "John Smith"}]}
+
+    result = await AddReviewRelation(repo).execute(254128, person_name="J. Smith", role_id=2)  # type: ignore[arg-type]
+
+    assert result["person_id"] is None
+    assert repo.review_relations[0]["evidence"] == [{"type": "person_match", "text": "ambiguous"}]
+
+
+async def test_alta_humana_pending_no_marca_la_revision() -> None:
+    repo = _FakeRepo()
+
+    await AddReviewRelation(repo).execute(254128, person_id="p1", role_id=3, decision="pending")  # type: ignore[arg-type]
+
+    assert repo.review_reviewed == []
+    assert repo.review_rows[254128]["status"] == "pending"
+
+
+async def test_alta_humana_valida_entradas() -> None:
+    repo = _FakeRepo()
+    with pytest.raises(ValueError):
+        await AddReviewRelation(repo).execute(1, role_id=3)  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        await AddReviewRelation(repo).execute(1, person_id="p1", person_name="X", role_id=3)  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        await AddReviewRelation(repo).execute(1, person_id="p1", role_id=99)  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        await AddReviewRelation(repo).execute(1, person_id="p1", role_id=3, decision="inventada")  # type: ignore[arg-type]
+    with pytest.raises(LookupError):
+        await AddReviewRelation(repo).execute(1, person_id="no-existe", role_id=3)  # type: ignore[arg-type]
+    repo.unknown_works = {777}
+    with pytest.raises(LookupError):
+        await AddReviewRelation(repo).execute(777, person_id="p1", role_id=3)  # type: ignore[arg-type]

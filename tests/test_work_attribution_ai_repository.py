@@ -262,11 +262,12 @@ async def test_decision_de_relacion_actualiza_solo_la_decision() -> None:
     db = _TransactionDb(rowcounts=[1, 1], rows=[{"review_id": 1, "work_id": 254128}])
     repo = SqlWorkAttributionAiRepository(db)  # type: ignore[arg-type]
 
-    row = await repo.set_relation_decision(7, "accepted")
+    row = await repo.set_relation_decision(7, "accepted", reviewed_by="e2e-admin")
 
     assert row == {"review_id": 1, "work_id": 254128}
     sql = db.log[0][0]
-    assert sql.startswith("UPDATE work_ai_review_relations SET decision=%s WHERE id=%s")
+    assert sql.startswith("UPDATE work_ai_review_relations SET decision=%s, decided_by=%s")
+    assert db.log[0][1] == ("accepted", "e2e-admin", 7)
     assert db.committed is True
 
 
@@ -278,3 +279,29 @@ async def test_decision_de_relacion_inexistente_no_escribe() -> None:
 
     assert db.rolled_back is False
     assert len(db.log) == 1  # solo el UPDATE que no encontró fila
+
+
+async def test_ensure_review_hereda_la_atribucion_de_la_propuesta_ia() -> None:
+    db = _TransactionDb(rowcounts=[1])
+    repo = SqlWorkAttributionAiRepository(db)  # type: ignore[arg-type]
+
+    review_id = await repo.ensure_review(254139)
+
+    assert review_id == 1
+    sql = db.log[0][0]
+    assert "SELECT %s, COALESCE((SELECT p.resolution FROM work_person_ai_proposals p" in sql
+    assert "'unknown'" in sql  # solo como respaldo si no hay propuesta
+
+
+async def test_alta_humana_no_pierde_evidencia_al_redecidir() -> None:
+    db = _TransactionDb(rowcounts=[1])
+    repo = SqlWorkAttributionAiRepository(db)  # type: ignore[arg-type]
+
+    await repo.upsert_human_relation(
+        review_id=1, work_id=254139, person_id="p1", person_name="Louise Farrenc", role_id=3,
+        decision="accepted", evidence=[{"type": "revisor", "text": "arreglo"}], decided_by="admin",
+    )
+
+    sql = db.log[0][0]
+    assert "origin='human'" in sql and "decided_by=VALUES(decided_by)" in sql
+    assert "evidence_json=IF(VALUES(evidence_json) IN ('[]', 'null'), evidence_json" in sql
