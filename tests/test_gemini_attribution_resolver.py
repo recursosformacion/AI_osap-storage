@@ -10,7 +10,7 @@ import json
 
 import httpx
 import pytest
-from domain.ports.work_attribution_ai import WorkContext
+from domain.ports.work_attribution_ai import AI_ROLE_KEYS, WorkContext
 from infrastructure.ai.errors import AiNotConfiguredError, AiUpstreamError
 from infrastructure.ai.gemini_attribution_resolver import GeminiWorkAttributionResolver
 
@@ -177,6 +177,61 @@ async def test_resolucion_fuera_del_enum_se_normaliza_a_unknown() -> None:
 
     assert proposal.resolution == "unknown"
     assert proposal.person_name is None
+
+
+async def test_parsea_relaciones_con_rol_y_contradicciones() -> None:
+    payload = {
+        "resolution": "traditional",
+        "person_name": None,
+        "role_name": None,
+        "confidence": 0.9,
+        "evidence": [{"type": "genre", "text": "folclore"}],
+        "relations": [
+            {
+                "person_name": "Bohuslav Martinů",
+                "role_key": "arranger",
+                "confidence": 0.4,
+                "evidence": [{"type": "editorial", "text": "posible arreglista"}],
+            },
+            {"person_name": "Alguien", "role_key": "rol_inventado"},
+            {"person_name": "", "role_key": "composer"},
+            {"person_name": "Repetido", "role_key": "arranger"},
+            {"person_name": "repetido", "role_key": "arranger"},
+            "no-es-dict",
+        ],
+        "contradictions": ["El título no concuerda con el catálogo", "  ", "El título no concuerda con el catálogo"],
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload)}]}}]}
+        return httpx.Response(200, json=body)
+
+    proposal = await _resolver(handler).propose(_context())
+
+    assert proposal.resolution == "traditional"
+    assert [(r.person_name, r.role_key) for r in proposal.relations] == [
+        ("Bohuslav Martinů", "arranger"),
+        ("Repetido", "arranger"),
+    ]
+    assert proposal.relations[0].confidence == pytest.approx(0.4)
+    assert proposal.relations[0].evidence == [{"type": "editorial", "text": "posible arreglista"}]
+    assert proposal.contradictions == ["El título no concuerda con el catálogo"]
+
+
+async def test_schema_declara_relaciones_y_roles_cerrados() -> None:
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = _body(request)
+        return httpx.Response(200, json=_OK_BODY)
+
+    await _resolver(handler).propose(_context())
+
+    schema = seen["body"]["generationConfig"]["responseSchema"]
+    relation_props = schema["properties"]["relations"]["items"]["properties"]
+    assert relation_props["role_key"]["enum"] == list(AI_ROLE_KEYS)
+    assert schema["properties"]["contradictions"]["items"]["type"] == "string"
+    assert schema["properties"]["relations"]["items"]["required"] == ["person_name", "role_key"]
 
 
 async def test_sin_key_no_llama_a_gemini() -> None:

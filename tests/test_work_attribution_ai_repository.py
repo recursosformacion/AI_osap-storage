@@ -45,15 +45,16 @@ class _Cursor:
 class _TransactionDb:
     """Doble de `Database.transaction()` que registra sentencias y si hubo rollback."""
 
-    def __init__(self, rowcounts: list[int]) -> None:
+    def __init__(self, rowcounts: list[int], rows: list[dict[str, Any]] | None = None) -> None:
         self._rowcounts = rowcounts
+        self._rows = rows or []
         self.log: list[tuple[str, object]] = []
         self.committed = False
         self.rolled_back = False
 
     @asynccontextmanager
     async def transaction(self) -> Any:
-        cursor = _Cursor([], self._rowcounts, self.log)
+        cursor = _Cursor(self._rows, self._rowcounts, self.log)
         try:
             yield _Conn(cursor)
             self.committed = True
@@ -217,3 +218,63 @@ async def test_listado_no_carga_answer_json() -> None:
     assert "SELECT *" not in page_sql
     assert "answer_json" not in page_sql
     assert "evidence_json" in page_sql  # la tarjeta muestra la evidencia
+
+
+async def test_upsert_review_no_pisa_decision_humana() -> None:
+    db = _TransactionDb(rowcounts=[1])
+    repo = SqlWorkAttributionAiRepository(db)  # type: ignore[arg-type]
+
+    review_id = await repo.upsert_review(
+        work_id=3, batch_id="lote-1", attribution_status="traditional", attribution_note=None,
+        attribution_confidence=0.9, contradictions=["título vs catálogo"],
+        context={"work_id": 3, "title": "X"},
+    )
+
+    assert review_id == 1
+    sql = db.log[0][0]
+    assert "INSERT INTO work_ai_reviews" in sql
+    assert "status='reviewed', attribution_status" in sql  # no pisa la atribución decidida
+    assert "status=IF(status='reviewed', status, VALUES(status))" in sql
+    assert db.committed is True
+
+
+async def test_add_review_relation_no_pisa_decision_humana() -> None:
+    db = _TransactionDb(rowcounts=[1])
+    repo = SqlWorkAttributionAiRepository(db)  # type: ignore[arg-type]
+
+    await repo.add_review_relation(
+        review_id=1, work_id=254128, person_id="p9", person_name="Jan Novák", role_id=3,
+        origin="gemini", confidence=0.4, evidence=[{"type": "editorial", "text": "arreglo"}],
+    )
+
+    sql = db.log[0][0]
+    params = db.log[0][1]
+    assert "INSERT INTO work_ai_review_relations" in sql
+    assert "person_name_norm" in sql and "'pending',%s,%s,%s" in sql
+    assert "person_id=IF(decision='pending'" in sql
+    assert "confidence=IF(decision='pending'" in sql
+    assert isinstance(params, tuple)
+    assert params[4] == "jan novak"  # normalización canónica para el índice único
+    assert json.loads(str(params[-1])) == [{"type": "editorial", "text": "arreglo"}]
+
+
+async def test_decision_de_relacion_actualiza_solo_la_decision() -> None:
+    db = _TransactionDb(rowcounts=[1, 1], rows=[{"review_id": 1, "work_id": 254128}])
+    repo = SqlWorkAttributionAiRepository(db)  # type: ignore[arg-type]
+
+    row = await repo.set_relation_decision(7, "accepted")
+
+    assert row == {"review_id": 1, "work_id": 254128}
+    sql = db.log[0][0]
+    assert sql.startswith("UPDATE work_ai_review_relations SET decision=%s WHERE id=%s")
+    assert db.committed is True
+
+
+async def test_decision_de_relacion_inexistente_no_escribe() -> None:
+    db = _TransactionDb(rowcounts=[0])
+    repo = SqlWorkAttributionAiRepository(db)  # type: ignore[arg-type]
+
+    assert await repo.set_relation_decision(404, "accepted") is None
+
+    assert db.rolled_back is False
+    assert len(db.log) == 1  # solo el UPDATE que no encontró fila

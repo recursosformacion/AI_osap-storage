@@ -10,11 +10,18 @@ Reglas del MVP:
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Any
 
 from domain.exceptions import ProposalAssignmentError, ProposalStateError
-from domain.ports.work_attribution_ai import PROMPT_VERSION, IWorkAttributionResolver, WorkContext
+from domain.ports.work_attribution_ai import (
+    PROMPT_VERSION,
+    AiProposal,
+    IWorkAttributionResolver,
+    WorkContext,
+)
 from domain.services.composer_names import normalize_composer_name
+from domain.services.person_roles import ROLE_IDS
 from infrastructure.repositories.sql_work_attribution_ai_repository import (
     SqlWorkAttributionAiRepository,
 )
@@ -61,7 +68,7 @@ class ProposeWorkAttribution:
             instrumentation=row.get("works_instrumentation"),
             attr_type=row.get("works_attr_type"),
             attribution_note=row.get("works_attribution_note"),
-            existing_persons=list(row.get("existing_persons") or []),
+            existing_relations=list(row.get("existing_relations") or []),
         )
         proposal = await self._resolver.propose(context)
 
@@ -104,8 +111,70 @@ class ProposeWorkAttribution:
                 "evidence": proposal.evidence,
             }
         )
+        await self._persist_review(work_id, batch_id, row, context, proposal, candidate_person_id,
+                                   candidate_name, person_match)
         saved = await self._repo.get_proposal(proposal_id)
         return {"proposal": saved or {"id": proposal_id}, "reused": False}
+
+    async def _persist_review(
+        self, work_id: int, batch_id: str | None, row: dict[str, Any], context: WorkContext,
+        proposal: AiProposal, candidate_person_id: str | None, candidate_name: str | None,
+        person_match: str,
+    ) -> None:
+        """Guarda el artefacto de revisión: atribución de la obra + personas relacionadas.
+
+        Nada de esto escribe en `works_person_roles`: son hipótesis con `decision=pending`.
+        """
+        relations: list[dict[str, Any]] = []
+        if proposal.resolution == "identified" and proposal.person_name:
+            evidence = list(proposal.evidence)
+            if person_match != "matched":
+                evidence.append({"type": "person_match", "text": person_match})
+            relations.append(
+                {
+                    "person_id": candidate_person_id,
+                    "person_name": candidate_name or proposal.person_name,
+                    "role_key": "composer",
+                    "confidence": proposal.confidence,
+                    "evidence": evidence,
+                }
+            )
+        for relation in proposal.relations:
+            if relation.role_key == "composer":
+                continue  # la vía canónica del compositor ya está cubierta arriba
+            matches = await self._repo.find_person_candidates(
+                normalize_composer_name(relation.person_name)
+            )
+            relations.append(
+                {
+                    "person_id": str(matches[0]["id"]) if len(matches) == 1 else None,
+                    "person_name": relation.person_name,
+                    "role_key": relation.role_key,
+                    "confidence": relation.confidence,
+                    "evidence": relation.evidence,
+                }
+            )
+
+        review_id = await self._repo.upsert_review(
+            work_id=work_id,
+            batch_id=batch_id,
+            attribution_status=proposal.resolution,
+            attribution_note=row.get("works_attribution_note"),
+            attribution_confidence=proposal.confidence,
+            contradictions=list(proposal.contradictions),
+            context=asdict(context),
+        )
+        for item in relations:
+            await self._repo.add_review_relation(
+                review_id=review_id,
+                work_id=work_id,
+                person_id=item["person_id"],
+                person_name=str(item["person_name"]),
+                role_id=ROLE_IDS[str(item["role_key"])],
+                origin="gemini",
+                confidence=item["confidence"],
+                evidence=item["evidence"],
+            )
 
 
 class ReviewProposal:
@@ -169,3 +238,57 @@ class GetWorkAttributionProposal:
         if proposal is None:
             raise LookupError(f"propuesta no encontrada: {proposal_id}")
         return proposal
+
+
+class GetWorkReview:
+    """Revisión de una obra: atribución + personas relacionadas (artefacto de decisiones)."""
+
+    def __init__(self, repo: SqlWorkAttributionAiRepository) -> None:
+        self._repo = repo
+
+    async def execute(self, work_id: int) -> dict[str, Any]:
+        review = await self._repo.get_review(work_id)
+        if review is None:
+            raise LookupError(f"revisión no encontrada: {work_id}")
+        return review
+
+
+class ListWorkReviews:
+    def __init__(self, repo: SqlWorkAttributionAiRepository) -> None:
+        self._repo = repo
+
+    async def execute(self, status: str | None, limit: int, offset: int) -> dict[str, Any]:
+        return await self._repo.list_reviews(status, limit, offset)
+
+
+class SetWorkAttribution:
+    """Decisión humana sobre la atribución de la obra (identified/anonymous/traditional/unknown)."""
+
+    def __init__(self, repo: SqlWorkAttributionAiRepository) -> None:
+        self._repo = repo
+
+    async def execute(
+        self, work_id: int, attribution_status: str, note: str | None, reviewed_by: str | None
+    ) -> dict[str, Any]:
+        if attribution_status not in ("identified", "anonymous", "traditional", "unknown"):
+            raise ValueError("attribution_status inválido")
+        updated = await self._repo.set_review_attribution(work_id, attribution_status, note, reviewed_by)
+        if not updated:
+            raise LookupError(f"revisión no encontrada: {work_id}")
+        return {"work_id": work_id, "attribution_status": attribution_status, "status": "reviewed"}
+
+
+class ReviewRelation:
+    """Decisión humana sobre una relación (persona × rol)."""
+
+    def __init__(self, repo: SqlWorkAttributionAiRepository) -> None:
+        self._repo = repo
+
+    async def execute(self, relation_id: int, decision: str, reviewed_by: str | None) -> dict[str, Any]:
+        if decision not in ("pending", "accepted", "rejected", "uncertain"):
+            raise ValueError("decision inválida")
+        row = await self._repo.set_relation_decision(relation_id, decision)
+        if row is None:
+            raise LookupError(f"relación no encontrada: {relation_id}")
+        await self._repo.mark_review_reviewed(int(row["work_id"]), reviewed_by)
+        return {"id": relation_id, "work_id": row["work_id"], "decision": decision}

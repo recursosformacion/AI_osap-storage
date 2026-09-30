@@ -12,9 +12,13 @@ from __future__ import annotations
 
 from application.use_cases.work_attribution_ai import (
     GetWorkAttributionProposal,
+    GetWorkReview,
     ListWorkAttributionProposals,
+    ListWorkReviews,
     ProposeWorkAttribution,
     ReviewProposal,
+    ReviewRelation,
+    SetWorkAttribution,
 )
 from domain.exceptions import ProposalAssignmentError, ProposalStateError
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
@@ -22,9 +26,13 @@ from infrastructure.ai.errors import AiNotConfiguredError, AiUpstreamError
 
 from api.dependencies import (
     GetWorkAttributionProposalDep,
+    GetWorkReviewDep,
     ListWorkAttributionProposalsDep,
+    ListWorkReviewsDep,
     ProposeWorkAttributionDep,
     ReviewProposalDep,
+    ReviewRelationDep,
+    SetWorkAttributionDep,
 )
 
 router = APIRouter(prefix="/api/admin/work-person-ai", tags=["admin-works"])
@@ -32,6 +40,79 @@ router = APIRouter(prefix="/api/admin/work-person-ai", tags=["admin-works"])
 
 def _error(status_code: int, code: str, message: str) -> HTTPException:
     return HTTPException(status_code=status_code, detail={"code": code, "message": message})
+
+
+# --- revisión humana: artefacto de decisiones (atribución + personas) ----------
+#
+# Se declaran antes de `/{proposal_id}` para que las rutas literales no se interpreten como id.
+
+
+@router.get(
+    "/reviews",
+    summary="Lista revisiones de atribución IA",
+    description="Conjunto de decisiones por obra (atribución + personas relacionadas).",
+)
+async def list_reviews(
+    status: str | None = Query(default=None, pattern=r"^(pending|reviewed)$"),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    uc: ListWorkReviews = Depends(ListWorkReviewsDep),
+):
+    return await uc.execute(status, limit, offset)
+
+
+@router.get(
+    "/reviews/{work_id}",
+    summary="Revisión de una obra (atribución + personas relacionadas)",
+    description="Incluye el contexto congelado, contradicciones y la decisión de cada "
+    "relación (`pending|accepted|rejected|uncertain`). Nada de esto escribe en "
+    "`works_person_roles`.",
+)
+async def get_review(work_id: int, uc: GetWorkReview = Depends(GetWorkReviewDep)):
+    try:
+        return await uc.execute(work_id)
+    except LookupError as exc:
+        raise _error(404, "NOT_FOUND", str(exc)) from exc
+
+
+@router.post(
+    "/reviews/{work_id}/attribution",
+    summary="Decide la atribución de la obra (revisión humana)",
+    description="Fija `identified|anonymous|traditional|unknown` + nota y marca la revisión "
+    "como `reviewed`. No escribe en `works_person_roles`.",
+)
+async def set_attribution(
+    work_id: int,
+    payload: dict = Body(...),
+    uc: SetWorkAttribution = Depends(SetWorkAttributionDep),
+):
+    status = str(payload.get("attribution_status") or "")
+    if status not in ("identified", "anonymous", "traditional", "unknown"):
+        raise _error(422, "VALIDATION_ERROR", "attribution_status inválido")
+    try:
+        return await uc.execute(work_id, status, payload.get("note"), payload.get("reviewed_by"))
+    except LookupError as exc:
+        raise _error(404, "NOT_FOUND", str(exc)) from exc
+
+
+@router.post(
+    "/reviews/relations/{relation_id}",
+    summary="Decide una relación persona×rol (revisión humana)",
+    description="`decision` = pending|accepted|rejected|uncertain. No escribe en "
+    "`works_person_roles`: la aplicación la hará el programa de Fase 6.",
+)
+async def review_relation(
+    relation_id: int,
+    payload: dict = Body(...),
+    uc: ReviewRelation = Depends(ReviewRelationDep),
+):
+    decision = str(payload.get("decision") or "")
+    if decision not in ("pending", "accepted", "rejected", "uncertain"):
+        raise _error(422, "VALIDATION_ERROR", "decision inválida")
+    try:
+        return await uc.execute(relation_id, decision, payload.get("reviewed_by"))
+    except LookupError as exc:
+        raise _error(404, "NOT_FOUND", str(exc)) from exc
 
 
 @router.post(

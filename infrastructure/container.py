@@ -63,9 +63,13 @@ from application.use_cases.voting import (
 from application.use_cases.work_admin import GetWorkAdmin, ListWorksAdmin, UpdateWorkAdmin
 from application.use_cases.work_attribution_ai import (
     GetWorkAttributionProposal,
+    GetWorkReview,
     ListWorkAttributionProposals,
+    ListWorkReviews,
     ProposeWorkAttribution,
     ReviewProposal,
+    ReviewRelation,
+    SetWorkAttribution,
 )
 from application.use_cases.works import GetWork, SearchWorks, SearchWorksFull
 from domain.entities.storage_provider import ProviderType
@@ -225,6 +229,11 @@ class Container:
     review_proposal: ReviewProposal | None = None
     list_work_attribution_proposals: ListWorkAttributionProposals | None = None
     get_work_attribution_proposal: GetWorkAttributionProposal | None = None
+    # Revisión humana: decisión de atribución + personas relacionadas.
+    get_work_review: GetWorkReview | None = None
+    list_work_reviews: ListWorkReviews | None = None
+    set_work_attribution: SetWorkAttribution | None = None
+    review_relation: ReviewRelation | None = None
 
 
 def build_container(settings: Settings) -> Container:
@@ -346,6 +355,10 @@ def build_container(settings: Settings) -> Container:
     review_proposal = ReviewProposal(work_attribution_ai_repo)
     list_work_attribution_proposals = ListWorkAttributionProposals(work_attribution_ai_repo)
     get_work_attribution_proposal = GetWorkAttributionProposal(work_attribution_ai_repo)
+    get_work_review = GetWorkReview(work_attribution_ai_repo)
+    list_work_reviews = ListWorkReviews(work_attribution_ai_repo)
+    set_work_attribution = SetWorkAttribution(work_attribution_ai_repo)
+    review_relation = ReviewRelation(work_attribution_ai_repo)
     composer_review_stats = ComposerReviewStats(
         composer_repo,
         identifiers=composer_repo,
@@ -460,4 +473,8 @@ def build_container(settings: Settings) -> Container:
         review_proposal=review_proposal,
         list_work_attribution_proposals=list_work_attribution_proposals,
         get_work_attribution_proposal=get_work_attribution_proposal,
+        get_work_review=get_work_review,
+        list_work_reviews=list_work_reviews,
+        set_work_attribution=set_work_attribution,
+        review_relation=review_relation,
     )

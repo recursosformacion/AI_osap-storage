@@ -20,7 +20,13 @@ import json
 import os
 
 import httpx
-from domain.ports.work_attribution_ai import PROMPT_VERSION, AiProposal, WorkContext
+from domain.ports.work_attribution_ai import (
+    AI_ROLE_KEYS,
+    PROMPT_VERSION,
+    AiProposal,
+    AiRelation,
+    WorkContext,
+)
 
 from infrastructure.ai.errors import AiNotConfiguredError, AiUpstreamError
 
@@ -34,14 +40,25 @@ _RETRY_STATUS = frozenset({429, 503})
 
 _INSTRUCTIONS = (
     "Eres un investigador musicológico. Dada la información de una obra musical, identifica "
-    "al autor si la evidencia lo permite. Reglas estrictas:\n"
-    "- No inventes personas ni obras. Si la evidencia es insuficiente, usa resolution=unknown.\n"
-    "- Si la obra es anónima o tradicional, usa resolution=anonymous o traditional (no una persona).\n"
+    "su atribución y las personas relacionadas si la evidencia lo permite. Reglas estrictas:\n"
+    "- No inventes personas ni obras. Si no puedes identificar una relación con evidencia, omítela.\n"
+    "- Dos capas INDEPENDIENTES:\n"
+    "  * `resolution`: atribución de la OBRA: identified | anonymous | traditional | unknown.\n"
+    "    Si es anónima o tradicional usa esos valores (no una persona).\n"
+    "  * `relations`: PERSONAS relacionadas con su rol. OJO: una obra anonymous o traditional "
+    "puede tener arreglista, adaptador, transcriptor o letrista identificable; si lo conoces, "
+    "ponlo en `relations` aunque `resolution` sea anonymous o traditional.\n"
+    "- `relations[].role_key` SOLO puede ser uno de: " + ", ".join(AI_ROLE_KEYS) + ".\n"
+    "- Si el título y el catálogo no concuerdan, no los fuerces: anótalo en `contradictions` y "
+    "baja la confianza (o usa resolution=unknown si no puedes decidir).\n"
     "- Devuelve SOLO JSON válido con este esquema:\n"
     '{"resolution":"identified|anonymous|traditional|unknown","person_name":string|null,'
     '"role_name":string|null,"confidence":number|null,'
-    '"evidence":[{"type":string,"text":string}],"reason":string}\n'
-    "- `person_name`: nombre del autor SOLO si resolution=identified; si no, null.\n"
+    '"evidence":[{"type":string,"text":string}],'
+    '"relations":[{"person_name":string,"role_key":string,"confidence":number|null,'
+    '"evidence":[{"type":string,"text":string}],"reason":string|null}],'
+    '"contradictions":[string],"reason":string}\n'
+    "- `person_name`: nombre del compositor SOLO si resolution=identified; si no, null.\n"
     "- `role_name`: normalmente 'Compositor/a' cuando identified."
 )
 
@@ -67,10 +84,38 @@ _RESPONSE_SCHEMA: dict[str, object] = {
                 "required": ["type", "text"],
             },
         },
+        "relations": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "person_name": {"type": "string"},
+                    "role_key": {"type": "string", "enum": list(AI_ROLE_KEYS)},
+                    "confidence": {"type": "number", "nullable": True},
+                    "evidence": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "string"},
+                                "text": {"type": "string"},
+                            },
+                            "required": ["type", "text"],
+                        },
+                    },
+                    "reason": {"type": "string", "nullable": True},
+                },
+                "required": ["person_name", "role_key"],
+            },
+        },
+        "contradictions": {"type": "array", "items": {"type": "string"}},
         "reason": {"type": "string", "nullable": True},
     },
     "required": ["resolution"],
-    "propertyOrdering": ["resolution", "person_name", "role_name", "confidence", "evidence", "reason"],
+    "propertyOrdering": [
+        "resolution", "person_name", "role_name", "confidence", "evidence",
+        "relations", "contradictions", "reason",
+    ],
 }
 
 
@@ -87,7 +132,7 @@ def _user_prompt(context: WorkContext) -> str:
         "instrumentation": context.instrumentation,
         "attr_type": context.attr_type,
         "attribution_note": context.attribution_note,
-        "existing_persons": context.existing_persons,
+        "existing_relations": context.existing_relations,
     }
     return "Datos de la obra (JSON):\n" + json.dumps(payload, ensure_ascii=False)
 
@@ -179,12 +224,59 @@ class GeminiWorkAttributionResolver:
             confidence=confidence_value,
             evidence=evidence if isinstance(evidence, list) else [],
             reason=str(parsed.get("reason") or "") or None,
+            relations=_parse_relations(parsed.get("relations")),
+            contradictions=_parse_contradictions(parsed.get("contradictions")),
             raw={"parsed": parsed, "model": self.model, "prompt_version": PROMPT_VERSION},
         )
 
 
 class _RetryableStatus(RuntimeError):
     """Estado transitorio de Gemini (429/503) que merece reintento."""
+
+
+def _as_confidence(value: object) -> float | None:
+    try:
+        return float(value) if value is not None else None  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_relations(raw: object) -> list[AiRelation]:
+    """Personas propuestas: se descartan las que traen un `role_key` fuera del catálogo."""
+    if not isinstance(raw, list):
+        return []
+    relations: list[AiRelation] = []
+    seen: set[tuple[str, str]] = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        person = str(item.get("person_name") or "").strip()
+        role = str(item.get("role_key") or "").strip().lower()
+        if not person or role not in AI_ROLE_KEYS or (person.lower(), role) in seen:
+            continue
+        seen.add((person.lower(), role))
+        evidence = item.get("evidence")
+        relations.append(
+            AiRelation(
+                person_name=person,
+                role_key=role,
+                confidence=_as_confidence(item.get("confidence")),
+                evidence=evidence if isinstance(evidence, list) else [],
+                reason=str(item.get("reason") or "") or None,
+            )
+        )
+    return relations
+
+
+def _parse_contradictions(raw: object) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for item in raw:
+        text = str(item).strip()
+        if text and text not in out:
+            out.append(text[:500])
+    return out[:10]
 
 
 def _brief(text: str) -> str:
