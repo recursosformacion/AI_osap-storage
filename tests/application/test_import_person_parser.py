@@ -192,3 +192,17 @@ def test_xml_y_corchetes_se_limpian() -> None:
 
 def test_url_sola_no_es_persona() -> None:
     assert parse_import_name("Tom Brierhttps://musescore.com/user/29431458/scores/5192919").kind in ("junk", "person")
+
+
+def test_adapter_tiene_rol_en_el_catalogo() -> None:
+    """El rol 16 ("Adaptador/a", migración 013) debe existir para que el staging no quede sin rol."""
+    assert role_id_for("adapter") == 16
+    assert role_id_for("librettist") == 2
+
+
+def test_adaptado_por_produce_rol_adapter() -> None:
+    row = parse_import_name("Adapted by Rollo Dilworth", "composer")
+
+    assert row.kind == "person"
+    assert [(p.name, p.role_key) for p in row.persons] == [("Rollo Dilworth", "adapter")]
+    assert role_id_for(row.persons[0].role_key) == 16
