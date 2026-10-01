@@ -63,3 +63,46 @@ def test_claves_canonicas_colapsan_espacios_raros() -> None:
     assert canonical_name_key("name:a   b") == "name:a b"
     assert canonical_name_key("name:\u2003a") == "name: a"
     assert canonical_name_key("name:a\u200bb") == "name:ab"  # ZWSP: ni separa ni cuenta
+
+
+def test_detector_de_concatenaciones() -> None:
+    from scripts.build_review_items import es_concatenacion
+
+    # Casos reales del artefacto
+    assert es_concatenacion("niel gowneil gow")
+    assert es_concatenacion("neil gowniel gow")
+    assert es_concatenacion("j scott skinnerj scott skinner")
+    assert es_concatenacion("BachBach")
+
+
+def test_detector_de_concatenaciones_sin_falsos_positivos() -> None:
+    from scripts.build_review_items import es_concatenacion
+
+    for nombre in (
+        "johann sebastian bach", "neil gow", "nathaniel gow", "william marshall",
+        "gabriel faure", "franz liszt", "johannes brahms", "j pachelbel",
+    ):
+        assert not es_concatenacion(nombre), nombre
+
+
+def test_clasificar_artefacto_marca_concatenacion() -> None:
+    from scripts.build_review_items import clasificar_artefacto
+
+    assert clasificar_artefacto("niel gowneil gow") == "concatenacion"
+    assert clasificar_artefacto("attr Martin Herbst") == "prefijo_atribucion"
+    assert clasificar_artefacto("Johann Sebastian Bach") is None
+    assert clasificar_artefacto("Neil Gow") is None
+
+
+def test_union_por_nombre_sin_ambiguedad() -> None:
+    from scripts.build_review_items import union_inequivoca
+
+    # Bach: la forma abreviada expande a un único nombre completo
+    assert union_inequivoca(["j s bach"], ["johann sebastian bach"])
+    assert union_inequivoca(["j brahms"], ["johannes brahms", "johanes brahms"])
+    # Burns: la pareja abreviada+completa es inequívoca; la ambigüedad aparece al entrar la tercera
+    assert union_inequivoca(["r burns"], ["ralph burns"])
+    assert not union_inequivoca(["ralph burns"], ["robert burns"])
+    assert not union_inequivoca(["ralph burns", "r burns"], ["robert burns"])
+    # Personas diferentes con apellido común no se unen
+    assert not union_inequivoca(["neil gow"], ["nathaniel gow"])

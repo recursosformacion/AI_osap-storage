@@ -121,6 +121,35 @@ def compatible_names(uno: str, otro: str) -> bool:
 _CONECTOR_ROL = re.compile(r"^(attr\.?|attributed to|atribuido a|after|from|by)\s+", re.I)
 _TITULO = re.compile(r"\s-\s.*|\b(in|op|no|bwv|kv|hwv|buxwv)\b.*\b[a-z]\b", re.I)
 _CONCATENACION = re.compile(r"[a-z]{3,}[A-Z][a-z]{2,}")
+
+
+def es_concatenacion(texto: str) -> bool:
+    """Detecta nombres pegados sin espacio: `Niel GowNeil Gow` → `niel gowneil gow`.
+
+    Dos evidencias, ambas conservadoras (exigen ≥3 caracteres y palabra repetida):
+      - la cadena es "X X" (la primera mitad de las palabras repite la segunda);
+      - una palabra contiene como prefijo otra palabra de la misma cadena (`gowneil` ← `gow`+`neil`).
+    """
+    palabras = [p for p in texto.split() if p]
+    for palabra in palabras:
+        if re.search(r"(.{3,})\1", palabra, re.I):
+            return True
+    if len(palabras) < 2:
+        return False
+    mitad = len(palabras) // 2
+    if len(palabras) % 2 == 0 and [p.lower() for p in palabras[:mitad]] == [p.lower() for p in palabras[mitad:]]:
+        return True
+    vocabulario = {p.lower() for p in palabras}
+    for palabra in palabras:
+        baja = palabra.lower()
+        if len(baja) < 5:
+            continue
+        for corte in range(3, len(baja)):
+            if baja[:corte] in vocabulario and baja[corte:] != palabra.lower():
+                return True
+    return False
+
+
 _TRUNCADO = re.compile(r"\b(befo|before|after|sir|rev|ed|arr|adap|transcr)\.?$", re.I)
 
 
@@ -135,6 +164,8 @@ def clasificar_artefacto(nombre: str) -> str | None:
         return "vacio"
     if _CONECTOR_ROL.match(texto):
         return "prefijo_atribucion"
+    if es_concatenacion(texto):
+        return "concatenacion"
     if _TITULO.search(texto):
         return "posible_titulo"
     if _CONCATENACION.search(texto):
@@ -192,11 +223,9 @@ def unir_por_evidencia(
             if uno["alias"] & otro["alias"]:
                 razones.add("alias_comun")
             if not razones:
-                # compatibilidad fuerte de nombre, siempre que no haya anclas en conflicto
+                # compatibilidad fuerte de nombre, sin anclas en conflicto y sin ambigüedad
                 conflicto = bool(uno["anclas"] and otro["anclas"] and not (uno["anclas"] & otro["anclas"]))
-                if not conflicto and any(
-                    compatible_names(a, b) for a in uno["nombres"] for b in otro["nombres"]
-                ):
+                if not conflicto and union_inequivoca(uno["nombres"], otro["nombres"]):
                     razones.add("nombre_compatible")
             if razones:
                 ri, rj = raiz(i), raiz(j)
@@ -215,6 +244,46 @@ def unir_por_evidencia(
             "evidencia_union": sorted(evidencia[indice]),
         })
     return resultado
+
+
+def _distancia(uno: str, otro: str) -> int:
+    """Distancia de edición (Levenshtein) para distinguir variantes de un nombre de otra persona."""
+    previa = list(range(len(otro) + 1))
+    for i, letra_a in enumerate(uno, start=1):
+        actual = [i]
+        for j, letra_b in enumerate(otro, start=1):
+            actual.append(min(previa[j] + 1, actual[j - 1] + 1, previa[j - 1] + (letra_a != letra_b)))
+        previa = actual
+    return previa[-1]
+
+
+def _similares(uno: str, otro: str) -> bool:
+    """Dos formas largas del mismo nombre (`johannes`/`johanes`) frente a dos personas distintas."""
+    return uno == otro or uno.startswith(otro) or otro.startswith(uno) or _distancia(uno, otro) <= 1
+
+
+def union_inequivoca(nombres_a: list[str], nombres_b: list[str]) -> bool:
+    """Nombre compatible **y sin ambigüedad**: la forma abreviada no puede expandir a dos nombres.
+
+    Evita la falsa unión `r burns` → `Ralph Burns` + `Robert Burns`: si en alguna posición hay dos
+    palabras largas distintas (>2 caracteres), la evidencia nominal es ambigua y se mantiene separado.
+    Las variantes ortográficas del mismo nombre (`johannes`/`johanes`) no cuentan como ambigüedad.
+    """
+    if not any(compatible_names(a, b) for a in nombres_a for b in nombres_b):
+        return False
+    posiciones: dict[int, list[str]] = defaultdict(list)
+    for nombre in [*nombres_a, *nombres_b]:
+        for indice, palabra in enumerate(nombre.split()):
+            if len(palabra) > 2:
+                posiciones[indice].append(palabra)
+    for variantes in posiciones.values():
+        representantes: list[str] = []
+        for variante in variantes:
+            if not any(_similares(variante, visto) for visto in representantes):
+                representantes.append(variante)
+        if len(representantes) > 1:
+            return False
+    return True
 
 
 def agrupar_por_persona(filas: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
