@@ -25,7 +25,12 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from application.services.import_person_parser import looks_contaminated, parse_import_name, role_id_for
+from application.services.import_person_parser import (
+    canonical_name_key,
+    looks_contaminated,
+    parse_import_name,
+    role_id_for,
+)
 from domain.services.composer_names import normalize_composer_name
 from infrastructure.config import Settings
 from infrastructure.db.connection import Database
@@ -149,7 +154,7 @@ async def main() -> int:
             continue
         for person in parsed.persons:
             clean = person.name
-            norm = normalize_composer_name(clean)[:191]
+            norm = canonical_name_key(normalize_composer_name(clean))[:191]
             if not norm:
                 continue
             flags = list(person.flags)
@@ -185,7 +190,7 @@ async def main() -> int:
                 # El rol del texto no existe en el catálogo (p. ej. 'adapter'): cola de decisión.
                 status = "role_missing"
                 roles_sin_rol.add(person.role_key)
-            person_key = (anchor_key.get(person_id) if person_id else None) or f"name:{norm}"
+            person_key = canonical_name_key(anchor_key.get(person_id) if person_id else None) or f"name:{norm}"
             pendientes.append({
                 "kind": "person", "works_id": int(row["works_id"]), "import_row_id": int(row["id"]),
                 "person_name_raw": str(row["name"])[:512], "person_name_clean": clean[:512],

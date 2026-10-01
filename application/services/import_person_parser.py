@@ -112,6 +112,20 @@ _ADAPT_IN_PARENS = re.compile(
 _TRUNCATED_PREFIX = re.compile(r"^\s*(?:chior|vin|ar-)\b", re.I)
 
 
+_INVISIBLE = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060\ufeff\u00ad]")
+
+
+def canonical_name_key(text: str | None) -> str:
+    """Clave canónica de nombre: sin caracteres invisibles (U+200E, BOM, ZWSP…) ni espacios extra.
+
+    Evita que dos claves lógicas distintas colisionen en el índice único (la colación utf8mb4 del
+    catálogo ignora esos caracteres, así que hay que quitarlos antes de comparar).
+    """
+    if not text:
+        return ""
+    return _INVISIBLE.sub("", str(text)).strip()
+
+
 def looks_contaminated(name: str) -> bool:
     """True si un nombre (de origen o de una ficha del catálogo) tiene marcas de artefacto."""
     text = (name or "").strip()
