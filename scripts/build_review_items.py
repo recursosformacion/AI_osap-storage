@@ -1,17 +1,23 @@
-"""Construye la cola de revisión humana (`review_items`) desde el staging saneado (fase 015).
+"""Construye la cola de revisión humana (`review_items`) desde el staging saneado.
 
-NO aplica nada al catálogo: solo materializa la **unidad de revisión** con claves lógicas.
+NO aplica nada al catálogo: solo materializa la **unidad humana de decisión** con claves lógicas.
 
-Tres tipos de item:
-  identity_cluster     un clúster por `person_key` (todas las filas que apuntan a la misma identidad
-                       lógica, o al mismo nombre normalizado si no hay identidad resuelta)
-  work_attribution     una obra con propuesta de atribución (`anonymous`/`traditional`)
-  exception_ambiguous  una fila ambigua, con sus candidatos para poder elegir
+Unidades (paso a paso, según la auditoría del artefacto):
+  identity_cluster    una PERSONA (no una cadena): se agrupa por la clave de identidad del catálogo
+                      y se separa cuando esa clave colapsa nombres distintos (Neil vs Nathaniel Gow).
+  ambiguous_identity  un NOMBRE con varios candidatos (antes: un item por obra) + obras afectadas.
+  work_attribution    una OBRA y su propuesta de atribución (la clave incluye la propuesta, para que
+                      `anonymous` y `traditional` no se pisen).
+
+Cada item lleva candidatos enriquecidos (ancla, alias, obras, relaciones, si fue la resolución) y
+contexto suficiente para decidir sin abrir obra por obra. Los solapamientos obra↔identidad↔atribución
+se marcan explícitamente (`conflicto`).
 
 Uso:
     python -m scripts.build_review_items             # dry-run: solo métricas
-    python -m scripts.build_review_items --apply     # refresca review_items (tabla derivada)
+    python -m scripts.build_review_items --apply     # refresca review_items (derivada)
     python -m scripts.build_review_items --json out.json
+    python -m scripts.build_review_items --export-dir dir   # detalle completo de obras por clúster
 """
 
 from __future__ import annotations
@@ -19,7 +25,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import sys
+import unicodedata
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -29,7 +37,8 @@ from domain.services.composer_names import normalize_composer_name
 from infrastructure.config import Settings
 from infrastructure.db.connection import Database
 
-_ROLES_TRAMPA = ("review_target_contaminated", "resolved_sanitized", "ambiguous", "needs_review")
+_EXCEPCIONES = ("review_target_contaminated", "resolved_sanitized", "ambiguous", "needs_review")
+_MAX_OBRAS_EN_ITEM = 200
 
 
 def build_work_key(origin: str | None, origin_id: str | None, works_key: str | None) -> str | None:
@@ -46,12 +55,28 @@ def build_work_key(origin: str | None, origin_id: str | None, works_key: str | N
     return None
 
 
-def build_item_key(
-    item_type: str, work_key: str | None, person_key: str | None, role_key: str | None = None
-) -> str:
+_EQUIVALENCIAS = str.maketrans({
+    "ß": "ss", "ſ": "s", "ø": "o", "Ø": "o", "ł": "l", "Ł": "l", "đ": "d", "Đ": "d",
+    "æ": "ae", "Æ": "ae", "œ": "oe", "Œ": "oe", "þ": "th", "Þ": "th",
+})
+
+
+def collation_key(texto: str | None) -> str:
+    """Clave con la misma semántica que la colación utf8mb4_unicode_ci: sin acentos ni mayúsculas
+    y con las equivalencias que la colación aplica (`ß`≡`ss`, `ø`≡`o`, `ſ`≡`s`…).
+
+    Evita emitir dos claves lógicas que la base de datos considere iguales, que romperían el
+    índice único del artefacto.
+    """
+    base = canonical_name_key(texto).translate(_EQUIVALENCIAS)
+    plano = unicodedata.normalize("NFKD", base).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"\s+", " ", plano).strip().lower()
+
+
+def build_item_key(item_type: str, work_key: str | None, person_key: str | None, extra: str | None = None) -> str:
     """Clave canónica del item (no nula), para idempotencia del refresco."""
     return "|".join(
-        [item_type, canonical_name_key(work_key), canonical_name_key(person_key), canonical_name_key(role_key)]
+        [item_type, canonical_name_key(work_key), canonical_name_key(person_key), canonical_name_key(extra)]
     )
 
 
@@ -64,150 +89,376 @@ def build_decision_key(
     )
 
 
-async def _candidates_by_name(db: Database) -> dict[str, list[dict[str, str]]]:
-    """nombre normalizado -> [{id, name}] (personas + alias), para resolver ambigüedades."""
-    out: dict[str, list[dict[str, str]]] = defaultdict(list)
+def full_name_key(nombre: str) -> str:
+    """Clave nominal COMPLETA (sin colapsar nombres de pila a iniciales).
+
+    Es la que evita que `Neil Gow` y `Nathaniel Gow` caigan en la misma identidad.
+    """
+    texto = normalize_composer_name(canonical_name_key(nombre))
+    return canonical_name_key(texto)
+
+
+def compatible_names(uno: str, otro: str) -> bool:
+    """True si dos claves nominales pueden ser la misma persona (p. ej. `j s bach` vs `johann sebastian bach`).
+
+    Compatibles si tienen el mismo número de palabras, el mismo último apellido y el resto son
+    iguales o iniciales de la otra (una palabra de 1-2 caracteres que empieza la otra).
+    """
+    a, b = uno.split(), otro.split()
+    if not a or not b or len(a) != len(b) or a[-1] != b[-1]:
+        return False
+    for x, y in zip(a[:-1], b[:-1], strict=True):
+        if x == y:
+            continue
+        if len(x) <= 2 and y.startswith(x[0]):
+            continue
+        if len(y) <= 2 and x.startswith(y[0]):
+            continue
+        return False
+    return True
+
+
+def agrupar_por_persona(filas: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    """Parte las filas de una misma clave de identidad en sub-clústeres que son UNA persona.
+
+    Une variantes compatibles (`j s bach` + `johann sebastian bach`) y separa nombres distintos que
+    la clave colapsó (`n gow` → `neil gow` y `nathaniel gow`).
+    """
+    nombres = sorted({f["full_key"] for f in filas})
+    padre = {n: n for n in nombres}
+
+    def raiz(n: str) -> str:
+        while padre[n] != n:
+            padre[n] = padre[padre[n]]
+            n = padre[n]
+        return n
+
+    for i, uno in enumerate(nombres):
+        for otro in nombres[i + 1:]:
+            if compatible_names(uno, otro):
+                padre[raiz(otro)] = raiz(uno)
+    grupos: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for fila in filas:
+        grupos[raiz(fila["full_key"])].append(fila)
+    return list(grupos.values())
+
+
+async def _catalogo(db: Database) -> tuple[dict[str, dict[str, Any]], dict[str, list[dict[str, str]]]]:
+    """Metadatos por persona (nombre, anclas, alias, clave de identidad) y candidatos por nombre."""
+    meta: dict[str, dict[str, Any]] = {}
+    candidatos: dict[str, list[dict[str, str]]] = defaultdict(list)
     async with db.connection() as conn, conn.cursor() as cur:
         await cur.execute(
-            "SELECT persons_id, persons_name FROM persons "
-            "WHERE persons_status='active' AND persons_merged_into IS NULL"
+            "SELECT persons_id, persons_name FROM persons WHERE persons_status='active' AND persons_merged_into IS NULL"
         )
         for row in await cur.fetchall():
-            key = normalize_composer_name(str(row["persons_name"]))
+            pid = str(row["persons_id"])
+            meta[pid] = {"name": str(row["persons_name"]), "anchors": [], "aliases": [], "identity_key": ""}
+            key = full_name_key(str(row["persons_name"]))
             if key:
-                out[key].append({"id": str(row["persons_id"]), "name": str(row["persons_name"])})
+                candidatos[key].append({"id": pid, "name": str(row["persons_name"])})
         await cur.execute(
-            "SELECT a.person_id, p.persons_name, a.person_aliases_normalized_alias FROM persons_aliases a "
-            "JOIN persons p ON p.persons_id = a.person_id "
-            "WHERE p.persons_status='active' AND p.persons_merged_into IS NULL"
+            "SELECT person_id, person_aliases_alias, person_aliases_normalized_alias FROM persons_aliases"
         )
         for row in await cur.fetchall():
-            key = str(row["person_aliases_normalized_alias"] or "")
-            if not key:
+            pid = str(row["person_id"])
+            if pid in meta:
+                meta[pid]["aliases"].append(str(row["person_aliases_alias"]))
+            key = canonical_name_key(str(row["person_aliases_normalized_alias"] or ""))
+            if key:
+                candidatos[key].append({"id": pid, "name": str(row["person_aliases_alias"] or "")})
+        await cur.execute(
+            "SELECT persons_id, identity_type, identity_value, identity_name_norm FROM persons_identity "
+            "WHERE identity_is_anchor = 1"
+        )
+        for row in await cur.fetchall():
+            pid = str(row["persons_id"])
+            if pid not in meta:
                 continue
-            entry = {"id": str(row["person_id"]), "name": str(row["persons_name"])}
-            if entry not in out[key]:
-                out[key].append(entry)
-    return out
+            tipo = str(row["identity_type"] or "").strip().lower()
+            valor = canonical_name_key(str(row["identity_value"] or ""))
+            if tipo in ("viaf", "musicbrainz", "mbid", "isni") and valor:
+                meta[pid]["anchors"].append(f"{tipo}:{valor}")
+            elif not meta[pid]["identity_key"] and row["identity_name_norm"]:
+                meta[pid]["identity_key"] = canonical_name_key(str(row["identity_name_norm"]))
+        await cur.execute(
+            "SELECT works_person_roles_person_id AS pid, COUNT(*) AS n FROM works_person_roles GROUP BY pid"
+        )
+        rel = {str(r["pid"]): int(r["n"]) for r in await cur.fetchall()}
+        for pid, datos in meta.items():
+            datos["relaciones"] = rel.get(pid, 0)
+    return meta, candidatos
+
+
+def _candidato(pid: str, meta: dict[str, dict[str, Any]], es_resolucion: bool) -> dict[str, Any]:
+    datos = meta.get(pid, {})
+    return {
+        "person_key": (datos.get("anchors") or [f"name:{datos.get('identity_key') or ''}"])[0],
+        "nombre": datos.get("name", ""),
+        "anchors": datos.get("anchors", []),
+        "alias": datos.get("aliases", [])[:10],
+        "obras": datos.get("obras", 0),
+        "relaciones": datos.get("relaciones", 0),
+        "es_resolucion_parser": es_resolucion,
+    }
 
 
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true", help="refresca review_items (derivada)")
     parser.add_argument("--json", type=Path, default=None)
+    parser.add_argument("--export-dir", type=Path, default=None, help="detalle completo de obras por clúster")
     args = parser.parse_args()
 
     settings = Settings()  # type: ignore[call-arg]
     db = Database(settings)
+    meta, candidatos = await _catalogo(db)
     async with db.connection() as conn, conn.cursor() as cur:
         await cur.execute(
             "SELECT s.id, s.kind, s.person_key, s.person_name_raw, s.person_name_clean, s.person_name_norm, "
             "s.role_key, s.attribution_status, s.person_id, s.status, s.sanitize_flags, s.works_id, "
-            "w.works_title, w.works_origin, w.works_origin_id, w.works_key "
+            "w.works_title, w.works_origin, w.works_origin_id, w.works_key, "
+            "(SELECT GROUP_CONCAT(g.name) FROM work_genres wg JOIN genres g ON g.id = wg.genres_id "
+            " WHERE wg.works_id = w.id) AS generos, "
+            "w.works_instrumentation, w.works_attr_type, w.works_attribution_note "
             "FROM import_person_parse s JOIN works w ON w.id = s.works_id"
         )
         rows = [dict(r) for r in await cur.fetchall()]
-    candidatos = await _candidates_by_name(db)
-
-    clusters: dict[str, dict[str, Any]] = {}
-    atribuciones: dict[str, dict[str, Any]] = {}
-    ambiguas: list[dict[str, Any]] = []
-    sin_work_key = 0
-
+        await cur.execute("SELECT works_person_roles_work_id AS w, COUNT(*) AS n FROM works_person_roles GROUP BY w")
+        relaciones_obra = {int(r["w"]): int(r["n"]) for r in await cur.fetchall()}
+    # obras por persona (para enriquecer candidatos)
+    obras_por_persona: dict[str, set[int]] = defaultdict(set)
     for row in rows:
-        work_key = build_work_key(row["works_origin"], row["works_origin_id"], row["works_key"])
-        if work_key is None:
-            sin_work_key += 1
-        if row["kind"] == "attribution":
-            clave = work_key or f"work:{row['works_id']}"
-            item = atribuciones.setdefault(clave, {
-                "item_key": build_item_key("work_attribution", clave, None),
-                "item_type": "work_attribution", "person_key": None, "work_key": work_key,
-                "role_key": None, "attribution_status": row["attribution_status"],
-                "filas": 0, "obras": 0, "_obras": set(), "_estados": set(), "_muestras": [],
-            })
-            item["filas"] += 1
-            item["_obras"].add(row["works_id"])
-            item["_estados"].add(row["attribution_status"])
-            if len(item["_muestras"]) < 3:
-                item["_muestras"].append({"titulo": row["works_title"], "origen": row["works_origin"]})
-            continue
+        if row["kind"] == "person" and row["person_id"]:
+            obras_por_persona[str(row["person_id"])].add(int(row["works_id"]))
+    for pid, obras_persona in obras_por_persona.items():
+        if pid in meta:
+            meta[pid]["obras"] = len(obras_persona)
 
+    # --- agrupación por persona (paso 1)
+    por_identidad: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
         if row["kind"] != "person":
             continue
+        pid = str(row["person_id"]) if row["person_id"] else ""
+        ident = (meta.get(pid, {}).get("identity_key") or "") or canonical_name_key(
+            normalize_composer_name(str(row["person_name_clean"] or row["person_name_norm"] or ""))
+        )
+        por_identidad[ident or "?"].append({**row, "full_key": full_name_key(str(row["person_name_clean"] or ""))})
 
-        person_key = canonical_name_key(row["person_key"] or f"name:{row['person_name_norm']}")
-        item = clusters.setdefault(person_key, {
+    items: list[dict[str, Any]] = []
+    export: dict[str, Any] = {}
+    obras_por_cluster: dict[str, set[str]] = defaultdict(set)
+    obras_en_persona: set[str] = set()
+    # Se acumulan por `person_key`: dos sub-clústeres que resuelven a la MISMA persona son uno solo.
+    acumulado: dict[str, dict[str, Any]] = {}
+    for ident, filas in por_identidad.items():
+        subclusters = agrupar_por_persona(filas)
+        colision = len(subclusters) > 1
+        for sub in subclusters:
+            nombres = sorted({f["full_key"] for f in sub if f["full_key"]})
+            candidatos_ids = {str(f["person_id"]) for f in sub if f["person_id"]}
+            anclas = {a for pid in candidatos_ids for a in meta.get(pid, {}).get("anchors", [])}
+            if colision and nombres:
+                person_key = f"name:{nombres[0]}"
+            elif len(candidatos_ids) == 1 and len(anclas) == 1:
+                person_key = next(iter(anclas))
+            else:
+                person_key = f"name:{ident}"
+            entrada = acumulado.setdefault(
+                collation_key(person_key),
+                {"filas": [], "ident": ident, "colision": colision, "nombres": set(), "person_key": person_key},
+            )
+            entrada["filas"].extend(sub)
+            entrada["nombres"].update(nombres)
+            entrada["colision"] = entrada["colision"] or colision
+
+    for entrada in acumulado.values():
+        sub = entrada["filas"]
+        ident = entrada["ident"]
+        colision = entrada["colision"]
+        person_key = entrada["person_key"]
+        nombres = sorted(entrada["nombres"])
+        candidatos_ids = {str(f["person_id"]) for f in sub if f["person_id"]}
+        obras = {
+            build_work_key(f["works_origin"], f["works_origin_id"], f["works_key"])
+            or f"work:{f['works_id']}"
+            for f in sub
+        }
+        estados = sorted({str(f["status"]) for f in sub})
+        roles = sorted({str(f["role_key"]) for f in sub if f["role_key"]})
+        patrones: dict[str, int] = defaultdict(int)
+        for f in sub:
+            patrones[canonical_name_key(str(f["person_name_raw"]))[:120]] += 1
+        item = {
             "item_key": build_item_key("identity_cluster", None, person_key),
             "item_type": "identity_cluster", "person_key": person_key, "work_key": None,
             "role_key": None, "attribution_status": None,
-            "filas": 0, "obras": 0, "_obras": set(), "_roles": set(), "_estados": set(),
-            "_candidatos": {}, "_muestras": [], "_excepcion": False,
-        })
-        item["filas"] += 1
-        item["_obras"].add(row["works_id"])
-        if row["role_key"]:
-            item["_roles"].add(str(row["role_key"]))
-        estado = str(row["status"] or "")
-        item["_estados"].add(estado)
-        if estado in _ROLES_TRAMPA or row["sanitize_flags"]:
-            item["_excepcion"] = True
-        if row["person_id"]:
-            item["_candidatos"][str(row["person_id"])] = str(row["person_name_clean"] or "")
-        if len(item["_muestras"]) < 3:
-            item["_muestras"].append({
-                "texto_origen": row["person_name_raw"], "nombre_limpio": row["person_name_clean"],
-                "flags": row["sanitize_flags"], "obra": row["works_title"], "estado": estado,
-            })
+            "filas": len(sub), "obras": len(obras), "roles": ",".join(roles)[:255],
+            "estados": ",".join(estados)[:255],
+            "candidatos_json": json.dumps(
+                [_candidato(pid, meta, True) for pid in sorted(candidatos_ids)]
+                + [
+                    {**_candidato(c["id"], meta, False), "nombre": c["name"]}
+                    for nombre in nombres for c in candidatos.get(nombre, [])
+                    if c["id"] not in candidatos_ids
+                ],
+                ensure_ascii=False,
+            ),
+            "contexto_json": json.dumps({
+                "colision_de_clave": colision,
+                "clave_identidad_colapsada": ident,
+                "nombres_vistos": nombres,
+                "por_estado": {e: sum(1 for f in sub if str(f["status"]) == e) for e in estados},
+                "por_rol": {r: sum(1 for f in sub if str(f["role_key"]) == r) for r in roles},
+                "patrones_origen": [
+                    {"patron": patron, "n": total}
+                    for patron, total in sorted(patrones.items(), key=lambda kv: -kv[1])[:15]
+                ],
+                "obras": sorted(obras)[:_MAX_OBRAS_EN_ITEM],
+                "obras_total": len(obras),
+                "muestras": [
+                    {"texto_origen": f["person_name_raw"], "nombre_limpio": f["person_name_clean"],
+                     "flags": f["sanitize_flags"], "obra": f["works_title"], "estado": f["status"]}
+                    for f in sub[:5]
+                ],
+            }, ensure_ascii=False),
+            "_obras": obras,
+            "_filas": sub,
+        }
+        items.append(item)
+        obras_por_cluster[item["item_key"]] = obras
+        obras_en_persona |= obras
+        if len(obras) > _MAX_OBRAS_EN_ITEM or args.export_dir:
+            export[item["item_key"]] = sorted(obras)
 
-        if estado == "ambiguous":
-            ambiguas.append({
-                "item_key": build_item_key("exception_ambiguous", work_key, person_key, row["role_key"]),
-                "item_type": "exception_ambiguous", "person_key": person_key, "work_key": work_key,
-                "role_key": row["role_key"], "attribution_status": None,
-                "filas": 1, "obras": 1,
-                "roles": row["role_key"], "estados": estado,
-                "candidatos_json": json.dumps(
-                    candidatos.get(str(row["person_name_norm"] or ""), []), ensure_ascii=False
-                ),
+    # --- ambiguas por identidad (paso 2): un item por persona, no por obra
+    _ambiguas_vistas: set[str] = set()
+    for item in items:
+        if item["item_type"] != "identity_cluster" or "ambiguous" not in str(item["estados"]):
+            continue
+        if collation_key(item["person_key"]) in _ambiguas_vistas:
+            continue
+        _ambiguas_vistas.add(collation_key(item["person_key"]))
+        filas_amb = [f for f in item["_filas"] if str(f["status"]) == "ambiguous"]
+        if not filas_amb:
+            continue
+        nombres = sorted({f["full_key"] for f in filas_amb if f["full_key"]})
+        obras = {
+            build_work_key(f["works_origin"], f["works_origin_id"], f["works_key"]) or f"work:{f['works_id']}"
+            for f in filas_amb
+        }
+        candidatos_amb = [
+            {**_candidato(c["id"], meta, False), "nombre": c["name"]}
+            for nombre in nombres for c in candidatos.get(nombre, [])
+        ]
+        items.append({
+            "item_key": build_item_key("ambiguous_identity", None, item["person_key"]),
+            "item_type": "ambiguous_identity", "person_key": item["person_key"], "work_key": None,
+            "role_key": filas_amb[0]["role_key"], "attribution_status": None,
+            "filas": len(filas_amb), "obras": len(obras),
+            "roles": ",".join(sorted({str(f["role_key"]) for f in filas_amb}))[:255],
+            "estados": "ambiguous",
+            "candidatos_json": json.dumps(candidatos_amb, ensure_ascii=False),
+            "contexto_json": json.dumps({
+                "nombres_vistos": nombres,
+                "obras": sorted(obras)[:_MAX_OBRAS_EN_ITEM],
+                "obras_total": len(obras),
+                "textos_origen": sorted({canonical_name_key(str(f["person_name_raw"])) for f in filas_amb})[:15],
+            }, ensure_ascii=False),
+        })
+
+    # --- atribuciones por obra (paso 4) y conflictos (paso 5)
+    por_obra_attr: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        if row["kind"] == "attribution":
+            work_key = (
+                build_work_key(row["works_origin"], row["works_origin_id"], row["works_key"])
+                or f"work:{row['works_id']}"
+            )
+            por_obra_attr[work_key].append(row)
+    clusters_por_obra: dict[str, list[str]] = defaultdict(list)
+    for item in items:
+        if item["item_type"] != "identity_cluster":
+            continue
+        for obra in item["_obras"]:
+            clusters_por_obra[obra].append(item["item_key"])
+    for work_key, filas in por_obra_attr.items():
+        for estado in sorted({str(f["attribution_status"]) for f in filas}):
+            conflicto = work_key in obras_en_persona
+            items.append({
+                "item_key": build_item_key("work_attribution", work_key, None, estado),
+                "item_type": "work_attribution", "person_key": None, "work_key": work_key,
+                "role_key": None, "attribution_status": estado,
+                "filas": sum(1 for f in filas if str(f["attribution_status"]) == estado), "obras": 1,
+                "roles": None, "estados": estado,
+                "candidatos_json": None,
                 "contexto_json": json.dumps({
-                    "texto_origen": row["person_name_raw"], "nombre_limpio": row["person_name_clean"],
-                    "obra": row["works_title"], "works_id_local": row["works_id"],
+                    "titulo": filas[0]["works_title"],
+                    "origen": filas[0]["works_origin"],
+                    "source_id": filas[0]["works_origin_id"] or filas[0]["works_key"],
+                    "genero": filas[0]["generos"],
+                    "instrumentacion": filas[0]["works_instrumentation"],
+                    "attr_type": filas[0]["works_attr_type"],
+                    "attribution_note": filas[0]["works_attribution_note"],
+                    "textos_origen": sorted({canonical_name_key(str(f["person_name_raw"])) for f in filas})[:10],
+                    "relaciones_actuales": relaciones_obra.get(int(filas[0]["works_id"]), 0),
+                    "clusters_identidad_relacionados": sorted(set(clusters_por_obra.get(work_key, []))),
+                    "conflicto_persona_atribucion": conflicto,
                 }, ensure_ascii=False),
             })
 
-    items: list[dict[str, Any]] = []
-    for item in list(clusters.values()) + list(atribuciones.values()):
-        items.append({
-            "item_key": item["item_key"], "item_type": item["item_type"],
-            "person_key": item["person_key"], "work_key": item["work_key"],
-            "role_key": item["role_key"], "attribution_status": item["attribution_status"],
-            "filas": item["filas"], "obras": len(item["_obras"]),
-            "roles": ",".join(sorted(item.get("_roles", set())))[:255] or None,
-            "estados": ",".join(sorted(item.get("_estados", set())))[:255] or None,
-            "candidatos_json": json.dumps(item.get("_candidatos", {}), ensure_ascii=False) or None,
-            "contexto_json": json.dumps(item.get("_muestras", []), ensure_ascii=False) or None,
-        })
-    items.extend(ambiguas)
+    # Red de seguridad: si dos items acaban con claves que la colación de la BD considera iguales,
+    # se fusionan (misma unidad humana) en lugar de romper el índice único.
+    unicos: dict[str, dict[str, Any]] = {}
+    for item in items:
+        clave = collation_key(item["item_key"])
+        previo = unicos.get(clave)
+        if previo is None:
+            unicos[clave] = item
+            continue
+        previo["filas"] += item["filas"]
+        previo["_obras"] = set(previo.get("_obras", set())) | set(item.get("_obras", set()))
+        previo["obras"] = len(previo["_obras"])
+        previo["_filas"] = list(previo.get("_filas", [])) + list(item.get("_filas", []))
+        estados = sorted(set(str(previo["estados"]).split(",")) | set(str(item["estados"]).split(",")) - {""})
+        previo["estados"] = ",".join(estados)[:255]
+    items = list(unicos.values())
+
+    # limpieza de campos internos
+    for item in items:
+        item.pop("_obras", None)
+        item.pop("_filas", None)
 
     informe = {
         "filas_staging_leidas": len(rows),
         "items_total": len(items),
         "items_por_tipo": {
             tipo: sum(1 for i in items if i["item_type"] == tipo)
-            for tipo in ("identity_cluster", "work_attribution", "exception_ambiguous")
+            for tipo in ("identity_cluster", "ambiguous_identity", "work_attribution")
         },
-        "clusters_con_excepcion": sum(
-            1 for item in clusters.values() if item["_excepcion"]
+        "clusters_con_colision": sum(
+            1
+            for i in items
+            if i["item_type"] == "identity_cluster" and '"colision_de_clave": true' in str(i["contexto_json"])
         ),
-        "filas_sin_work_key": sin_work_key,
-        "top_clusters_por_obras": sorted(
-            ({"person_key": i["person_key"], "obras": i["obras"], "roles": i["roles"], "estados": i["estados"]}
-             for i in items if i["item_type"] == "identity_cluster"),
-            key=lambda x: -x["obras"],
-        )[:10],
+        "clusters_con_excepcion": sum(
+            1 for i in items if i["item_type"] == "identity_cluster"
+            and any(e in str(i["estados"]) for e in _EXCEPCIONES)
+        ),
+        "obras_con_conflicto": sum(
+            1 for i in items if i["item_type"] == "work_attribution"
+            and '"conflicto_persona_atribucion": true' in str(i["contexto_json"])
+        ),
         "aplicado": False,
     }
+
+    if args.export_dir:
+        args.export_dir.mkdir(parents=True, exist_ok=True)
+        (args.export_dir / "obras_por_cluster.json").write_text(
+            json.dumps(export, ensure_ascii=False, indent=1), encoding="utf-8"
+        )
+        informe["export"] = str(args.export_dir / "obras_por_cluster.json")
 
     if args.apply:
         columnas = ("item_key", "item_type", "person_key", "work_key", "role_key", "attribution_status",
