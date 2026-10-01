@@ -75,7 +75,7 @@ class SqlReviewRepository:
                 if claves:
                     marcadores = ",".join(["%s"] * len(claves))
                     await cur.execute(
-                        f"SELECT person_key, role_key, obras, candidatos_json FROM review_items "
+                        f"SELECT person_key, role_key, roles, obras, candidatos_json FROM review_items "
                         f"WHERE item_type='identity_cluster' AND item_key IN ({marcadores})",
                         claves,
                     )
