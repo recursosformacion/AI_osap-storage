@@ -103,6 +103,44 @@ class SqlReviewRepository:
             )
             return {str(r["decision_key"]): str(r["decision"]) for r in await cur.fetchall()}
 
+    async def insertar_historial(self, filas: list[dict[str, Any]]) -> int:
+        """Historial append-only: registra la decisión anterior y la nueva. Nunca se borra."""
+        if not filas:
+            return 0
+        columnas = ("decision_key", "operation", "previous_decision", "new_decision", "reason",
+                    "evidence_json", "decided_by")
+        sql = (
+            "INSERT INTO review_decision_history (" + ",".join(f"`{c}`" for c in columnas) + ") "
+            "VALUES (" + ",".join(["%s"] * len(columnas)) + ")"
+        )
+        parametros = [tuple(fila.get(c) for c in columnas) for fila in filas]
+        insertadas = 0
+        async with self._db.transaction() as conn, conn.cursor() as cur:
+            for inicio in range(0, len(parametros), 500):
+                await cur.executemany(sql, parametros[inicio: inicio + 500])
+                insertadas += int(cur.rowcount or 0)
+        return insertadas
+
+    async def actualizar_decision(self, decision_key: str, decision: str, notes: str | None) -> int:
+        """Única vía de actualización de una decisión vigente: el mecanismo de corrección."""
+        async with self._db.transaction() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "UPDATE review_decisions SET decision=%s, attribution_status="
+                "CASE WHEN decision_type='attribution' THEN %s ELSE attribution_status END, notes=%s "
+                "WHERE decision_key=%s",
+                (decision, decision, notes, decision_key),
+            )
+            return int(cur.rowcount or 0)
+
+    async def historial(self, decision_key: str) -> list[dict[str, Any]]:
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT operation, previous_decision, new_decision, reason, decided_by, decided_at "
+                "FROM review_decision_history WHERE decision_key=%s ORDER BY id",
+                (decision_key,),
+            )
+            return [dict(r) for r in await cur.fetchall()]
+
     async def insertar_decisiones(self, filas: list[dict[str, Any]]) -> int:
         """INSERT IGNORE: repetir un lote no duplica ni altera decisiones existentes."""
         if not filas:

@@ -70,6 +70,15 @@ async def main() -> int:
     p_dec.add_argument("--evidence", default=None, help="evidencia/justificación (p. ej. fuente consultada)")
     p_dec.add_argument("--apply", action="store_true", help="escribir en review_decisions")
 
+    p_cor = sub.add_parser("corregir", help="corrige una decisión conservando el historial")
+    p_cor.add_argument("--decision-key", required=True)
+    p_cor.add_argument("--decision", required=True, help="nueva decisión vigente")
+    p_cor.add_argument("--decided-by", required=True)
+    p_cor.add_argument("--reason", required=True, help="motivo de la corrección (obligatorio)")
+    p_cor.add_argument("--evidence", default=None)
+    p_cor.add_argument("--note", default=None)
+    p_cor.add_argument("--apply", action="store_true", help="escribir (historial + decisión vigente)")
+
     args = parser.parse_args()
     settings = Settings()  # type: ignore[call-arg]
     engine = ReviewEngine(SqlReviewRepository(Database(settings)))
@@ -82,8 +91,17 @@ async def main() -> int:
             )
         else:
             resultado = await engine.decidir_conflicto(
-                args.work, args.decision, decided_by=args.decided_by, apply=args.apply
+                args.work, args.decision, decided_by=args.decided_by, note=args.note,
+                evidence=args.evidence, apply=args.apply,
             )
+        print(json.dumps(resultado, ensure_ascii=False))
+        return 0
+
+    if args.comando == "corregir":
+        resultado = await engine.corregir_decision(
+            args.decision_key, args.decision, decided_by=args.decided_by, reason=args.reason,
+            evidence=args.evidence, notes=args.note, apply=args.apply,
+        )
         print(json.dumps(resultado, ensure_ascii=False))
         return 0
 

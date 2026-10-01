@@ -151,3 +151,103 @@ async def test_conflicto_valida_decision_y_existencia() -> None:
     repo.existentes["conflict|CPDL:1||"] = "atribucion_gana"
     with pytest.raises(DecisionExistenteDistinta):
         await engine.decidir_conflicto("CPDL:1", "persona_gana", decided_by="admin")
+
+
+class _FakeRepoHistorial(_FakeRepo):
+    def __init__(self) -> None:
+        super().__init__()
+        self.historial_filas: list[dict] = []
+
+    async def insertar_historial(self, filas: list[dict]) -> int:
+        self.historial_filas.extend(filas)
+        return len(filas)
+
+    async def actualizar_decision(self, decision_key: str, decision: str, notes: str | None) -> int:
+        if decision_key not in self.existentes:
+            return 0
+        self.existentes[decision_key] = decision
+        return 1
+
+
+async def test_conflict_guarda_nota_y_evidencia() -> None:
+    repo = _FakeRepo()
+    repo.conflictos_filas = [{"item_key": "conflict|CPDL:1|", "work_key": "CPDL:1", "person_key": "viaf:1",
+                              "role_key": "composer", "attribution_status": "traditional", "personas": [], "obras": 1}]
+    engine = ReviewEngine(repo)  # type: ignore[arg-type]
+
+    await engine.decidir_conflicto(
+        "CPDL:1", "atribucion_gana", decided_by="mgarcia",
+        note="tradicional galesa", evidence="consulta web del revisor", apply=True,
+    )
+
+    evidencia = json.loads(repo.insertadas[0]["evidence_json"])
+    assert evidencia["researcher_note"] == "consulta web del revisor"
+    assert repo.insertadas[0]["notes"] == "tradicional galesa"
+
+
+async def test_correccion_conserva_original_y_actualiza_vigente() -> None:
+    repo = _FakeRepoHistorial()
+    repo.existentes["conflict|CPDL:1||"] = "persona_gana"
+    engine = ReviewEngine(repo)  # type: ignore[arg-type]
+
+    resultado = await engine.corregir_decision(
+        "conflict|CPDL:1||", "atribucion_gana", decided_by="mgarcia",
+        reason="la fuente documenta melodia tradicional", apply=True,
+    )
+
+    assert resultado["estado"] == "corregida" and resultado["actualizada"] == 1
+    assert repo.existentes["conflict|CPDL:1||"] == "atribucion_gana"       # vigente nueva
+    assert repo.historial_filas[0]["previous_decision"] == "persona_gana"   # original conservada
+    assert repo.historial_filas[0]["new_decision"] == "atribucion_gana"
+
+
+async def test_segunda_correccion_deja_historial_completo() -> None:
+    repo = _FakeRepoHistorial()
+    repo.existentes["attribution|CPDL:1||"] = "traditional"
+    engine = ReviewEngine(repo)  # type: ignore[arg-type]
+
+    await engine.corregir_decision("attribution|CPDL:1||", "anonymous", decided_by="a", reason="r1", apply=True)
+    await engine.corregir_decision("attribution|CPDL:1||", "traditional", decided_by="b", reason="r2", apply=True)
+
+    assert [(f["previous_decision"], f["new_decision"]) for f in repo.historial_filas] == [
+        ("traditional", "anonymous"), ("anonymous", "traditional"),
+    ]
+    assert repo.existentes["attribution|CPDL:1||"] == "traditional"
+
+
+async def test_correccion_invalida_no_cambia_nada() -> None:
+    repo = _FakeRepoHistorial()
+    repo.existentes["conflict|CPDL:1||"] = "persona_gana"
+    engine = ReviewEngine(repo)  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError):
+        await engine.corregir_decision("conflict|CPDL:1||", "atribucion_gana", decided_by="a", reason="", apply=True)
+    with pytest.raises(LookupError):
+        await engine.corregir_decision("conflict|CPDL:999||", "persona_gana", decided_by="a", reason="r", apply=True)
+    assert repo.historial_filas == []
+    assert repo.existentes["conflict|CPDL:1||"] == "persona_gana"
+
+
+async def test_correccion_repetida_no_duplica() -> None:
+    repo = _FakeRepoHistorial()
+    repo.existentes["conflict|CPDL:1||"] = "atribucion_gana"
+    engine = ReviewEngine(repo)  # type: ignore[arg-type]
+
+    resultado = await engine.corregir_decision(
+        "conflict|CPDL:1||", "atribucion_gana", decided_by="a", reason="r", apply=True
+    )
+
+    assert resultado["estado"] == "sin_cambios" and repo.historial_filas == []
+
+
+async def test_correccion_dry_run_no_escribe() -> None:
+    repo = _FakeRepoHistorial()
+    repo.existentes["conflict|CPDL:1||"] = "persona_gana"
+    engine = ReviewEngine(repo)  # type: ignore[arg-type]
+
+    resultado = await engine.corregir_decision(
+        "conflict|CPDL:1||", "atribucion_gana", decided_by="a", reason="r", apply=False
+    )
+
+    assert resultado["estado"] == "dry_run" and repo.historial_filas == []
+    assert repo.existentes["conflict|CPDL:1||"] == "persona_gana"

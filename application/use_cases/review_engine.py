@@ -144,8 +144,44 @@ class ReviewEngine:
             "ya_existente": bool(existentes), "insertadas": insertadas, "aplicado": apply,
         }
 
+    async def corregir_decision(
+        self, decision_key: str, nuevo_valor: str, *, decided_by: str, reason: str,
+        evidence: str | None = None, notes: str | None = None, apply: bool = False
+    ) -> dict[str, Any]:
+        """Corrige una decisión **conservando el historial** (append-only).
+
+        Nunca se borra la decisión anterior: se registra `previous -> new` con motivo, quién y
+        cuándo, y se actualiza la fila vigente por esta única vía. Repetir la misma corrección no
+        duplica historial ni cambia nada.
+        """
+        if not reason:
+            raise ValueError("la corrección exige un motivo")
+        existentes = await self._repo.decisiones_existentes([decision_key])
+        anterior = existentes.get(decision_key)
+        if anterior is None:
+            raise LookupError(f"no hay decisión registrada para {decision_key}")
+        if anterior == nuevo_valor:
+            return {"decision_key": decision_key, "estado": "sin_cambios", "vigente": anterior,
+                    "historial": 0, "actualizada": 0, "aplicado": apply}
+        fila_historial = {
+            "decision_key": decision_key, "operation": "correct",
+            "previous_decision": anterior, "new_decision": nuevo_valor, "reason": reason,
+            "evidence_json": json.dumps({"correction_evidence": evidence}, ensure_ascii=False),
+            "decided_by": decided_by,
+        }
+        if not apply:
+            return {"decision_key": decision_key, "estado": "dry_run", "anterior": anterior,
+                    "nuevo": nuevo_valor, "historial": 0, "actualizada": 0, "aplicado": False}
+        historial = await self._repo.insertar_historial([fila_historial])
+        actualizada = await self._repo.actualizar_decision(decision_key, nuevo_valor, notes)
+        if actualizada != 1:
+            raise PreviewNoValidado(f"no se pudo actualizar la decisión vigente {decision_key}")
+        return {"decision_key": decision_key, "estado": "corregida", "anterior": anterior,
+                "nuevo": nuevo_valor, "historial": historial, "actualizada": actualizada, "aplicado": True}
+
     async def decidir_conflicto(
-        self, work_key: str, decision: str, *, decided_by: str, apply: bool = False
+        self, work_key: str, decision: str, *, decided_by: str, note: str | None = None,
+        evidence: str | None = None, apply: bool = False
     ) -> dict[str, Any]:
         """Decisión individual de un conflicto persona↔atribución (no admite lote).
 
@@ -176,10 +212,11 @@ class ReviewEngine:
             "attribution_status": fila["attribution_status"],
             "evidence_json": json.dumps(
                 {"decision_mode": "individual", "batch": "CONFLICTOS",
-                 "personas": [p.get("person_key") for p in fila.get("personas", [])]},
+                 "personas": [p.get("person_key") for p in fila.get("personas", [])],
+                 "researcher_note": evidence or note},
                 ensure_ascii=False,
             ),
-            "notes": None,
+            "notes": note,
             "decided_by": decided_by,
             "batch": "CONFLICTOS",
         }]
