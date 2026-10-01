@@ -162,6 +162,10 @@ def clasificar_artefacto(nombre: str) -> str | None:
     texto = canonical_name_key(nombre)
     if not texto:
         return "vacio"
+    if re.search(r"\b(trad|traditional|anon|anónim[oa]|adap?ted from)\b", texto, re.I):
+        # Nombres que en realidad son una atribución ("trad. Dm (drop D)", "PSF traditional",
+        # "X adapted from TRADITIONAL"): no son personas.
+        return "nombre_con_atribucion"
     if _CONECTOR_ROL.match(texto):
         return "prefijo_atribucion"
     if es_concatenacion(texto):
@@ -454,6 +458,9 @@ async def main() -> int:
     export: dict[str, Any] = {}
     obras_por_cluster: dict[str, set[str]] = defaultdict(set)
     obras_en_persona: set[str] = set()
+    # Solo hay conflicto con la atribución si la persona propuesta **es compositor/a**:
+    # una obra tradicional puede tener arreglista, transcriptor o editor sin contradicción alguna.
+    obras_con_compositor: set[str] = set()
     # Se acumulan por `person_key`: dos sub-clústeres que resuelven a la MISMA persona son uno solo.
     acumulado: dict[str, dict[str, Any]] = {}
     for grupo in grupos_unidos:
@@ -545,6 +552,15 @@ async def main() -> int:
         items.append(item)
         obras_por_cluster[item["item_key"]] = obras
         obras_en_persona |= obras
+        # Por FILA (obra × persona × rol): solo la obra donde esta persona es compositora.
+        for fila_persona in sub:
+            if str(fila_persona["role_key"]) == "composer":
+                obras_con_compositor.add(
+                    build_work_key(
+                        fila_persona["works_origin"], fila_persona["works_origin_id"], fila_persona["works_key"]
+                    )
+                    or f"work:{fila_persona['works_id']}"
+                )
         if len(obras) > _MAX_OBRAS_EN_ITEM or args.export_dir:
             export[item["item_key"]] = sorted(obras)
 
@@ -625,7 +641,7 @@ async def main() -> int:
             clusters_por_obra[obra].append(item["item_key"])
     for work_key, filas in por_obra_attr.items():
         for estado in sorted({str(f["attribution_status"]) for f in filas}):
-            conflicto = work_key in obras_en_persona
+            conflicto = work_key in obras_con_compositor
             items.append({
                 "item_key": build_item_key("work_attribution", work_key, None, estado),
                 "item_type": "work_attribution", "person_key": None, "work_key": work_key,

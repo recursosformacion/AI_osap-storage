@@ -114,3 +114,12 @@ def test_alias_compartido_no_mezcla_nombres_distintos() -> None:
 
     assert not union_inequivoca(["neil gow"], ["nathaniel gow"])
     assert union_inequivoca(["j s bach"], ["johann sebastian bach"])
+
+
+def test_nombres_que_son_atribucion_son_artefacto() -> None:
+    from scripts.build_review_items import clasificar_artefacto
+
+    assert clasificar_artefacto("trad. Dm (drop D)") == "nombre_con_atribucion"
+    assert clasificar_artefacto("PSF traditional") == "nombre_con_atribucion"
+    assert clasificar_artefacto("Ludwig van Beethoven adapted from traditional") == "nombre_con_atribucion"
+    assert clasificar_artefacto("Johann Sebastian Bach") is None

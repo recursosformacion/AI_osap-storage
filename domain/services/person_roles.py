@@ -2,8 +2,8 @@
 
 La API pública/admin acepta los roles por clave (`composer`, `arranger`, `performer`,
 `editor`…), que es estable para las aplicaciones; en la BBDD el rol es un id numérico
-(`roles.id`). Tabla sembrada en la migración (roles 1..16; el 16, "Adaptador/a", se añadió en
-la 013 para el re-parse del import).
+(`roles.id`). Tabla sembrada en la migración (roles 1..17; el 16, "Adaptador/a", se añadió en la 013
+para el re-parse del import, y el 17, "Traductor/a", en la 017).
 
 `role_name` en la tabla está en español ("Compositor/a"); aquí se mantiene la traducción.
 """
@@ -29,6 +29,7 @@ ROLE_IDS: dict[str, int] = {
     "patron": 14,
     "inspiration": 15,
     "adapter": 16,
+    "translator": 17,
 }
 
 ROLE_KEYS: dict[int, str] = {role_id: key for key, role_id in ROLE_IDS.items()}

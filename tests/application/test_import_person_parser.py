@@ -262,3 +262,30 @@ def test_adaptado_por_produce_rol_adapter() -> None:
     assert row.kind == "person"
     assert [(p.name, p.role_key) for p in row.persons] == [("Rollo Dilworth", "adapter")]
     assert role_id_for(row.persons[0].role_key) == 16
+
+
+def test_corta_en_marcadores_sin_by() -> None:
+    """'… Hardy Oliver Urbank transcribed T. Potten' no debe comerse el siguiente marcador."""
+    row = parse_import_name("English Traditional arr. Hardy Oliver Urbank transcribed T. Potten")
+
+    assert row.kind == "person"
+    assert [(p.name, p.role_key) for p in row.persons] == [
+        ("Hardy Oliver Urbank", "arranger"),
+        ("T. Potten", "transcriber"),
+    ]
+
+
+def test_traductor_tiene_rol_y_marcadores() -> None:
+    row = parse_import_name("Traditional English carol translated by Barry Callaghan")
+
+    assert row.kind == "person"
+    assert row.attribution_status == "traditional"
+    assert [(p.name, p.role_key) for p in row.persons] == [("Barry Callaghan", "translator")]
+    assert role_id_for("translator") == 17
+
+
+def test_trad_suelto_sigue_siendo_atribucion_no_traductor() -> None:
+    row = parse_import_name("Trad. Dm (drop D)", "composer")
+
+    assert row.attribution_status == "traditional"
+    assert all(p.role_key != "translator" for p in row.persons)

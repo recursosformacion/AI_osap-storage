@@ -55,6 +55,13 @@ _ROLE_MARKERS: list[tuple[str, re.Pattern[str]]] = [
     ("transcriber", re.compile(r"\b(?:transcribed by|transcription by|transcri\w*|transcr\.)", re.I)),
     ("orchestrator", re.compile(r"\b(?:orchestrated by|orchestration by|orchestrat\w*|orquestad[oa] por\b)", re.I)),
     (
+        "translator",
+        re.compile(
+            r"\b(?:translated by|translation by|traducid[oa] por\b|traducci[oó]n de\b|traductor\b)",
+            re.I,
+        ),
+    ),
+    (
         "librettist",
         re.compile(r"\b(?:lyrics by|lyric by|words by|text by|letra de\b|letrista\b|texto de\b|tex\.)", re.I),
     ),
@@ -258,10 +265,13 @@ def _clean_person(text: str) -> str:
 
 def _extract_after(marker: re.Match[str], text: str) -> str:
     tail = text[marker.end(): marker.end() + 160]
-    # Corta en el siguiente marcador de rol, separador fuerte o año.
-    tail = re.split(r"\b(?:arranged by|adapted by|transcribed by|orchestrated by|lyrics by|text by|"
-                    r"composed by|music by|composition by|ed(?:ited)?\.? by)\b|;|\||\b1[0-9]{3}\b",
-                    tail, flags=re.I)[0]
+    # Corta en el siguiente marcador de rol —con o SIN "by" ("… transcribed T. Potten")—,
+    # en un separador fuerte o en un año.
+    tail = re.split(
+        r"\b(?:arranged|adapted|transcribed|orchestrated|lyrics|words|text|composed|music|"
+        r"composition|ed(?:ited)?)\b(?:\s+by\b)?|;|\||\b1[0-9]{3}\b",
+        tail, flags=re.I,
+    )[0]
     # Quita el conector que queda tras el marcador ("arr. by X").
     tail = re.sub(r"^\s*(?:by|de|por|:)\s+", "", tail, flags=re.I)
     return _clean_person(tail)
