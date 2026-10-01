@@ -102,6 +102,48 @@ class ReviewEngine:
             resumen={"obras": len(filas)},
         )
 
+    async def decidir_atribucion(
+        self, work_key: str, valor: str, *, decided_by: str, note: str | None = None,
+        evidence: str | None = None, apply: bool = False
+    ) -> dict[str, Any]:
+        """Decisión de atribución de una obra (`anonymous|traditional|unknown|identified`).
+
+        Solo una decisión `attribution` puede desembocar (en el aplicador de Fase 6) en escribir
+        `works.works_attr_type`; nunca una decisión `identity`.
+        """
+        if valor not in ("anonymous", "traditional", "unknown", "identified"):
+            raise ValueError(f"atribución inválida: {valor}")
+        clave = f"attribution|{work_key}||"
+        existentes = await self._repo.decisiones_existentes([clave])
+        if existentes and existentes[clave] != valor:
+            raise DecisionExistenteDistinta(
+                f"ya hay decisión {existentes[clave]!r} para la atribución de {work_key}; no se altera"
+            )
+        nuevas = [] if existentes else [{
+            "decision_key": clave,
+            "item_key": f"work_attribution|{work_key}|",
+            "decision_type": "attribution",
+            "person_key": None,
+            "work_key": work_key,
+            "role_key": None,
+            "decision": valor,
+            "target_person_key": None,
+            "attribution_status": valor,
+            "evidence_json": json.dumps(
+                {"decision_mode": "individual", "batch": "CONFLICTOS",
+                 "researcher_note": evidence or note},
+                ensure_ascii=False,
+            ),
+            "notes": note,
+            "decided_by": decided_by,
+            "batch": "CONFLICTOS",
+        }]
+        insertadas = await self._repo.insertar_decisiones(nuevas) if apply else 0
+        return {
+            "work_key": work_key, "decision": valor,
+            "ya_existente": bool(existentes), "insertadas": insertadas, "aplicado": apply,
+        }
+
     async def decidir_conflicto(
         self, work_key: str, decision: str, *, decided_by: str, apply: bool = False
     ) -> dict[str, Any]:

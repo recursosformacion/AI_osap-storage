@@ -55,10 +55,19 @@ async def main() -> int:
     p_apply.add_argument("--decided-by", required=True)
     p_apply.add_argument("--apply", action="store_true", help="escribir en review_decisions")
 
-    p_dec = sub.add_parser("decide", help="decisión individual de un conflicto persona↔atribución")
-    p_dec.add_argument("--work", required=True, help="work_key (p. ej. CPDL:14615)")
-    p_dec.add_argument("--decision", required=True, choices=("persona_gana", "atribucion_gana", "revisar_manual"))
+    p_dec = sub.add_parser("decide", help="decisión individual: conflicto persona↔atribución o atribución de obra")
+    p_dec.add_argument("--work", required=True, help="work_key (p. ej. PDMX:Qm…)")
+    p_dec.add_argument("--tipo", default="conflict", choices=("conflict", "attribution"))
+    p_dec.add_argument(
+        "--decision", required=True,
+        help=(
+            "conflict: persona_gana|atribucion_gana|revisar_manual · "
+            "attribution: anonymous|traditional|unknown|identified"
+        ),
+    )
     p_dec.add_argument("--decided-by", required=True)
+    p_dec.add_argument("--note", default=None, help="nota del revisor")
+    p_dec.add_argument("--evidence", default=None, help="evidencia/justificación (p. ej. fuente consultada)")
     p_dec.add_argument("--apply", action="store_true", help="escribir en review_decisions")
 
     args = parser.parse_args()
@@ -66,9 +75,15 @@ async def main() -> int:
     engine = ReviewEngine(SqlReviewRepository(Database(settings)))
 
     if args.comando == "decide":
-        resultado = await engine.decidir_conflicto(
-            args.work, args.decision, decided_by=args.decided_by, apply=args.apply
-        )
+        if args.tipo == "attribution":
+            resultado = await engine.decidir_atribucion(
+                args.work, args.decision, decided_by=args.decided_by, note=args.note,
+                evidence=args.evidence, apply=args.apply,
+            )
+        else:
+            resultado = await engine.decidir_conflicto(
+                args.work, args.decision, decided_by=args.decided_by, apply=args.apply
+            )
         print(json.dumps(resultado, ensure_ascii=False))
         return 0
 
