@@ -118,6 +118,105 @@ def compatible_names(uno: str, otro: str) -> bool:
     return True
 
 
+_CONECTOR_ROL = re.compile(r"^(attr\.?|attributed to|atribuido a|after|from|by)\s+", re.I)
+_TITULO = re.compile(r"\s-\s.*|\b(in|op|no|bwv|kv|hwv|buxwv)\b.*\b[a-z]\b", re.I)
+_CONCATENACION = re.compile(r"[a-z]{3,}[A-Z][a-z]{2,}")
+_TRUNCADO = re.compile(r"\b(befo|before|after|sir|rev|ed|arr|adap|transcr)\.?$", re.I)
+
+
+def clasificar_artefacto(nombre: str) -> str | None:
+    """Clasifica un nombre como posible artefacto textual (no identidad de persona).
+
+    `posible_artefacto` ≠ `new_person`: aquí no hay evidencia de que sea una persona real, así que
+    no debe entrar en la unidad de identidad ni alimentar una futura decisión `create_person`.
+    """
+    texto = canonical_name_key(nombre)
+    if not texto:
+        return "vacio"
+    if _CONECTOR_ROL.match(texto):
+        return "prefijo_atribucion"
+    if _TITULO.search(texto):
+        return "posible_titulo"
+    if _CONCATENACION.search(texto):
+        return "concatenacion"
+    if _TRUNCADO.search(texto):
+        return "texto_truncado"
+    if len(texto.split()) > 6:
+        return "demasiado_largo"
+    return None
+
+
+def _persona_evidencia(pid: str, meta: dict[str, dict[str, Any]]) -> tuple[set[str], set[str]]:
+    datos = meta.get(pid, {})
+    anclas = set(datos.get("anchors", []))
+    alias = {full_name_key(a) for a in datos.get("aliases", []) if a}
+    nombre = full_name_key(str(datos.get("name", "")))
+    if nombre:
+        alias.add(nombre)
+    return anclas, alias
+
+
+def unir_por_evidencia(
+    grupos: list[dict[str, Any]], meta: dict[str, dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Une grupos de identidad siguiendo el orden: ancla > alias > nombre compatible.
+
+    Deja constancia de la evidencia usada (`evidencia_union`), para poder auditar después qué
+    uniones no se apoyan en ancla ni alias.
+    """
+    for grupo in grupos:
+        anclas: set[str] = set()
+        alias: set[str] = set()
+        for pid in grupo["candidatos"]:
+            a, al = _persona_evidencia(pid, meta)
+            anclas |= a
+            alias |= al
+        grupo["anclas"] = anclas
+        grupo["alias"] = alias
+
+    padre = {i: i for i in range(len(grupos))}
+    evidencia: list[set[str]] = [set() for _ in grupos]
+
+    def raiz(i: int) -> int:
+        while padre[i] != i:
+            padre[i] = padre[padre[i]]
+            i = padre[i]
+        return i
+
+    for i, uno in enumerate(grupos):
+        for j in range(i + 1, len(grupos)):
+            otro = grupos[j]
+            razones: set[str] = set()
+            if uno["anclas"] & otro["anclas"]:
+                razones.add("ancla_comun")
+            if uno["alias"] & otro["alias"]:
+                razones.add("alias_comun")
+            if not razones:
+                # compatibilidad fuerte de nombre, siempre que no haya anclas en conflicto
+                conflicto = bool(uno["anclas"] and otro["anclas"] and not (uno["anclas"] & otro["anclas"]))
+                if not conflicto and any(
+                    compatible_names(a, b) for a in uno["nombres"] for b in otro["nombres"]
+                ):
+                    razones.add("nombre_compatible")
+            if razones:
+                ri, rj = raiz(i), raiz(j)
+                if ri != rj:
+                    padre[rj] = ri
+                    evidencia[ri] |= razones | evidencia[rj]
+                    evidencia[rj] = set()
+
+    unidos: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for i, grupo in enumerate(grupos):
+        unidos[raiz(i)].append(grupo)
+    resultado: list[dict[str, Any]] = []
+    for indice, miembros in unidos.items():
+        resultado.append({
+            "miembros": miembros,
+            "evidencia_union": sorted(evidencia[indice]),
+        })
+    return resultado
+
+
 def agrupar_por_persona(filas: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
     """Parte las filas de una misma clave de identidad en sub-clústeres que son UNA persona.
 
@@ -235,16 +334,34 @@ async def main() -> int:
         if pid in meta:
             meta[pid]["obras"] = len(obras_persona)
 
-    # --- agrupación por persona (paso 1)
+    # --- clasificación de artefactos textuales y agrupación por identidad (paso 1)
+    artefactos: dict[str, list[dict[str, Any]]] = defaultdict(list)
     por_identidad: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
         if row["kind"] != "person":
             continue
+        limpio = str(row["person_name_clean"] or "")
         pid = str(row["person_id"]) if row["person_id"] else ""
         ident = (meta.get(pid, {}).get("identity_key") or "") or canonical_name_key(
-            normalize_composer_name(str(row["person_name_clean"] or row["person_name_norm"] or ""))
+            normalize_composer_name(limpio or str(row["person_name_norm"] or ""))
         )
-        por_identidad[ident or "?"].append({**row, "full_key": full_name_key(str(row["person_name_clean"] or ""))})
+        fila = {**row, "full_key": full_name_key(limpio), "ident": ident or "?"}
+        motivo = clasificar_artefacto(limpio)
+        if motivo:
+            artefactos[f"{motivo}|{canonical_name_key(limpio)}"].append({**fila, "motivo": motivo})
+        else:
+            por_identidad[ident or "?"].append(fila)
+
+    grupos_iniciales = [
+        {
+            "ident": ident,
+            "filas": filas,
+            "candidatos": sorted({str(f["person_id"]) for f in filas if f["person_id"]}),
+            "nombres": sorted({f["full_key"] for f in filas if f["full_key"]}),
+        }
+        for ident, filas in por_identidad.items()
+    ]
+    grupos_unidos = unir_por_evidencia(grupos_iniciales, meta)
 
     items: list[dict[str, Any]] = []
     export: dict[str, Any] = {}
@@ -252,32 +369,41 @@ async def main() -> int:
     obras_en_persona: set[str] = set()
     # Se acumulan por `person_key`: dos sub-clústeres que resuelven a la MISMA persona son uno solo.
     acumulado: dict[str, dict[str, Any]] = {}
-    for ident, filas in por_identidad.items():
-        subclusters = agrupar_por_persona(filas)
-        colision = len(subclusters) > 1
-        for sub in subclusters:
+    for grupo in grupos_unidos:
+        filas_grupo = [f for miembro in grupo["miembros"] for f in miembro["filas"]]
+        fichas = len({m["ident"] for m in grupo["miembros"]})
+        for sub in agrupar_por_persona(filas_grupo):
             nombres = sorted({f["full_key"] for f in sub if f["full_key"]})
             candidatos_ids = {str(f["person_id"]) for f in sub if f["person_id"]}
             anclas = {a for pid in candidatos_ids for a in meta.get(pid, {}).get("anchors", [])}
+            colision = len(agrupar_por_persona(filas_grupo)) > 1
             if colision and nombres:
                 person_key = f"name:{nombres[0]}"
             elif len(candidatos_ids) == 1 and len(anclas) == 1:
                 person_key = next(iter(anclas))
             else:
-                person_key = f"name:{ident}"
+                person_key = f"name:{sorted({f['ident'] for f in sub})[0]}"
             entrada = acumulado.setdefault(
                 collation_key(person_key),
-                {"filas": [], "ident": ident, "colision": colision, "nombres": set(), "person_key": person_key},
+                {
+                    "filas": [], "ident": sorted({f["ident"] for f in sub})[0], "colision": colision,
+                    "nombres": set(), "person_key": person_key, "evidencia": set(),
+                    "fichas": fichas,
+                },
             )
             entrada["filas"].extend(sub)
             entrada["nombres"].update(nombres)
             entrada["colision"] = entrada["colision"] or colision
+            entrada["evidencia"] |= set(grupo["evidencia_union"])
+            entrada["fichas"] = max(int(entrada["fichas"]), fichas)
 
     for entrada in acumulado.values():
         sub = entrada["filas"]
         ident = entrada["ident"]
         colision = entrada["colision"]
         person_key = entrada["person_key"]
+        evidencia = sorted(entrada.get("evidencia", []))
+        fichas = int(entrada.get("fichas", 1))
         nombres = sorted(entrada["nombres"])
         candidatos_ids = {str(f["person_id"]) for f in sub if f["person_id"]}
         obras = {
@@ -309,6 +435,9 @@ async def main() -> int:
                 "colision_de_clave": colision,
                 "clave_identidad_colapsada": ident,
                 "nombres_vistos": nombres,
+                "evidencia_union": evidencia,
+                "fichas_unidas": fichas,
+                "union_solo_por_nombre": evidencia == ["nombre_compatible"] and len(candidatos_ids) > 1,
                 "por_estado": {e: sum(1 for f in sub if str(f["status"]) == e) for e in estados},
                 "por_rol": {r: sum(1 for f in sub if str(f["role_key"]) == r) for r in roles},
                 "patrones_origen": [
@@ -331,6 +460,30 @@ async def main() -> int:
         obras_en_persona |= obras
         if len(obras) > _MAX_OBRAS_EN_ITEM or args.export_dir:
             export[item["item_key"]] = sorted(obras)
+
+    # --- posible artefacto textual: fuera de la unidad de identidad (paso 2)
+    for clave, filas in artefactos.items():
+        motivo, _, nombre = clave.partition("|")
+        obras = {
+            build_work_key(f["works_origin"], f["works_origin_id"], f["works_key"]) or f"work:{f['works_id']}"
+            for f in filas
+        }
+        items.append({
+            "item_key": build_item_key("posible_artefacto", None, nombre),
+            "item_type": "posible_artefacto", "person_key": f"name:{nombre}", "work_key": None,
+            "role_key": filas[0]["role_key"], "attribution_status": None,
+            "filas": len(filas), "obras": len(obras),
+            "roles": ",".join(sorted({str(f["role_key"]) for f in filas if f["role_key"]}))[:255],
+            "estados": motivo,
+            "candidatos_json": None,
+            "contexto_json": json.dumps({
+                "motivo": motivo,
+                "textos_origen": sorted({canonical_name_key(str(f["person_name_raw"])) for f in filas})[:15],
+                "obras": sorted(obras)[:_MAX_OBRAS_EN_ITEM],
+                "obras_total": len(obras),
+                "person_id_casado": sorted({str(f["person_id"]) for f in filas if f["person_id"]}),
+            }, ensure_ascii=False),
+        })
 
     # --- ambiguas por identidad (paso 2): un item por persona, no por obra
     _ambiguas_vistas: set[str] = set()
@@ -435,8 +588,14 @@ async def main() -> int:
         "items_total": len(items),
         "items_por_tipo": {
             tipo: sum(1 for i in items if i["item_type"] == tipo)
-            for tipo in ("identity_cluster", "ambiguous_identity", "work_attribution")
+            for tipo in ("identity_cluster", "ambiguous_identity", "work_attribution", "posible_artefacto")
         },
+        "clusters_unidos_solo_por_nombre": sum(
+            1
+            for i in items
+            if i["item_type"] == "identity_cluster"
+            and '"union_solo_por_nombre": true' in str(i["contexto_json"])
+        ),
         "clusters_con_colision": sum(
             1
             for i in items
