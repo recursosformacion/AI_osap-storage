@@ -122,3 +122,32 @@ async def test_muestra_y_excepciones_del_preview() -> None:
     assert preview.resumen["unidades"] == 2
     assert len(preview.excepciones) == 1
     assert preview.excepciones[0]["person_key"] == "name:x"
+
+
+async def test_decision_individual_de_conflicto() -> None:
+    repo = _FakeRepo()
+    repo.conflictos_filas = [{"item_key": "conflict|CPDL:1|", "work_key": "CPDL:1", "person_key": "viaf:1",
+                              "role_key": "composer", "attribution_status": "traditional", "personas": [],
+                              "obras": 1}]
+    engine = ReviewEngine(repo)  # type: ignore[arg-type]
+
+    resultado = await engine.decidir_conflicto("CPDL:1", "persona_gana", decided_by="admin", apply=True)
+
+    assert resultado["insertadas"] == 1
+    assert repo.insertadas[0]["decision_type"] == "conflict"
+    assert repo.insertadas[0]["decision"] == "persona_gana"
+
+
+async def test_conflicto_valida_decision_y_existencia() -> None:
+    repo = _FakeRepo()
+    repo.conflictos_filas = [{"item_key": "conflict|CPDL:1|", "work_key": "CPDL:1", "person_key": "viaf:1",
+                              "role_key": "composer", "attribution_status": "traditional", "personas": [], "obras": 1}]
+    engine = ReviewEngine(repo)  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError):
+        await engine.decidir_conflicto("CPDL:1", "inventada", decided_by="admin")
+    with pytest.raises(LookupError):
+        await engine.decidir_conflicto("CPDL:999", "persona_gana", decided_by="admin")
+    repo.existentes["conflict|CPDL:1||"] = "atribucion_gana"
+    with pytest.raises(DecisionExistenteDistinta):
+        await engine.decidir_conflicto("CPDL:1", "persona_gana", decided_by="admin")

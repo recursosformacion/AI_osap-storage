@@ -102,6 +102,51 @@ class ReviewEngine:
             resumen={"obras": len(filas)},
         )
 
+    async def decidir_conflicto(
+        self, work_key: str, decision: str, *, decided_by: str, apply: bool = False
+    ) -> dict[str, Any]:
+        """Decisión individual de un conflicto persona↔atribución (no admite lote).
+
+        `revisar_manual` deja la obra **deliberadamente fuera** del plan aplicable hasta que exista
+        una decisión posterior suficiente.
+        """
+        if decision not in _DECISIONES_CONFLICT:
+            raise ValueError(f"decisión de conflicto inválida: {decision}")
+        conflictos = await self._repo.conflictos()
+        fila = next((c for c in conflictos if c["work_key"] == work_key), None)
+        if fila is None:
+            raise LookupError(f"obra sin conflicto registrado: {work_key}")
+        clave = f"conflict|{work_key}||"
+        existentes = await self._repo.decisiones_existentes([clave])
+        if existentes and existentes[clave] != decision:
+            raise DecisionExistenteDistinta(
+                f"ya hay decisión {existentes[clave]!r} para {work_key}; no se altera"
+            )
+        nuevas = [] if existentes else [{
+            "decision_key": clave,
+            "item_key": fila["item_key"],
+            "decision_type": "conflict",
+            "person_key": fila["person_key"],
+            "work_key": work_key,
+            "role_key": fila["role_key"],
+            "decision": decision,
+            "target_person_key": None,
+            "attribution_status": fila["attribution_status"],
+            "evidence_json": json.dumps(
+                {"decision_mode": "individual", "batch": "CONFLICTOS",
+                 "personas": [p.get("person_key") for p in fila.get("personas", [])]},
+                ensure_ascii=False,
+            ),
+            "notes": None,
+            "decided_by": decided_by,
+            "batch": "CONFLICTOS",
+        }]
+        insertadas = await self._repo.insertar_decisiones(nuevas) if apply else 0
+        return {
+            "work_key": work_key, "decision": decision,
+            "ya_existente": bool(existentes), "insertadas": insertadas, "aplicado": apply,
+        }
+
     async def materializar(
         self, preview: Preview, *, confirm: str, decided_by: str, apply: bool = False
     ) -> dict[str, Any]:

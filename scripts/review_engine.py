@@ -55,9 +55,22 @@ async def main() -> int:
     p_apply.add_argument("--decided-by", required=True)
     p_apply.add_argument("--apply", action="store_true", help="escribir en review_decisions")
 
+    p_dec = sub.add_parser("decide", help="decisión individual de un conflicto persona↔atribución")
+    p_dec.add_argument("--work", required=True, help="work_key (p. ej. CPDL:14615)")
+    p_dec.add_argument("--decision", required=True, choices=("persona_gana", "atribucion_gana", "revisar_manual"))
+    p_dec.add_argument("--decided-by", required=True)
+    p_dec.add_argument("--apply", action="store_true", help="escribir en review_decisions")
+
     args = parser.parse_args()
     settings = Settings()  # type: ignore[call-arg]
     engine = ReviewEngine(SqlReviewRepository(Database(settings)))
+
+    if args.comando == "decide":
+        resultado = await engine.decidir_conflicto(
+            args.work, args.decision, decided_by=args.decided_by, apply=args.apply
+        )
+        print(json.dumps(resultado, ensure_ascii=False))
+        return 0
 
     if args.comando == "conflicts":
         preview = await engine.preview_conflictos()
@@ -65,7 +78,10 @@ async def main() -> int:
             "batch": preview.batch, "modo": preview.modo, "unidad": preview.unidad, "decision": "",
             "hash": preview.hash(), "resumen": preview.resumen, "filas": preview.filas,
         }, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
-        print(json.dumps({"preview": str(args.out), "obras": preview.resumen["obras"], "hash": preview.hash()}, ensure_ascii=False))
+        print(json.dumps(
+            {"preview": str(args.out), "obras": preview.resumen["obras"], "hash": preview.hash()},
+            ensure_ascii=False,
+        ))
         return 0
 
     if args.comando == "preview":
