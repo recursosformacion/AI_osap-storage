@@ -106,3 +106,11 @@ def test_union_por_nombre_sin_ambiguedad() -> None:
     assert not union_inequivoca(["ralph burns", "r burns"], ["robert burns"])
     # Personas diferentes con apellido común no se unen
     assert not union_inequivoca(["neil gow"], ["nathaniel gow"])
+
+
+def test_alias_compartido_no_mezcla_nombres_distintos() -> None:
+    """'n gow' está en los alias de Neil y de Nathaniel: no debe unirlos."""
+    from scripts.build_review_items import union_inequivoca
+
+    assert not union_inequivoca(["neil gow"], ["nathaniel gow"])
+    assert union_inequivoca(["j s bach"], ["johann sebastian bach"])

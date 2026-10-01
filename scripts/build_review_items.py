@@ -219,13 +219,16 @@ def unir_por_evidencia(
             otro = grupos[j]
             razones: set[str] = set()
             if uno["anclas"] & otro["anclas"]:
+                # ancla compartida: evidencia fuerte, no necesita más comprobaciones
                 razones.add("ancla_comun")
-            if uno["alias"] & otro["alias"]:
-                razones.add("alias_comun")
-            if not razones:
-                # compatibilidad fuerte de nombre, sin anclas en conflicto y sin ambigüedad
+            else:
+                inequivoca = union_inequivoca(uno["nombres"], otro["nombres"])
+                if inequivoca and (uno["alias"] & otro["alias"]):
+                    # alias compartido, pero solo si no mezcla dos nombres distintos
+                    # (p. ej. 'n gow' está en los alias de Neil y de Nathaniel Gow)
+                    razones.add("alias_comun")
                 conflicto = bool(uno["anclas"] and otro["anclas"] and not (uno["anclas"] & otro["anclas"]))
-                if not conflicto and union_inequivoca(uno["nombres"], otro["nombres"]):
+                if not razones and inequivoca and not conflicto:
                     razones.add("nombre_compatible")
             if razones:
                 ri, rj = raiz(i), raiz(j)
