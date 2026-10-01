@@ -52,3 +52,14 @@ def test_claves_sin_caracteres_invisibles() -> None:
 
 def test_work_key_con_caracteres_invisibles() -> None:
     assert build_work_key("PDMX", None, "abc\u200e") == "PDMX:abc"
+
+
+def test_claves_canonicas_colapsan_espacios_raros() -> None:
+    from application.services.import_person_parser import canonical_name_key
+
+    # U+2009 (thin space) y U+00A0 (nbsp) son invisibles para la colación pero no para el índice.
+    assert canonical_name_key("name:a\u2009b") == "name:a b"
+    assert canonical_name_key("name:a\u00a0b") == "name:a b"
+    assert canonical_name_key("name:a   b") == "name:a b"
+    assert canonical_name_key("name:\u2003a") == "name: a"
+    assert canonical_name_key("name:a\u200bb") == "name:ab"  # ZWSP: ni separa ni cuenta

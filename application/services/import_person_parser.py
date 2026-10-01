@@ -112,18 +112,25 @@ _ADAPT_IN_PARENS = re.compile(
 _TRUNCATED_PREFIX = re.compile(r"^\s*(?:chior|vin|ar-)\b", re.I)
 
 
-_INVISIBLE = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060\ufeff\u00ad]")
+# Separadores invisibles: se convierten en un espacio normal (separan palabras).
+_ESPACIOS_INVISIBLES = re.compile(r"[\u00a0\u1680\u2000-\u200a\u2028\u2029\u205f\u3000]")
+# Marcas de anchura cero: se eliminan (no separan nada).
+_ZERO_WIDTH = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060\ufeff\u00ad]")
+_ESPACIOS = re.compile(r"\s+")
 
 
 def canonical_name_key(text: str | None) -> str:
-    """Clave canónica de nombre: sin caracteres invisibles (U+200E, BOM, ZWSP…) ni espacios extra.
+    """Clave canónica de nombre: sin marcas invisibles, con separadores raros normalizados y
+    espacios internos colapsados.
 
-    Evita que dos claves lógicas distintas colisionen en el índice único (la colación utf8mb4 del
-    catálogo ignora esos caracteres, así que hay que quitarlos antes de comparar).
+    Evita que dos claves lógicas distintas colisionen en el índice único: la colación utf8mb4 del
+    catálogo ignora estos caracteres, pero el índice único de `review_items`/`review_decisions` no.
     """
     if not text:
         return ""
-    return _INVISIBLE.sub("", str(text)).strip()
+    limpio = _ZERO_WIDTH.sub("", str(text))
+    limpio = _ESPACIOS_INVISIBLES.sub(" ", limpio)
+    return _ESPACIOS.sub(" ", limpio).strip()
 
 
 def looks_contaminated(name: str) -> bool:
