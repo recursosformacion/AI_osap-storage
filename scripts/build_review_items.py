@@ -177,33 +177,50 @@ def clasificar_artefacto(nombre: str) -> str | None:
     return None
 
 
-def _persona_evidencia(pid: str, meta: dict[str, dict[str, Any]]) -> tuple[set[str], set[str]]:
+def _alias_discriminativo(alias: str) -> bool:
+    """Alias con palabra larga además del apellido (`johann sebastian bach`) frente a abreviado (`n gow`)."""
+    palabras = canonical_name_key(alias).split()
+    return any(len(p) > 2 for p in palabras[:-1])
+
+
+def _persona_evidencia(pid: str, meta: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Evidencia de una ficha: anclas, alias (discriminativos/abreviados) y nombre canónico."""
     datos = meta.get(pid, {})
-    anclas = set(datos.get("anchors", []))
-    alias = {full_name_key(a) for a in datos.get("aliases", []) if a}
-    nombre = full_name_key(str(datos.get("name", "")))
-    if nombre:
-        alias.add(nombre)
-    return anclas, alias
+    alias = [str(a) for a in datos.get("aliases", []) if a]
+    nombre = canonical_name_key(str(datos.get("name", "")))
+    return {
+        "anclas": set(datos.get("anchors", [])),
+        "alias_discriminativos": {full_name_key(a) for a in alias if _alias_discriminativo(a)},
+        "alias_abreviados": {full_name_key(a) for a in alias if not _alias_discriminativo(a)},
+        "nombres": {full_name_key(nombre)} if nombre else set(),
+    }
 
 
 def unir_por_evidencia(
     grupos: list[dict[str, Any]], meta: dict[str, dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """Une grupos de identidad siguiendo el orden: ancla > alias > nombre compatible.
+    """Une grupos de identidad siguiendo el orden: ancla > alias discriminativo > alias abreviado
+    inequívoco > nombre compatible inequívoco. Deja constancia de la evidencia usada.
 
-    Deja constancia de la evidencia usada (`evidencia_union`), para poder auditar después qué
-    uniones no se apoyan en ancla ni alias.
+    La compatibilidad se evalúa sobre los **nombres canónicos de las fichas**, no sobre los textos de
+    origen (que traen variantes ruidosas: `Joahnn`, `Jean-Sébastien`, `Bach Johann Sebastian`, `BWV`).
+    Un conflicto de anclas distintas bloquea la unión: queda para revisión.
     """
     for grupo in grupos:
         anclas: set[str] = set()
-        alias: set[str] = set()
+        alias_disc: set[str] = set()
+        alias_abr: set[str] = set()
+        nombres: set[str] = set()
         for pid in grupo["candidatos"]:
-            a, al = _persona_evidencia(pid, meta)
-            anclas |= a
-            alias |= al
+            datos_persona = _persona_evidencia(pid, meta)
+            anclas |= datos_persona["anclas"]
+            alias_disc |= datos_persona["alias_discriminativos"]
+            alias_abr |= datos_persona["alias_abreviados"]
+            nombres |= datos_persona["nombres"]
         grupo["anclas"] = anclas
-        grupo["alias"] = alias
+        grupo["alias_disc"] = alias_disc
+        grupo["alias_abr"] = alias_abr
+        grupo["nombres_canonicos"] = sorted(nombres) or list(grupo.get("nombres", []))
 
     padre = {i: i for i in range(len(grupos))}
     evidencia: list[set[str]] = [set() for _ in grupos]
@@ -218,17 +235,18 @@ def unir_por_evidencia(
         for j in range(i + 1, len(grupos)):
             otro = grupos[j]
             razones: set[str] = set()
+            conflictivo = bool(
+                uno["anclas"] and otro["anclas"] and not (uno["anclas"] & otro["anclas"])
+            )
             if uno["anclas"] & otro["anclas"]:
-                # ancla compartida: evidencia fuerte, no necesita más comprobaciones
                 razones.add("ancla_comun")
-            else:
-                inequivoca = union_inequivoca(uno["nombres"], otro["nombres"])
-                if inequivoca and (uno["alias"] & otro["alias"]):
-                    # alias compartido, pero solo si no mezcla dos nombres distintos
-                    # (p. ej. 'n gow' está en los alias de Neil y de Nathaniel Gow)
-                    razones.add("alias_comun")
-                conflicto = bool(uno["anclas"] and otro["anclas"] and not (uno["anclas"] & otro["anclas"]))
-                if not razones and inequivoca and not conflicto:
+            elif not conflictivo:
+                inequivoca = union_inequivoca(uno["nombres_canonicos"], otro["nombres_canonicos"])
+                if uno["alias_disc"] & otro["alias_disc"]:
+                    razones.add("alias_discriminativo")
+                elif inequivoca and (uno["alias_abr"] & otro["alias_abr"]):
+                    razones.add("alias_abreviado_inequivoco")
+                elif inequivoca:
                     razones.add("nombre_compatible")
             if razones:
                 ri, rj = raiz(i), raiz(j)
@@ -240,13 +258,10 @@ def unir_por_evidencia(
     unidos: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for i, grupo in enumerate(grupos):
         unidos[raiz(i)].append(grupo)
-    resultado: list[dict[str, Any]] = []
-    for indice, miembros in unidos.items():
-        resultado.append({
-            "miembros": miembros,
-            "evidencia_union": sorted(evidencia[indice]),
-        })
-    return resultado
+    return [
+        {"miembros": miembros, "evidencia_union": sorted(evidencia[indice])}
+        for indice, miembros in unidos.items()
+    ]
 
 
 def _distancia(uno: str, otro: str) -> int:
