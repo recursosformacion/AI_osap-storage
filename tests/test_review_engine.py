@@ -276,6 +276,23 @@ async def test_decidir_identidad_map_to_existing() -> None:
     assert json.loads(fila["evidence_json"])["decision_mode"] == "individual"
 
 
+async def test_decidir_identidad_batch_por_defecto_y_explicito() -> None:
+    repo = _FakeRepo()
+    repo.unidades = [_unidad("identity_cluster||viaf:1|", "viaf:1")]
+    engine = ReviewEngine(repo)  # type: ignore[arg-type]
+
+    por_defecto = await engine.decidir_identidad("viaf:1", "accept", decided_by="a", apply=True)
+    assert por_defecto["batch"] == "IDENTIDAD"
+    assert repo.insertadas[-1]["batch"] == "IDENTIDAD"
+    assert json.loads(repo.insertadas[-1]["evidence_json"])["batch"] == "IDENTIDAD"
+
+    repo.existentes.clear()
+    explicito = await engine.decidir_identidad("viaf:1", "accept", decided_by="a", batch="D-1", apply=True)
+    assert explicito["batch"] == "D-1"
+    assert repo.insertadas[-1]["batch"] == "D-1"
+    assert json.loads(repo.insertadas[-1]["evidence_json"])["batch"] == "D-1"
+
+
 async def test_decidir_identidad_accept_sin_target() -> None:
     repo = _FakeRepo()
     repo.unidades = [_unidad("identity_cluster||viaf:1|", "viaf:1")]

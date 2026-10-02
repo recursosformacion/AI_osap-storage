@@ -11,7 +11,7 @@ Uso:
     python -m scripts.review_engine apply --preview preview_A.json --confirm <hash> --decided-by admin
     python -m scripts.review_engine apply --preview preview_A.json --confirm <hash> --decided-by admin --apply
     python -m scripts.review_engine decide --tipo identity --person "name:…" \
-        --decision map_to_existing --target-person "viaf:…" --decided-by admin --apply
+        --decision map_to_existing --target-person "viaf:…" --batch D-1 --decided-by admin --apply
 """
 
 from __future__ import annotations
@@ -71,6 +71,7 @@ async def main() -> int:
             "attribution: anonymous|traditional|unknown|identified"
         ),
     )
+    p_dec.add_argument("--batch", default=None, help="etiqueta de lote (identity; por defecto IDENTIDAD)")
     p_dec.add_argument("--decided-by", required=True)
     p_dec.add_argument("--note", default=None, help="nota del revisor")
     p_dec.add_argument("--evidence", default=None, help="evidencia/justificación (p. ej. fuente consultada)")
@@ -96,7 +97,7 @@ async def main() -> int:
             resultado = await engine.decidir_identidad(
                 args.person, args.decision, decided_by=args.decided_by,
                 target_person_key=args.target_person, note=args.note,
-                evidence=args.evidence, apply=args.apply,
+                evidence=args.evidence, batch=args.batch, apply=args.apply,
             )
         elif args.tipo == "attribution":
             if not args.work:

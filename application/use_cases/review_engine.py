@@ -141,7 +141,8 @@ class ReviewEngine:
     async def decidir_identidad(
         self, person_key: str, decision: str, *, decided_by: str,
         target_person_key: str | None = None, role_key: str | None = None,
-        note: str | None = None, evidence: str | None = None, apply: bool = False,
+        note: str | None = None, evidence: str | None = None,
+        batch: str | None = None, apply: bool = False,
     ) -> dict[str, Any]:
         """Decisión individual sobre el **clúster canónico** de identidad (`person_key`).
 
@@ -149,6 +150,8 @@ class ReviewEngine:
         `map_to_existing` exige `--target-person` (persona destino concreta); el resto no lo admite.
         Operar aquí (y no sobre `ambiguous_identity`, que es una vista derivada) evita decidir dos veces
         las mismas obras: el clúster cubre sus obras ambiguas y resueltas.
+
+        `batch` es la etiqueta de lote humano (p. ej. `F`, `D-1`, `C-1`); por defecto `IDENTIDAD`.
         """
         if decision not in _DECISIONES_IDENTITY:
             raise ValueError(f"decisión de identidad inválida: {decision}")
@@ -156,6 +159,7 @@ class ReviewEngine:
             raise ValueError("map_to_existing exige --target-person")
         if decision != "map_to_existing" and target_person_key:
             raise ValueError(f"{decision} no admite --target-person")
+        lote = batch or "IDENTIDAD"
         fila = await self._repo.cluster_identidad(person_key, role_key)
         if fila is None:
             raise LookupError(f"clúster de identidad inexistente: {person_key}")
@@ -178,7 +182,7 @@ class ReviewEngine:
             "target_person_key": target_person_key,
             "attribution_status": None,
             "evidence_json": json.dumps(
-                {"decision_mode": "individual", "batch": "IDENTIDAD",
+                {"decision_mode": "individual", "batch": lote,
                  "propuesta": person_key,
                  "candidatos": [c.get("person_key") for c in candidatos],
                  "researcher_note": evidence or note},
@@ -186,12 +190,12 @@ class ReviewEngine:
             ),
             "notes": note,
             "decided_by": decided_by,
-            "batch": "IDENTIDAD",
+            "batch": lote,
         }]
         insertadas = await self._repo.insertar_decisiones(nuevas) if apply else 0
         return {
             "person_key": person_key, "decision": decision, "target_person_key": target_person_key,
-            "ya_existente": bool(existentes), "insertadas": insertadas, "aplicado": apply,
+            "batch": lote, "ya_existente": bool(existentes), "insertadas": insertadas, "aplicado": apply,
         }
 
     async def decidir_atribucion(
