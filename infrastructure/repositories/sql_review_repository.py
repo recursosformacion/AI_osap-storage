@@ -18,29 +18,64 @@ _COLUMNAS = (
     "decided_by", "batch",
 )
 
+_TRAMOS = ("A", "B", "C", "D", "E", "F")
+_ANCLA_TIPADA = (
+    "(person_key LIKE %s OR person_key LIKE %s OR person_key LIKE %s OR person_key LIKE %s)"
+)
+
+
+def condiciones_tramo(tramo: str) -> tuple[list[str], list[str]]:
+    """Condiciones SQL y parámetros de un tramo de identidad, **disjuntos** por prioridad.
+
+    Prioridad D > C > E > F > A > B (la misma del inventario): cada clúster cae en un único
+    tramo. `estados` es una lista separada por comas (`resolved`, `ambiguous`, `new_person`,
+    `resolved_sanitized`, `review_target_contaminated`). Los patrones van como **parámetros**
+    porque un `%` literal en el SQL rompe el formateo con `%s`.
+    """
+    t = tramo.upper()
+    if t not in _TRAMOS:
+        raise ValueError(f"tramo de identidad inválido: {tramo} (esperado uno de {_TRAMOS})")
+    p = {
+        "contaminated": "%contaminated%", "sanitized": "%sanitized%",
+        "new_person": "%new_person%", "ambiguous": "%ambiguous%", "resolved": "%resolved%",
+    }
+    no_cont, no_san, no_new, no_amb = (
+        "estados NOT LIKE %s", "estados NOT LIKE %s", "estados NOT LIKE %s", "estados NOT LIKE %s",
+    )
+    if t == "D":
+        return ["estados LIKE %s"], [p["contaminated"]]
+    if t == "C":
+        return [no_cont, "estados LIKE %s"], [p["contaminated"], p["sanitized"]]
+    if t == "E":
+        return (
+            [no_cont, no_san, "estados LIKE %s"],
+            [p["contaminated"], p["sanitized"], p["new_person"]],
+        )
+    if t == "F":
+        return (
+            [no_cont, no_san, no_new, "estados LIKE %s"],
+            [p["contaminated"], p["sanitized"], p["new_person"], p["ambiguous"]],
+        )
+    # A / B: resueltos con o sin ancla tipada, excluyendo los estados con tratamiento propio.
+    condiciones = [no_cont, no_san, no_new, no_amb, "estados LIKE %s"]
+    parametros = [p["contaminated"], p["sanitized"], p["new_person"], p["ambiguous"], p["resolved"]]
+    if t == "A":
+        condiciones.append(_ANCLA_TIPADA)
+        parametros.extend(["viaf:%", "musicbrainz:%", "mbid:%", "isni:%"])
+    else:
+        condiciones.append("person_key LIKE %s")
+        parametros.append("name:%")
+    return condiciones, parametros
+
 
 class SqlReviewRepository:
     def __init__(self, db: Database) -> None:
         self._db = db
 
     async def unidades_tramo(self, tramo: str, role_key: str | None, limite: int) -> list[dict[str, Any]]:
-        """Unidades de identidad de un tramo (A/B/…) para preparar un lote."""
-        condiciones = ["item_type='identity_cluster'"]
-        parametros: list[Any] = []
-        if tramo.upper() == "A":
-            condiciones.append("estados='resolved'")
-            # Los patrones van como parámetros: un `%` literal en el SQL rompe el formateo.
-            condiciones.append(
-                "(person_key LIKE %s OR person_key LIKE %s OR person_key LIKE %s OR person_key LIKE %s)"
-            )
-            parametros.extend(["viaf:%", "musicbrainz:%", "mbid:%", "isni:%"])
-        elif tramo.upper() == "B":
-            condiciones.append("estados='resolved'")
-            condiciones.append("person_key LIKE %s")
-            parametros.append("name:%")
-        else:
-            condiciones.append("estados LIKE %s")
-            parametros.append(f"%{tramo.lower()}%")
+        """Unidades de identidad de un tramo explícito (A–F) para preparar un lote."""
+        extra, parametros = condiciones_tramo(tramo)
+        condiciones = ["item_type='identity_cluster'", *extra]
         if role_key:
             condiciones.append("FIND_IN_SET(%s, roles) > 0")
             parametros.append(role_key)
@@ -52,6 +87,22 @@ class SqlReviewRepository:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(sql, [*parametros, limite])
             return [dict(r) for r in await cur.fetchall()]
+
+    async def cluster_identidad(self, person_key: str, role_key: str | None = None) -> dict[str, Any] | None:
+        """Clúster canónico de identidad por `person_key` (y `role_key` si se indica)."""
+        condiciones = ["item_type='identity_cluster'", "person_key=%s"]
+        parametros: list[Any] = [person_key]
+        if role_key:
+            condiciones.append("role_key=%s")
+            parametros.append(role_key)
+        sql = (
+            f"SELECT item_key, person_key, role_key, filas, obras, roles, estados, candidatos_json, "
+            f"contexto_json FROM review_items WHERE {' AND '.join(condiciones)} LIMIT 1"
+        )
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(sql, parametros)
+            fila = await cur.fetchone()
+            return dict(fila) if fila else None
 
     async def conflictos(self) -> list[dict[str, Any]]:
         """Obras con propuesta de persona y de atribución a la vez (plan incompleto)."""

@@ -55,6 +55,42 @@ class Preview:
         ).hexdigest()[:16]
 
 
+def _detalle_identidad(unidad: dict[str, Any]) -> dict[str, Any]:
+    """Enriquece una unidad de identidad con propuesta, candidatos, evidencia y excepciones.
+
+    La `excepcion` (motivo o `None`) replica el criterio del inventario: colisión de clave,
+    destino contaminado o identidad saneada. Ser ambiguo/nuevo no es excepción: es el motivo del tramo.
+    """
+    try:
+        contexto = json.loads(unidad.get("contexto_json") or "{}")
+    except json.JSONDecodeError:
+        contexto = {}
+    try:
+        candidatos = json.loads(unidad.get("candidatos_json") or "[]")
+    except json.JSONDecodeError:
+        candidatos = []
+    estados = str(unidad.get("estados") or "")
+    colision = bool(contexto.get("colision_de_clave"))
+    motivos = ["colision_de_clave"] if colision else []
+    if "contaminated" in estados:
+        motivos.append("contaminated")
+    if "sanitized" in estados:
+        motivos.append("sanitized")
+    detalle = dict(unidad)
+    detalle.update({
+        "propuesta": unidad.get("person_key"),
+        "candidatos": candidatos,
+        "evidencia": contexto.get("evidencia_union"),
+        "patrones_origen": contexto.get("patrones_origen"),
+        "nombres_vistos": contexto.get("nombres_vistos", []),
+        "colisiones": colision,
+        "estado": estados,
+        "obras_cubiertas": int(unidad.get("obras") or 0),
+        "excepcion": ",".join(motivos) if motivos else None,
+    })
+    return detalle
+
+
 class ReviewEngine:
     def __init__(self, repo: SqlReviewRepository) -> None:
         self._repo = repo
@@ -63,31 +99,31 @@ class ReviewEngine:
         self, tramo: str, decision: str, *, batch: str, role_key: str | None = None,
         limite: int = 5000, tamano_muestra: int = 5,
     ) -> Preview:
-        """Prepara un lote de identidad: selección + muestra + excepciones + resumen."""
+        """Prepara un lote de identidad (A–F): selección + detalle + muestra + excepciones + resumen.
+
+        Cada unidad añade `propuesta`, `candidatos`, `evidencia`, `patrones_origen`, `colisiones`,
+        `estado`, `obras_cubiertas` y `excepcion`. Para F (revisión individual) `propuesta` es el
+        `person_key` del clúster canónico.
+        """
         if decision not in _DECISIONES_IDENTITY:
             raise ValueError(f"decisión de identidad inválida: {decision}")
         unidades = await self._repo.unidades_tramo(tramo, role_key, limite)
         if not unidades:
             raise LookupError(f"sin unidades para el tramo {tramo}")
-        muestra = unidades[:tamano_muestra]
+        filas = [_detalle_identidad(u) for u in unidades]
+        muestra = filas[:tamano_muestra]
         excepciones = [
-            {
-                "item_key": u["item_key"], "person_key": u["person_key"],
-                "nombres": json.loads(u["contexto_json"]).get("nombres_vistos", [])[:6],
-                "obras": u["obras"],
-            }
-            for u in unidades
-            if "colision_de_clave\": true" in str(u["contexto_json"])
-            or "contaminated" in str(u["estados"])
-            or "sanitized" in str(u["estados"])
+            {"item_key": u["item_key"], "person_key": u["person_key"],
+             "nombres": u["nombres_vistos"][:6], "obras": u["obras"], "motivo": u["excepcion"]}
+            for u in filas if u["excepcion"]
         ]
         return Preview(
             batch=batch, modo=f"bulk:{tramo.upper()}", unidad="identity_cluster", decision=decision,
-            filas=unidades, muestra=muestra, excepciones=excepciones,
+            filas=filas, muestra=muestra, excepciones=excepciones,
             resumen={
-                "unidades": len(unidades),
-                "obras": sum(int(u["obras"]) for u in unidades),
-                "roles": sorted({str(u["roles"] or "") for u in unidades}),
+                "unidades": len(filas),
+                "obras": sum(int(u["obras"]) for u in filas),
+                "roles": sorted({str(u["roles"] or "") for u in filas}),
                 "excepciones": len(excepciones),
                 "criterio": {"tramo": tramo.upper(), "role": role_key, "limite": limite},
             },
@@ -101,6 +137,62 @@ class ReviewEngine:
             filas=filas, muestra=filas[:5], excepciones=[],
             resumen={"obras": len(filas)},
         )
+
+    async def decidir_identidad(
+        self, person_key: str, decision: str, *, decided_by: str,
+        target_person_key: str | None = None, role_key: str | None = None,
+        note: str | None = None, evidence: str | None = None, apply: bool = False,
+    ) -> dict[str, Any]:
+        """Decisión individual sobre el **clúster canónico** de identidad (`person_key`).
+
+        Vocabulario: `accept` | `map_to_existing` | `create_person` | `not_a_person` | `leave_unresolved`.
+        `map_to_existing` exige `--target-person` (persona destino concreta); el resto no lo admite.
+        Operar aquí (y no sobre `ambiguous_identity`, que es una vista derivada) evita decidir dos veces
+        las mismas obras: el clúster cubre sus obras ambiguas y resueltas.
+        """
+        if decision not in _DECISIONES_IDENTITY:
+            raise ValueError(f"decisión de identidad inválida: {decision}")
+        if decision == "map_to_existing" and not target_person_key:
+            raise ValueError("map_to_existing exige --target-person")
+        if decision != "map_to_existing" and target_person_key:
+            raise ValueError(f"{decision} no admite --target-person")
+        fila = await self._repo.cluster_identidad(person_key, role_key)
+        if fila is None:
+            raise LookupError(f"clúster de identidad inexistente: {person_key}")
+        role = fila.get("role_key") or ""
+        clave = f"identity||{person_key}|{role}"
+        existentes = await self._repo.decisiones_existentes([clave])
+        if existentes and existentes[clave] != decision:
+            raise DecisionExistenteDistinta(
+                f"ya hay decisión {existentes[clave]!r} para {person_key}; no se altera"
+            )
+        candidatos = json.loads(fila.get("candidatos_json") or "[]")
+        nuevas = [] if existentes else [{
+            "decision_key": clave,
+            "item_key": fila["item_key"],
+            "decision_type": "identity",
+            "person_key": person_key,
+            "work_key": None,
+            "role_key": fila.get("role_key"),
+            "decision": decision,
+            "target_person_key": target_person_key,
+            "attribution_status": None,
+            "evidence_json": json.dumps(
+                {"decision_mode": "individual", "batch": "IDENTIDAD",
+                 "propuesta": person_key,
+                 "candidatos": [c.get("person_key") for c in candidatos],
+                 "researcher_note": evidence or note},
+                ensure_ascii=False,
+            ),
+            "notes": note,
+            "decided_by": decided_by,
+            "batch": "IDENTIDAD",
+        }]
+        insertadas = await self._repo.insertar_decisiones(nuevas) if apply else 0
+        return {
+            "person_key": person_key, "decision": decision, "target_person_key": target_person_key,
+            "ya_existente": bool(existentes), "insertadas": insertadas, "aplicado": apply,
+        }
 
     async def decidir_atribucion(
         self, work_key: str, valor: str, *, decided_by: str, note: str | None = None,

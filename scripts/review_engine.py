@@ -7,8 +7,11 @@ individuales auditables en `review_decisions` (una por unidad). **No ejecuta nad
 Uso:
     python -m scripts.review_engine conflicts  --out preview_conflictos.json
     python -m scripts.review_engine preview --tramo A --decision accept --batch A-0001 --out preview_A.json
+    python -m scripts.review_engine preview --tramo F --decision leave_unresolved --batch F-0001 --out preview_F.json
     python -m scripts.review_engine apply --preview preview_A.json --confirm <hash> --decided-by admin
     python -m scripts.review_engine apply --preview preview_A.json --confirm <hash> --decided-by admin --apply
+    python -m scripts.review_engine decide --tipo identity --person "name:…" \
+        --decision map_to_existing --target-person "viaf:…" --decided-by admin --apply
 """
 
 from __future__ import annotations
@@ -41,8 +44,8 @@ async def main() -> int:
     p_conf = sub.add_parser("conflicts", help="preview de los conflictos persona↔atribución")
     p_conf.add_argument("--out", type=Path, required=True)
 
-    p_prev = sub.add_parser("preview", help="preview de un lote de identidad")
-    p_prev.add_argument("--tramo", required=True)
+    p_prev = sub.add_parser("preview", help="preview de un lote de identidad (tramo A–F)")
+    p_prev.add_argument("--tramo", required=True, help="tramo de identidad A–F (F = ambiguo)")
     p_prev.add_argument("--decision", required=True)
     p_prev.add_argument("--batch", required=True)
     p_prev.add_argument("--role", default=None)
@@ -55,12 +58,15 @@ async def main() -> int:
     p_apply.add_argument("--decided-by", required=True)
     p_apply.add_argument("--apply", action="store_true", help="escribir en review_decisions")
 
-    p_dec = sub.add_parser("decide", help="decisión individual: conflicto persona↔atribución o atribución de obra")
-    p_dec.add_argument("--work", required=True, help="work_key (p. ej. PDMX:Qm…)")
-    p_dec.add_argument("--tipo", default="conflict", choices=("conflict", "attribution"))
+    p_dec = sub.add_parser("decide", help="decisión individual: identidad, conflicto o atribución")
+    p_dec.add_argument("--tipo", default="conflict", choices=("identity", "conflict", "attribution"))
+    p_dec.add_argument("--work", default=None, help="work_key (conflict/attribution)")
+    p_dec.add_argument("--person", default=None, help="person_key del clúster canónico (identity)")
+    p_dec.add_argument("--target-person", default=None, help="person_key destino (identity: map_to_existing)")
     p_dec.add_argument(
         "--decision", required=True,
         help=(
+            "identity: accept|map_to_existing|create_person|not_a_person|leave_unresolved · "
             "conflict: persona_gana|atribucion_gana|revisar_manual · "
             "attribution: anonymous|traditional|unknown|identified"
         ),
@@ -84,12 +90,24 @@ async def main() -> int:
     engine = ReviewEngine(SqlReviewRepository(Database(settings)))
 
     if args.comando == "decide":
-        if args.tipo == "attribution":
+        if args.tipo == "identity":
+            if not args.person:
+                parser.error("--tipo identity exige --person")
+            resultado = await engine.decidir_identidad(
+                args.person, args.decision, decided_by=args.decided_by,
+                target_person_key=args.target_person, note=args.note,
+                evidence=args.evidence, apply=args.apply,
+            )
+        elif args.tipo == "attribution":
+            if not args.work:
+                parser.error("--tipo attribution exige --work")
             resultado = await engine.decidir_atribucion(
                 args.work, args.decision, decided_by=args.decided_by, note=args.note,
                 evidence=args.evidence, apply=args.apply,
             )
         else:
+            if not args.work:
+                parser.error("--tipo conflict exige --work")
             resultado = await engine.decidir_conflicto(
                 args.work, args.decision, decided_by=args.decided_by, note=args.note,
                 evidence=args.evidence, apply=args.apply,
