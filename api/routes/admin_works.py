@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 
 from application.use_cases.work_admin import (
+    CreateWorkAdmin,
     GetWorkAdmin,
     ListWorksAdmin,
     UpdateWorkAdmin,
@@ -12,11 +13,17 @@ from domain.entities.work import Work
 from fastapi import APIRouter, Depends, Query
 
 from api.dependencies import (
+    CreateWorkAdminDep,
     GetWorkAdminDep,
     ListWorksAdminDep,
     UpdateWorkAdminDep,
 )
-from api.schemas import WorkAdminDetail, WorkAdminListResult, WorkAdminUpdateRequest
+from api.schemas import (
+    CreateWorkRequest,
+    WorkAdminDetail,
+    WorkAdminListResult,
+    WorkAdminUpdateRequest,
+)
 
 router = APIRouter(prefix="/api/admin/works", tags=["admin-works"])
 
@@ -35,6 +42,28 @@ def _to_detail(d: WorkAdminDetailData) -> WorkAdminDetail:
             "parts_names": d.parts_names,
         }
     )
+
+
+@router.post(
+    "",
+    response_model=WorkAdminDetail,
+    status_code=201,
+    summary="Crear obra (admin)",
+    description="Alta de una obra nueva (pasa por `WorkRepository.create`). Mínimos: title, origin.",
+)
+async def create_work(
+    payload: CreateWorkRequest,
+    uc: CreateWorkAdmin = Depends(CreateWorkAdminDep),
+) -> WorkAdminDetail:
+    work = Work(
+        title=payload.title,
+        origin=payload.origin,
+        origin_id=payload.origin_id,
+        license=payload.license,
+        song_name=payload.song_name,
+        attribution_type=payload.attribution_type,
+    )
+    return _to_detail(await uc.execute(work=work))
 
 
 @router.get(

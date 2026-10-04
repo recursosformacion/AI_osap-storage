@@ -61,7 +61,12 @@ from application.use_cases.voting import (
     RecordVote,
     RefreshVotingStatistics,
 )
-from application.use_cases.work_admin import GetWorkAdmin, ListWorksAdmin, UpdateWorkAdmin
+from application.use_cases.work_admin import (
+    CreateWorkAdmin,
+    GetWorkAdmin,
+    ListWorksAdmin,
+    UpdateWorkAdmin,
+)
 from application.use_cases.work_attribution_ai import (
     AddReviewRelation,
     GetWorkAttributionProposal,
@@ -175,6 +180,7 @@ class Container:
     delete_composer_identifier: DeleteComposerIdentifier
     list_works_admin: ListWorksAdmin
     get_work_admin: GetWorkAdmin
+    create_work_admin: CreateWorkAdmin
     update_work_admin: UpdateWorkAdmin
     clean_composer_names: CleanComposerNames
     prune_composers: PruneComposers
@@ -384,6 +390,7 @@ def build_container(settings: Settings) -> Container:
     delete_composer_identifier = DeleteComposerIdentifier(composer_repo)
     list_works_admin = ListWorksAdmin(work_repo)
     get_work_admin = GetWorkAdmin(work_repo)
+    create_work_admin = CreateWorkAdmin(work_repo)
     update_work_admin = UpdateWorkAdmin(work_repo)
     clean_composer_names = CleanComposerNames(composer_repo)
     prune_composers = PruneComposers(composer_repo)
@@ -432,6 +439,7 @@ def build_container(settings: Settings) -> Container:
         delete_composer_identifier=delete_composer_identifier,
         list_works_admin=list_works_admin,
         get_work_admin=get_work_admin,
+        create_work_admin=create_work_admin,
         update_work_admin=update_work_admin,
         clean_composer_names=clean_composer_names,
         prune_composers=prune_composers,

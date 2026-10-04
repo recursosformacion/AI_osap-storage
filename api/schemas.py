@@ -255,6 +255,17 @@ class WorkAdminUpdateRequest(Model):
     parts_names: list[str] | None = None
 
 
+class CreateWorkRequest(Model):
+    """Alta de obra (mínima): campos canónicos requeridos por la aportación create_work."""
+
+    title: str
+    origin: str
+    origin_id: str | None = None
+    license: str | None = None
+    song_name: str | None = None
+    attribution_type: str | None = None
+
+
 class ResourceRead(Model):
     relative_path: str
     format: str | None = None

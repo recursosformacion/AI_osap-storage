@@ -68,6 +68,19 @@ class GetWorkAdmin:
                                instruments=instruments, parts_names=parts)
 
 
+class CreateWorkAdmin:
+    """Alta administrativa de una obra (pasa por `WorkRepository.create`)."""
+
+    def __init__(self, works: WorkRepository) -> None:
+        self._works = works
+
+    async def execute(self, *, work: Work) -> WorkAdminDetail:
+        created = await self._works.create(work)
+        if created.id is None:
+            raise ValueError("work sin id tras crear")
+        return await GetWorkAdmin(self._works).execute(created.id)
+
+
 class UpdateWorkAdmin:
     """Edita los metadatos de una obra y sus listas (tags/genres/instruments/parts)."""
 

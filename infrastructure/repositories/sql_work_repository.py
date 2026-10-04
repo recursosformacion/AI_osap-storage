@@ -136,7 +136,7 @@ class SqlWorkRepository(WorkRepository):
                     work.attribution_note, work.title, work.song_name, work.subtitle,
                     work.opus, work.catalogue, work.musical_key, work.year, work.duration,
                     work.measures, work.pages, work.parts, work.complexity, work.description,
-                    work.license, int(work.public_domain), None, None,
+                    work.license, int(work.public_domain), work.origin, work.origin_id,
                 ),
             )
             work.id = cur.lastrowid
