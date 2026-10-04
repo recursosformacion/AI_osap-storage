@@ -19,43 +19,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import re
 import sys
 from collections import defaultdict
 
+from domain.services.ensemble_codes import canonical_code, is_voice_block  # noqa: F401
 from infrastructure.config import Settings
 from infrastructure.db.connection import Database
-
-_TOKENS = ["BAR", "MZ", "TR", "CT", "S", "A", "T", "B", "C", "V"]
-_SEP = re.compile(r"[\s/_.\-]+")
-# Vacío, con plantilla o con dígitos -> no es un conjunto de voces.
-_NOISE = re.compile(r"(\{\{|\}\}|=|\d)")
-
-
-def is_voice_block(text: str) -> bool:
-    """True si el texto se compone íntegramente de símbolos de voz (BAR, S, A...)."""
-    if not text or _NOISE.search(text):
-        return False
-    i = 0
-    while i < len(text):
-        for token in _TOKENS:
-            if text.startswith(token, i):
-                i += len(token)
-                break
-        else:
-            return False
-    return True
-
-
-def canonical_code(code: str) -> str:
-    upper = str(code or "").strip().upper()
-    parts = [p for p in _SEP.split(upper) if p]
-    if len(parts) > 1 and all(is_voice_block(p) for p in parts):
-        # Multi-coro: separador canónico '.' (SATB-SATB == SATB.SATB).
-        return ".".join(parts)
-    # Descriptivos: se unifican guiones/puntos/espacios a un solo espacio
-    # (SOLO MEZZO-SOPRANO == SOLO MEZZO SOPRANO).
-    return " ".join(parts)
 
 
 async def run(dry_run: bool) -> None:

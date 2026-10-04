@@ -41,5 +41,6 @@ class Catalogue:
     catalogue_name: str
     creator: str
     ordering_criterion: str
+    description: str = ""
     id: int | None = None
     created_at: datetime | None = None

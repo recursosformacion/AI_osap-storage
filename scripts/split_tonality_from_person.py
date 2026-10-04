@@ -148,7 +148,7 @@ def main() -> int:
                 found.append((str(person["persons_id"]), cleaned, str(person["persons_name"]),
                               tonality))
         print(f"personas: {len(people)}  con tono en el nombre: {len(found)}")
-        for pid, cleaned, original, tonality in found[:15]:
+        for _pid, cleaned, original, tonality in found[:15]:
             print(f"  {original[:62]!r}\n      -> {cleaned[:52]!r}  tono={tonality!r}")
         dist = Counter(t for *_, t in found)
         print("tonos:", dict(dist.most_common(10)))

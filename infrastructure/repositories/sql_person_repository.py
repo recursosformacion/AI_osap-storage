@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import uuid4
 
 from domain.entities.composer import (
@@ -822,7 +822,6 @@ class SqlPersonRepository(ComposerRepository):
         key_fact: str | None = None,
         references: list[dict[str, str]] | None = None,
     ) -> None:
-        now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
                 "UPDATE persons SET "
@@ -831,13 +830,13 @@ class SqlPersonRepository(ComposerRepository):
                 "persons_biography_nationality = COALESCE(%s, persons_biography_nationality), "
                 "persons_biography_key_works = COALESCE(%s, persons_biography_key_works), "
                 "persons_biography_key_fact = COALESCE(%s, persons_biography_key_fact), "
-                "persons_biography_references = COALESCE(%s, persons_biography_references), "
-                "persons_biography_updated_at = %s WHERE persons_id = %s",
+                "persons_biography_references = COALESCE(%s, persons_biography_references) "
+                "WHERE persons_id = %s",
                 (summary, era, nationality,
                  json.dumps(key_works) if key_works is not None else None,
                  key_fact,
                  json.dumps(references) if references is not None else None,
-                 now_str, person_id),
+                 person_id),
             )
 
     async def delete_identifier(self, person_id: str, identifier_id: int) -> None:

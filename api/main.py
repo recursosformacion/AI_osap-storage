@@ -28,6 +28,7 @@ from api.routes import (
     admin_works,
     archives,
     catalogues,
+    classifications,
     composers,
     cpdl,
     downloads,
@@ -113,6 +114,11 @@ def create_app() -> FastAPI:
     app.include_router(cpdl.router)
     app.include_router(health.router)
     app.include_router(admin_epochs.router)
+    app.include_router(admin_epochs.public_router)
+    app.include_router(classifications.genres_router)
+    app.include_router(classifications.instrument_categories_router)
+    app.include_router(classifications.instruments_router)
+    app.include_router(classifications.ensembles_router)
     app.include_router(providers.router)
     app.include_router(files.router)
     app.include_router(downloads.router)

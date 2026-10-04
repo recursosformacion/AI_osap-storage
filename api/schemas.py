@@ -574,6 +574,7 @@ class CatalogueRead(Model):
     catalogue_name: str
     creator: str
     ordering_criterion: str
+    description: str = ""
     created_at: datetime | None = None
 
 

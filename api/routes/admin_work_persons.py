@@ -4,7 +4,12 @@ Fuente canónica: `works_person_roles` (work_id, person_id, role_id) + `persons`
 Solo lectura; no toca datos ni el modelo.
 
 Endpoints:
-  GET /api/admin/work-persons   → listado Obra | Persona | Rol (con ?missing=1: obras sin persona)
+  GET /api/admin/work-persons   → listado Obra | Persona | Rol | Autoría | Origen
+                                  (con ?missing=1: obras sin persona)
+
+Autoría: `works.works_attr_type` (ANONIMA/TRADICIONAL/POPULAR/ATRIBUIDA) permite saber si es
+correcto que una obra no tenga autor. Origen: `works.works_origin` (proveedor/fuente).
+Ordenación por columna con lista blanca (`sort` + `direction`); `sort` desconocido cae a obra.
 """
 
 from __future__ import annotations
@@ -19,6 +24,15 @@ from api.dependencies import get_db
 router = APIRouter(prefix="/api/admin/work-persons", tags=["admin-works"])
 
 _TITLE = "COALESCE(NULLIF(w.works_title, ''), NULLIF(w.works_song_name, ''), CONCAT('Obra #', w.id))"
+
+# Lista blanca columna → expresión SQL. Nunca se interpola texto del cliente.
+_SORT_COLUMNS: dict[str, str] = {
+    "work": "w.id",
+    "person": "p.persons_name",
+    "role": "ro.role_name",
+    "attribution": "w.works_attr_type",
+    "origin": "w.works_origin",
+}
 
 
 def _filters(
@@ -41,6 +55,14 @@ def _filters(
     return (" AND ".join(where) if where else "1=1"), params
 
 
+def _order_by(sort: str, direction: str) -> str:
+    column = _SORT_COLUMNS.get(sort)
+    if column is None:
+        column, direction = "w.id", "desc"
+    dir_sql = "ASC" if direction.strip().lower() == "asc" else "DESC"
+    return f"{column} {dir_sql}, w.id DESC, ro.id ASC"
+
+
 @router.get("/roles", summary="Roles realmente usados en works_person_roles")
 async def used_roles(db: Database = Depends(get_db)):
     """Distinct de roles presentes en `works_person_roles` (solo los usados)."""
@@ -61,11 +83,14 @@ async def work_persons(
     role: str | None = Query(default=None, description="Filtra por rol (composer, arranger…)"),
     person_id: str | None = Query(default=None, description="Filtra por persona (exacto)"),
     missing: bool = Query(default=False, description="Solo obras SIN ninguna persona/rol"),
+    sort: str = Query(default="work", description="Columna de orden: work|person|role|attribution|origin"),
+    direction: str = Query(default="desc", description="asc|desc"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Database = Depends(get_db),
 ):
     where, params = _filters(q, role, missing, person_id)
+    order_by = _order_by(sort, direction)
     base_from = (
         "FROM works w "
         "LEFT JOIN works_person_roles r ON r.works_person_roles_work_id = w.id "
@@ -74,9 +99,10 @@ async def work_persons(
     )
     sql = (
         f"SELECT w.id AS work_id, {_TITLE} AS work_title, w.works_catalogue AS catalogue, "
+        "w.works_attr_type AS attribution, w.works_origin AS origin, "
         "r.works_person_roles_person_id AS person_id, p.persons_name AS person_name, "
         "ro.role_name AS role_name "
-        f"{base_from} WHERE {where} ORDER BY w.id DESC, ro.id LIMIT %s OFFSET %s"
+        f"{base_from} WHERE {where} ORDER BY {order_by} LIMIT %s OFFSET %s"
     )
     count_sql = f"SELECT COUNT(*) AS total {base_from} WHERE {where}"
     async with db.connection() as conn, conn.cursor() as cur:

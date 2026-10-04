@@ -1,13 +1,28 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 
-import { authHeaders, resolveToken } from '../auth'
+import { authHeaders } from '../auth'
 
 // Listado de la relación obra ↔ persona (works_person_roles + persons + roles).
-// Permite investigar qué persona está asociada a qué obra y en calidad de qué,
-// y llegar a la ficha de la obra (SPA /t/works/:id) o de la persona (página curada
-// /admin/maestros?id=…&mode=view).
+// Permite investigar qué persona está asociada a qué obra y en calidad de qué, y llegar a la
+// ficha de la obra (/t/works/:id) o de la persona (/t/persons/:id) con navegación interna
+// (react-router), de modo que el token de sessionStorage sobreviva.
+//
+// Columnas: Obra · Persona · Rol · Autoría (works_attr_type) · Origen (works_origin) · Acciones.
+// Cabeceras ordenables (asc/desc) y paginación que recarga de verdad cada página.
 
 const API = '/api/admin/work-persons'
+
+type SortKey = 'work' | 'person' | 'role' | 'attribution' | 'origin'
+type Direction = 'asc' | 'desc'
+
+const DEFAULT_DIRECTION: Record<SortKey, Direction> = {
+  work: 'desc',
+  person: 'asc',
+  role: 'asc',
+  attribution: 'asc',
+  origin: 'asc',
+}
 
 interface Row {
   work_id: number
@@ -16,6 +31,8 @@ interface Row {
   person_id: string | null
   person_name: string | null
   role_name: string | null
+  attribution: string | null
+  origin: string | null
 }
 
 async function getJson<T>(url: string): Promise<T> {
@@ -24,9 +41,43 @@ async function getJson<T>(url: string): Promise<T> {
   return (await response.json()) as T
 }
 
-function tokenParam(): string {
-  const token = resolveToken()
-  return token ? `?token=${encodeURIComponent(token)}` : ''
+function SortHeader({
+  label,
+  sortKey,
+  sort,
+  direction,
+  onSort,
+}: {
+  label: string
+  sortKey: SortKey
+  sort: SortKey
+  direction: Direction
+  onSort: (key: SortKey) => void
+}) {
+  const active = sort === sortKey
+  const ariaSort = active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'
+  return (
+    <th scope="col" aria-sort={ariaSort}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        style={{
+          background: 'transparent',
+          border: 0,
+          color: 'inherit',
+          font: 'inherit',
+          letterSpacing: 'inherit',
+          textTransform: 'inherit',
+          cursor: 'pointer',
+          padding: 0,
+        }}
+        title={`Ordenar por ${label}`}
+      >
+        {label}
+        {active ? (direction === 'asc' ? ' ↑' : ' ↓') : ''}
+      </button>
+    </th>
+  )
 }
 
 export default function WorkPersons() {
@@ -34,8 +85,11 @@ export default function WorkPersons() {
   const [total, setTotal] = useState(0)
   const [roleOptions, setRoleOptions] = useState<{ value: string; label: string }[]>([])
   const [q, setQ] = useState('')
+  const [appliedQ, setAppliedQ] = useState('')
   const [role, setRole] = useState('')
   const [missing, setMissing] = useState(false)
+  const [sort, setSort] = useState<SortKey>('work')
+  const [direction, setDirection] = useState<Direction>('desc')
   const [offset, setOffset] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -45,8 +99,13 @@ export default function WorkPersons() {
     setLoading(true)
     setError(null)
     try {
-      const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
-      if (q.trim()) params.set('q', q.trim())
+      const params = new URLSearchParams({
+        limit: String(limit),
+        offset: String(offset),
+        sort,
+        direction,
+      })
+      if (appliedQ) params.set('q', appliedQ)
       if (role.trim()) params.set('role', role.trim())
       if (missing) params.set('missing', 'true')
       const data = await getJson<{ items: Row[]; total: number }>(`${API}?${params}`)
@@ -57,7 +116,7 @@ export default function WorkPersons() {
     } finally {
       setLoading(false)
     }
-  }, [q, role, missing, offset])
+  }, [appliedQ, role, missing, offset, sort, direction])
 
   useEffect(() => {
     void load()
@@ -77,7 +136,17 @@ export default function WorkPersons() {
     })()
   }, [])
 
-  const token = tokenParam()
+  function onSort(key: SortKey) {
+    setOffset(0)
+    if (key === sort) {
+      setDirection((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSort(key)
+      setDirection(DEFAULT_DIRECTION[key])
+    }
+  }
+
+  const pageEnd = Math.min(offset + rows.length, total)
 
   return (
     <section>
@@ -91,7 +160,7 @@ export default function WorkPersons() {
         onSubmit={(e) => {
           e.preventDefault()
           setOffset(0)
-          void load()
+          setAppliedQ(q.trim())
         }}
       >
         <div className="row">
@@ -101,7 +170,13 @@ export default function WorkPersons() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
-          <select value={role} onChange={(e) => setRole(e.target.value)}>
+          <select
+            value={role}
+            onChange={(e) => {
+              setOffset(0)
+              setRole(e.target.value)
+            }}
+          >
             <option value="">(todos los roles)</option>
             {roleOptions.map((o) => (
               <option key={o.value} value={o.label}>
@@ -110,7 +185,14 @@ export default function WorkPersons() {
             ))}
           </select>
           <label style={{ margin: 0 }}>
-            <input type="checkbox" checked={missing} onChange={(e) => setMissing(e.target.checked)} />{' '}
+            <input
+              type="checkbox"
+              checked={missing}
+              onChange={(e) => {
+                setOffset(0)
+                setMissing(e.target.checked)
+              }}
+            />{' '}
             Solo obras sin persona
           </label>
           <button type="submit">Buscar</button>
@@ -124,34 +206,77 @@ export default function WorkPersons() {
         <table>
           <thead>
             <tr>
-              <th>Obra</th>
-              <th>Persona</th>
-              <th>Concepto / rol</th>
-              <th>Acciones</th>
+              <SortHeader
+                label="Obra"
+                sortKey="work"
+                sort={sort}
+                direction={direction}
+                onSort={onSort}
+              />
+              <SortHeader
+                label="Persona"
+                sortKey="person"
+                sort={sort}
+                direction={direction}
+                onSort={onSort}
+              />
+              <SortHeader
+                label="Concepto / rol"
+                sortKey="role"
+                sort={sort}
+                direction={direction}
+                onSort={onSort}
+              />
+              <SortHeader
+                label="Autoría"
+                sortKey="attribution"
+                sort={sort}
+                direction={direction}
+                onSort={onSort}
+              />
+              <SortHeader
+                label="Origen"
+                sortKey="origin"
+                sort={sort}
+                direction={direction}
+                onSort={onSort}
+              />
             </tr>
           </thead>
           <tbody>
             {rows.map((r, i) => (
               <tr key={`${r.work_id}-${r.person_id ?? 'none'}-${r.role_name ?? 'none'}-${i}`}>
                 <td>
-                  {r.work_title ?? `Obra #${r.work_id}`}
+                  <Link
+                    to={`/t/works/${r.work_id}`}
+                    className="text-osap-accent hover:underline"
+                    title="Abrir la ficha de la obra"
+                  >
+                    {r.work_title ?? `Obra #${r.work_id}`}
+                  </Link>
                   {r.catalogue ? <span className="muted"> · {r.catalogue}</span> : null}
                 </td>
-                <td>{r.person_name ?? <em className="muted">— sin persona —</em>}</td>
-                <td>{r.role_name ?? <em className="muted">— sin rol —</em>}</td>
-                <td className="tools">
-                  <a href={`/admin/t/works/${r.work_id}${token}`}>→ Obra</a>
+                <td>
                   {r.person_id ? (
-                    <a href={`/admin/maestros?id=${encodeURIComponent(r.person_id)}&mode=view${token.replace('?', '&')}`}>
-                      → Persona
-                    </a>
-                  ) : null}
+                    <Link
+                      to={`/t/persons/${encodeURIComponent(r.person_id)}`}
+                      className="text-osap-accent hover:underline"
+                      title="Abrir la ficha de la persona"
+                    >
+                      {r.person_name ?? r.person_id}
+                    </Link>
+                  ) : (
+                    <em className="muted">— sin persona —</em>
+                  )}
                 </td>
+                <td>{r.role_name ?? <em className="muted">— sin rol —</em>}</td>
+                <td>{r.attribution ?? <span className="muted">—</span>}</td>
+                <td>{r.origin ?? <span className="muted">—</span>}</td>
               </tr>
             ))}
             {rows.length === 0 && !loading ? (
               <tr>
-                <td colSpan={4} className="empty">
+                <td colSpan={5} className="empty">
                   Sin resultados.
                 </td>
               </tr>
@@ -159,15 +284,21 @@ export default function WorkPersons() {
           </tbody>
         </table>
         <div className="pager">
-          <button className="ghost" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - limit))}>
+          <button
+            type="button"
+            className="ghost"
+            disabled={offset === 0}
+            onClick={() => setOffset(Math.max(0, offset - limit))}
+          >
             ←
           </button>
           <span>
-            {offset + 1}–{Math.min(offset + limit, total)} de {total}
+            {total === 0 ? '0' : `${offset + 1}–${pageEnd}`} de {total}
           </span>
           <button
+            type="button"
             className="ghost"
-            disabled={offset + limit >= total}
+            disabled={pageEnd >= total}
             onClick={() => setOffset(offset + limit)}
           >
             →

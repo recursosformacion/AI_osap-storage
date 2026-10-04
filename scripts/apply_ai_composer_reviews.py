@@ -224,8 +224,8 @@ def main() -> int:
                         " persons_review_status='reviewed', persons_review_reason=NULL,"
                         " persons_reviewed_at=NOW(6), persons_biography_summary=%s,"
                         " persons_biography_era=%s, persons_biography_nationality=%s,"
-                        " persons_biography_key_works=%s, persons_biography_key_fact=%s,"
-                        " persons_biography_updated_at=NOW(6) WHERE persons_id=%s",
+                        " persons_biography_key_works=%s, persons_biography_key_fact=%s"
+                        " WHERE persons_id=%s",
                         (
                             new_name,
                             entry.get("summary"),

@@ -33,7 +33,6 @@ sys.path.insert(0, str(ROOT))
 
 import pymysql  # noqa: E402
 import yaml  # noqa: E402
-from domain.services.composer_names import normalize_composer_name as norm  # noqa: E402
 
 _JUNK = re.compile(r"[:!?*#\"\\|<>\[\]{}~^`\u0000-\u001f\u007f]")
 _SPACES = re.compile(r"\s+")
@@ -102,13 +101,6 @@ def main() -> int:
         with conn.cursor() as cur:
             cur.execute("SELECT persons_id, persons_name FROM persons")
             people = cur.fetchall()
-            cur.execute("SELECT person_id, person_aliases_normalized_alias FROM persons_aliases")
-            alias_index = {
-                str(r["person_aliases_normalized_alias"]): str(r["person_id"]) for r in cur.fetchall()
-            }
-            cur.execute("SELECT persons_id, persons_name FROM persons")
-            name_index = {norm(r["persons_name"]): str(r["persons_id"]) for r in cur.fetchall()}
-
         pending: list[dict] = []
         composites = junks = cleanable = with_years = 0
         for person in people:

@@ -123,9 +123,8 @@ def is_person_name(name: str, tokens: list[str]) -> bool:
         return False
     if "/" in name or "\\" in name:  # rutas/IDs (onmi.misc/…)
         return False
-    if any(_GLUED.match(tok) for tok in tokens):  # junk pegado al apellido
-        return False
-    return True
+    # junk pegado al apellido
+    return not any(_GLUED.match(tok) for tok in tokens)
 
 
 def is_reliable_keeper(tokens: list[str]) -> bool:
@@ -250,7 +249,7 @@ def main() -> int:
         if len(plan) <= args.max_families or args.all:
             print(f"\n### apellido '{surname}' ({len(members)})")
             print(f"   KEEPER [{keeper['obras']:>3}] {keeper['persons_name']!r} src={keeper['src']}")
-            for m, verdict in autos:
+            for m, _verdict in autos:
                 print(f"   AUTO          [{m['obras']:>3}] {m['persons_name']!r}")
             for m, verdict in reviews[:12]:
                 print(f"   {verdict:<28} [{m['obras']:>3}] {m['persons_name']!r}")

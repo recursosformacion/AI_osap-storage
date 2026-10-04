@@ -25,10 +25,17 @@ _MAX_GENRES = 5
 
 # Columnas del listado: sin `answer_json` (la respuesta completa del modelo solo se sirve en
 # el detalle). `evidence_json` sí viaja porque la tarjeta lo muestra para revisar de un vistazo.
-_LIST_COLUMNS = (
-    "id, work_id, batch_id, resolution, person_match, candidate_person_id, candidate_name, "
-    "role_id, role_name, status, confidence, model, prompt_version, evidence_json, review_note, "
-    "reviewed_by, reviewed_at, created_at"
+# Se une `works` para traer el TÍTULO de la obra (imprescindible para decidir) y su nota de
+# atribución (`works_attribution_note`) como comentario de contexto.
+_LIST_SELECT = (
+    "SELECT p.id, p.work_id, p.batch_id, p.resolution, p.person_match, p.candidate_person_id, "
+    "p.candidate_name, p.role_id, p.role_name, p.status, p.confidence, p.model, "
+    "p.prompt_version, p.evidence_json, p.review_note, p.reviewed_by, p.reviewed_at, "
+    "p.created_at, "
+    "COALESCE(NULLIF(w.works_title, ''), NULLIF(w.works_song_name, ''), "
+    "CONCAT('Obra #', p.work_id)) AS work_title, "
+    "w.works_attribution_note AS work_note "
+    "FROM work_person_ai_proposals p LEFT JOIN works w ON w.id = p.work_id"
 )
 
 
@@ -130,14 +137,13 @@ class SqlWorkAttributionAiRepository:
             return int(cur.lastrowid or 0)
 
     async def list_proposals(self, status: str | None, limit: int, offset: int) -> dict[str, Any]:
-        where = "WHERE status = %s" if status else ""
+        where = "WHERE p.status = %s" if status else ""
         params: list[Any] = [status] if status else []
         async with self._db.connection() as conn, conn.cursor() as cur:
-            await cur.execute(f"SELECT COUNT(*) AS total FROM work_person_ai_proposals {where}", params)
+            await cur.execute(f"SELECT COUNT(*) AS total FROM work_person_ai_proposals p {where}", params)
             total = int((await cur.fetchone())["total"])
             await cur.execute(
-                f"SELECT {_LIST_COLUMNS} FROM work_person_ai_proposals {where} "
-                f"ORDER BY id DESC LIMIT %s OFFSET %s",
+                f"{_LIST_SELECT} {where} ORDER BY p.id DESC LIMIT %s OFFSET %s",
                 [*params, limit, offset],
             )
             return {"items": [dict(r) for r in await cur.fetchall()], "total": total}

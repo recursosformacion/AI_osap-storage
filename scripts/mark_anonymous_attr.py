@@ -28,7 +28,7 @@ _TRAD_PATTERN = "tradicional|traditional|popular|folk|volkslied|trad\\."
 
 
 def _db_config() -> dict:
-    with open(ROOT / "config.yaml", "r", encoding="utf-8") as handle:
+    with open(ROOT / "config.yaml", encoding="utf-8") as handle:
         cfg = yaml.safe_load(handle) or {}
     db = cfg.get("db") or cfg.get("database") or {}
     return {
@@ -40,7 +40,7 @@ def _db_config() -> dict:
     }
 
 
-_CLASSIFY = f"""
+_CLASSIFY = """
     CASE
         WHEN w.works_title REGEXP %(trad)s OR w.works_attribution_note REGEXP %(trad)s
             THEN 'TRADICIONAL'
@@ -50,7 +50,7 @@ _CLASSIFY = f"""
     END
 """
 
-_FILTER = f"""
+_FILTER = """
     w.works_attr_type IS NULL
     AND NOT EXISTS (
         SELECT 1 FROM works_person_roles r

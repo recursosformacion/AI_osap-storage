@@ -18,7 +18,6 @@ from __future__ import annotations
 import argparse
 import contextlib
 import sys
-import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -88,7 +87,7 @@ def _norm_catalogue(raw: str | None) -> str:
 
 
 def _db() -> dict:
-    with open(ROOT / "config.yaml", "r", encoding="utf-8") as handle:
+    with open(ROOT / "config.yaml", encoding="utf-8") as handle:
         cfg = yaml.safe_load(handle) or {}
     conf = cfg.get("db") or cfg.get("database") or {}
     return {

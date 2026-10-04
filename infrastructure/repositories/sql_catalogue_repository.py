@@ -20,6 +20,7 @@ def _row_to_catalogue(row: dict) -> Catalogue:
         catalogue_name=row["catalog_name"],
         creator="",
         ordering_criterion=row.get("catalog_format_template") or "",
+        description=row.get("catalog_description") or "",
         created_at=row.get("created_at"),
     )
 

@@ -53,4 +53,4 @@ def test_catalogues_keys(client):
     assert r.status_code == 200
     item = r.json()[0]
     assert set(item.keys()) == {"id", "prefix", "composer", "catalogue_name",
-                                "creator", "ordering_criterion", "created_at"}
+                                "creator", "ordering_criterion", "description", "created_at"}
