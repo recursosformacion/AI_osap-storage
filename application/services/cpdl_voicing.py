@@ -28,6 +28,8 @@ from __future__ import annotations
 import json
 import re
 
+from domain.services.ensemble_codes import canonical_code
+
 # Cualquier resto de plantilla MediaWiki / parámetro nombrado descarta ese elemento.
 _TEMPLATE_NOISE = re.compile(r"(\{\{|\}\}|=)")
 # Token válido: debe contener letras y no quedarse en el conteo (descarta "4", "4/5"...).
@@ -57,11 +59,15 @@ def _descriptive(raw: str) -> str:
 
 
 def normalize_term(raw: str) -> str:
-    """Canonicaliza un voicing para comparación exacta (sin tocar el dato CPDL)."""
+    """Canonicaliza un voicing para comparación exacta (sin tocar el dato CPDL).
+
+    Aplica `canonical_code`: colapsa espacios intra-formación (`SA T B` -> `SATB`) y
+    preserva `.` como separador de multi-coro; nunca trata la notación vocal como basura.
+    """
     s = _descriptive(raw)
     s = _KEEP_RE.sub(" ", s)
     s = " ".join(s.split()).upper()
-    return s.strip(" .-")
+    return canonical_code(s.strip(" .-"))
 
 
 def is_useful_term(raw: str) -> bool:
