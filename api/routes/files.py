@@ -10,10 +10,11 @@ from application.use_cases.list_files import ListFiles
 from application.use_cases.register_file import RegisterFile, RegisterFileCommand
 from application.use_cases.start_download import StartDownload, StartDownloadCommand
 from application.use_cases.stream_file import StreamFile
+from application.use_cases.upload_file import UploadFile, UploadFileCommand
 from application.use_cases.verify_file import VerifyFile
 from domain.entities.storage_location import StorageLocation
 from domain.entities.storage_provider import StorageProvider
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from infrastructure.config import Settings
 
@@ -25,6 +26,7 @@ from api.dependencies import (
     RegisterFileDep,
     StartDownloadDep,
     StreamFileDep,
+    UploadFileDep,
     VerifyFileDep,
     get_settings,
 )
@@ -108,6 +110,33 @@ async def register_file(
 ) -> FileRead:
     file = await uc.execute(RegisterFileCommand(**payload.model_dump()))
     return _empty_file_read(file)
+
+
+@router.post(
+    "/upload",
+    response_model=FileRead,
+    status_code=201,
+    summary="Subir un fichero (no público)",
+    description=(
+        "Capacidad service-to-service: recibe el contenido por el body (stream) y los metadatos "
+        "por query (`name`, `mime_type`, `provider_id`). Deduplica por sha256, guarda el contenido "
+        "en un proveedor y devuelve el File con sus StorageLocations. NO crea `works_resources`: "
+        "el fichero queda disponible pero no público."
+    ),
+)
+async def upload_file(
+    request: Request,
+    name: str = Query(..., min_length=1),
+    mime_type: str | None = Query(default=None),
+    provider_id: int | None = Query(default=None),
+    uc: UploadFile = Depends(UploadFileDep),
+    get_file: GetFile = Depends(GetFileDep),
+) -> FileRead:
+    file = await uc.execute(
+        UploadFileCommand(name=name, mime_type=mime_type, provider_id=provider_id),
+        request.stream(),
+    )
+    return _file_read(await get_file.execute(file.id))
 
 
 @router.get(

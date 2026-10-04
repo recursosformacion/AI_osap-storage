@@ -46,6 +46,7 @@ def _use_case(attr: str) -> Callable[[Request], Any]:
 
 
 RegisterFileDep = _use_case("register_file")
+UploadFileDep = _use_case("upload_file")
 GetFileDep = _use_case("get_file")
 ListFilesDep = _use_case("list_files")
 StartDownloadDep = _use_case("start_download")

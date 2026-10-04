@@ -53,6 +53,7 @@ from application.use_cases.start_download import StartDownload
 from application.use_cases.statistics import GetStatistics, RefreshStatistics
 from application.use_cases.stream_file import StreamFile
 from application.use_cases.table_crud import TableCrud
+from application.use_cases.upload_file import UploadFile
 from application.use_cases.verify_file import VerifyFile
 from application.use_cases.voting import (
     GetComposerStatistics,
@@ -220,6 +221,8 @@ class Container:
     search_rism_sources: SearchRismSources | None = None
     representation_admin: RepresentationAdminCrud | None = None
     resource_admin: ResourceAdminCrud | None = None
+    # Subida service-to-service de ficheros (capacidad adicional, no cambia el import).
+    upload_file: UploadFile | None = None
     # Personas (modelo nuevo): consultas por rol para la API de osap-api.
     person_queries: SqlPersonQueryRepository | None = None
     list_persons: ListPersons | None = None
@@ -296,6 +299,13 @@ def build_container(settings: Settings) -> Container:
     list_providers = ListProviders(provider_repo)
 
     publisher = FilePublisher(file_repo, location_repo, provider_repo, registry)
+    upload_file = UploadFile(
+        files=file_repo,
+        registration=registration,
+        publisher=publisher,
+        integrity=integrity,
+        temp_dir=settings.temp_dir,
+    )
     tar_downloader = TarDownloader(downloader, None)
     import_pdmx = PdmxImporter(archive_repo, archive_entry_repo, sources=import_source_repo)
     resolve_file = ResolveFile(archive_entry_repo, archive_repo)
@@ -434,6 +444,7 @@ def build_container(settings: Settings) -> Container:
         scheduler=scheduler,
         registry=registry,
         register_file=register_file,
+        upload_file=upload_file,
         get_file=get_file,
         list_files=list_files,
         start_download=start_download,
