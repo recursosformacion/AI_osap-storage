@@ -50,7 +50,7 @@ async def main() -> None:
     plan: list[dict] = []
     async with db.connection() as conn, conn.cursor() as cur:
         for tabla, col in COLUMNAS:
-            for ent, rep in ENTIDADES:
+            for ent, _rep in ENTIDADES:
                 await cur.execute(
                     f"SELECT COUNT(*) AS n FROM `{tabla}` WHERE `{col}` LIKE %s", (f"%{ent}%",)
                 )

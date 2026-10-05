@@ -369,13 +369,13 @@ def resolve(
                 elif a.has_composer and b.has_composer:
                     composer_mismatch.add((_text(a.composer) or "?", _text(b.composer) or "?"))
 
-        for a, b in sorted(catalogue_conflict):
+        for ca, cb in sorted(catalogue_conflict):
             blocked.append(
                 _rule(
                     CATALOGUE_CONFLICT,
                     LEVEL_REPRESENTATION_WORK,
                     BLOCKED,
-                    {"title": title_norm, "representations": [a, b]},
+                    {"title": title_norm, "representations": [ca, cb]},
                     "mismo título pero catálogos distintos: no se fuerzan a una obra",
                 )
             )

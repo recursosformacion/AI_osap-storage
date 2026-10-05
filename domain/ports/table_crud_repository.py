@@ -36,6 +36,14 @@ class TableCrudRepository(Protocol):
     async def count_search(self, table: str, q: str) -> int:
         """Nº de filas que casan con la búsqueda."""
 
+    async def read_filtered(
+        self, table: str, column: str, value: str, *, limit: int, offset: int
+    ) -> list[dict]:
+        """Lee filas filtrando por igualdad en una columna."""
+
+    async def count_filtered(self, table: str, column: str, value: str) -> int:
+        """Nº de filas que cumplen el filtro de igualdad."""
+
     async def read_one(self, table: str, pk_value: object) -> dict | None: ...
 
     async def create(self, table: str, data: dict) -> dict:

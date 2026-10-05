@@ -67,7 +67,9 @@ class PopulateComposers:
         for normalized, spellings in groups.items():
             raw_canonical = self._pick_canonical(spellings)
             canonical = extract_composer_name(raw_canonical) or clean_composer_name(raw_canonical)
-            existing = await self._composers.resolve_by_normalized(normalized)
+            existing: tuple[str, str] | Composer | None = await self._composers.resolve_by_normalized(
+                normalized
+            )
             if existing is None:
                 # Salvaguarda: la persona puede existir por nombre y no tener alias con
                 # esa forma normalizada; sin esto se crearía un duplicado.

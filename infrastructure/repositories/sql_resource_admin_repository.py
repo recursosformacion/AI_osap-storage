@@ -28,7 +28,8 @@ class SqlResourceAdminRepository:
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[dict], int]:
-        where, params = "1=1", []
+        where = "1=1"
+        params: list[object] = []
         if work_id:
             where += " AND r.works_resources_work_id = %s"
             params.append(work_id)

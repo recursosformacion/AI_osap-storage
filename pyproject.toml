@@ -45,6 +45,8 @@ asyncio_default_fixture_loop_scope = "function"
 line-length = 120
 target-version = "py311"
 src = ["domain", "application", "infrastructure", "api", "tests"]
+# `_externo/` es material de auditoría de un solo uso, no código de producción.
+extend-exclude = ["_externo"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
