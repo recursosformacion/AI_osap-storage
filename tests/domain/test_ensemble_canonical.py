@@ -64,6 +64,17 @@ def test_idempotencia() -> None:
         assert canonical_id(once) == once, f"{raw!r} -> {once!r} no idempotente"
 
 
+def test_punto_fijo_tokenizacion() -> None:
+    # La tokenización greedy producía ids no estables (AATBARB -> AATBAR); la función
+    # itera a punto fijo para que `canonical_ensemble(id) == id`.
+    assert canonical_id("AATBARBB") == "AATBAR"
+    assert canonical_id("SATBARBB") == "SATBAR"
+    assert canonical_id("SMZ") == "MZ"
+    for raw in ("AATBARBB", "SATBARBB", "SMZ", "A_SOLO_S", "TTBARB"):
+        once = canonical_id(raw)
+        assert canonical_id(once) == once
+
+
 def test_multibloque_sin_voces_hereda_centinela() -> None:
     info = canonical_ensemble("UNKNOWN|UNKNOWN")
     assert info.kind == "UNKNOWN"

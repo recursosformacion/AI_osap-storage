@@ -499,8 +499,7 @@ def _describe(kind: str, id_canonico: str, voices: Mapping[str, int]) -> str:
 
 # ── API pública ──────────────────────────────────────────────────────────────
 
-def canonical_ensemble(text: str | None) -> CanonicalEnsemble:
-    """Canonicaliza un texto de formación vocal. Ver contrato en el módulo."""
+def _canonical_once(text: str | None) -> CanonicalEnsemble:
     norm = lex_normalize(text)
     if not norm:
         return CanonicalEnsemble(
@@ -584,6 +583,26 @@ def canonical_ensemble(text: str | None) -> CanonicalEnsemble:
         description=_describe(kind, id_canonico, voices),
         notes=tuple(notes),
     )
+
+
+_MAX_PASSES = 6
+
+
+def canonical_ensemble(text: str | None) -> CanonicalEnsemble:
+    """Canonicaliza un texto y **garantiza que el id es punto fijo** (idempotencia).
+
+    La tokenización greedy puede producir un id que, re-canonicalizado, colapsa
+    (`AATBARB` -> `AATBAR`). Se itera hasta el punto fijo y se devuelve la interpretación
+    de ese id estable, de modo que `canonical_ensemble(x).id_canonico == ensembles_code`
+    se cumple para toda fila canónica.
+    """
+    info = _canonical_once(text)
+    for _ in range(_MAX_PASSES):
+        again = _canonical_once(info.id_canonico)
+        if again.id_canonico == info.id_canonico:
+            return again
+        info = again
+    return info
 
 
 def canonical_id(text: str | None) -> str:

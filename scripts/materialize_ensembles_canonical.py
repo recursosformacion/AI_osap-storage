@@ -107,7 +107,9 @@ def gen_name(info: CanonicalEnsemble) -> str:
     if idc.startswith("UNISON"):
         mod = idc[len("UNISON"):].strip("_").replace("_", " ").title()
         return f"Unísono {mod}".strip()
-    return _LABEL.get(idc, info.description)
+    if idc in _LABEL:
+        return _LABEL[idc]
+    return idc.replace("|", " + ").replace("_", " ").strip().title()
 
 
 def _coherent_name(name: str, code: str) -> bool:
@@ -220,10 +222,144 @@ def _dump(result: dict) -> None:
     )
 
 
+async def apply_plan() -> None:
+    """Ejecuta la materialización en una transacción (reapunta, aliases, borra, voces)."""
+    db = Database(Settings())  # type: ignore[call-arg]
+    async with db.connection() as conn, conn.cursor() as cur:
+        await cur.execute("SELECT id, voices_name FROM voices")
+        voice_ids = {str(r["voices_name"]): int(r["id"]) for r in await cur.fetchall()}
+        await cur.execute(
+            "SELECT id, ensembles_name, ensembles_code, ensembles_description "
+            "FROM ensembles"
+        )
+        rows = [dict(r) for r in await cur.fetchall()]
+        await cur.execute(
+            "SELECT works_id, ensembles_id, work_ensembles_quantity FROM work_ensembles"
+        )
+        links = [dict(r) for r in await cur.fetchall()]
+
+    by_code = {str(r["ensembles_code"] or ""): r for r in rows}
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for row in rows:
+        groups[canonical_ensemble(str(row["ensembles_code"] or "")).id_canonico].append(row)
+    source_links: dict[int, list[tuple[int, int]]] = defaultdict(list)
+    for link in links:
+        source_links[int(link["ensembles_id"])].append(
+            (int(link["works_id"]), int(link["work_ensembles_quantity"]))
+        )
+
+    target: dict[str, int] = {}
+    inserts: list[tuple[str, str, str]] = []
+    updates: list[tuple[int, str, str]] = []
+    for cid, _items in groups.items():
+        info = canonical_ensemble(cid)
+        existing = by_code.get(cid)
+        reuse = existing is not None and (
+            canonical_ensemble(str(existing["ensembles_code"] or "")).id_canonico == cid
+        )
+        if reuse and existing is not None:
+            raw_name = str(existing["ensembles_name"] or "").strip()
+            raw_desc = str(existing["ensembles_description"] or "").strip()
+            name = raw_name if _coherent_name(raw_name, cid) else gen_name(info)
+            desc = raw_desc or info.description
+            if name != raw_name or desc != raw_desc:
+                updates.append((int(existing["id"]), name, desc))
+            target[cid] = int(existing["id"])
+        else:
+            inserts.append((cid, gen_name(info), info.description))
+
+    deleted = aliases = 0
+    async with db.transaction() as conn, conn.cursor() as cur:
+        for cid, name, desc in inserts:
+            await cur.execute(
+                "INSERT INTO ensembles (ensembles_name, ensembles_code, ensembles_description) "
+                "VALUES (%s, %s, %s)",
+                (name, cid, desc),
+            )
+            target[cid] = int(cur.lastrowid)
+        for cid, items in groups.items():
+            tgt = target[cid]
+            for item in items:
+                src = int(item["id"])
+                if src == tgt:
+                    continue
+                for works_id, qty in source_links.get(src, []):
+                    await cur.execute(
+                        "INSERT INTO work_ensembles "
+                        "(works_id, ensembles_id, work_ensembles_quantity) VALUES (%s, %s, %s) "
+                        "ON DUPLICATE KEY UPDATE work_ensembles_quantity = "
+                        "GREATEST(work_ensembles_quantity, VALUES(work_ensembles_quantity))",
+                        (works_id, tgt, qty),
+                    )
+                await cur.execute(
+                    "INSERT INTO ensembles_aliases (raw_code, ensembles_id) VALUES (%s, %s) "
+                    "ON DUPLICATE KEY UPDATE ensembles_id = VALUES(ensembles_id)",
+                    (str(item["ensembles_code"] or ""), tgt),
+                )
+                aliases += 1
+        for ens_id, name, desc in updates:
+            await cur.execute(
+                "UPDATE ensembles SET ensembles_name=%s, ensembles_description=%s WHERE id=%s",
+                (name, desc, ens_id),
+            )
+        for cid, items in groups.items():
+            srcs = [int(i["id"]) for i in items if int(i["id"]) != target[cid]]
+            if srcs:
+                placeholders = ",".join(["%s"] * len(srcs))
+                await cur.execute(
+                    f"DELETE FROM ensembles WHERE id IN ({placeholders})", tuple(srcs)
+                )
+                deleted += len(srcs)
+        for cid, tgt in target.items():
+            await cur.execute("DELETE FROM ensemble_voices WHERE ensembles_id=%s", (tgt,))
+            for order, (vname, qty) in enumerate(voices_for(canonical_ensemble(cid))):
+                await cur.execute(
+                    "INSERT INTO ensemble_voices "
+                    "(ensembles_id, voices_id, ensemble_voices_quantity, ensemble_voices_order) "
+                    "VALUES (%s, %s, %s, %s)",
+                    (tgt, voice_ids[vname], qty, order),
+                )
+    await db.close()
+    print(f"APLICADO -> filas nuevas: {len(inserts)} | actualizadas: {len(updates)} "
+          f"| borradas: {deleted} | aliases: {aliases}")
+
+
+async def verify() -> None:
+    db = Database(Settings())  # type: ignore[call-arg]
+    async with db.connection() as conn, conn.cursor() as cur:
+        await cur.execute("SELECT ensembles_code FROM ensembles")
+        codes = [str(r["ensembles_code"] or "") for r in await cur.fetchall()]
+        await cur.execute("SELECT COUNT(*) AS n FROM ensembles_aliases")
+        aliases = int((await cur.fetchone())["n"])
+        await cur.execute(
+            "SELECT COUNT(*) AS n FROM ensembles_aliases a "
+            "LEFT JOIN ensembles e ON e.id = a.ensembles_id WHERE e.id IS NULL"
+        )
+        orphan_aliases = int((await cur.fetchone())["n"])
+        await cur.execute(
+            "SELECT COUNT(*) AS n FROM work_ensembles w "
+            "LEFT JOIN ensembles e ON e.id = w.ensembles_id WHERE e.id IS NULL"
+        )
+        orphan_links = int((await cur.fetchone())["n"])
+        await cur.execute("SELECT COUNT(*) AS n FROM ensembles e LEFT JOIN ensemble_voices v "
+                          "ON v.ensembles_id = e.id WHERE v.ensembles_id IS NULL "
+                          "AND e.ensembles_code NOT IN "
+                          "('UNSPECIFIED','UNKNOWN','INVALID_OR_INSTRUMENTAL')")
+        no_voices = int((await cur.fetchone())["n"])
+    await db.close()
+    bad = [c for c in codes if canonical_ensemble(c).id_canonico != c]
+    print(f"VERIFY -> ensembles: {len(codes)} | aliases: {aliases} "
+          f"| aliases huerfanos: {orphan_aliases} | links huerfanos: {orphan_links} "
+          f"| no idempotentes: {len(bad)} | sin voces (no sentinela): {no_voices}")
+    if bad:
+        print("  no idempotentes:", bad[:10])
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dry-run", action="store_true", help="solo planifica (por defecto)")
-    parser.parse_args()
+    parser.add_argument("--apply", action="store_true",
+                        help="ejecuta la migración (por defecto solo planifica)")
+    args = parser.parse_args()
     result = plan()
     _dump(result)
     print(f"filas originales        : {result['original_rows']}")
@@ -235,6 +371,9 @@ def main() -> int:
     print(f"aliases mal dirigidos   : {len(result['bad_alias'])}")
     print(f"VOICES sin voces        : {len(result['voice_missing'])}")
     print(f"plan escrito en {OUT_DIR}")
+    if args.apply:
+        asyncio.run(apply_plan())
+        asyncio.run(verify())
     return 0
 
 
