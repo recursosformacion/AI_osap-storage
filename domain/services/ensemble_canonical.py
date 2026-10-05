@@ -383,7 +383,10 @@ def _is_invalid(norm_code: str) -> bool:
 def _classify_segment(norm_code: str, notes: list[str]) -> str:
     if not norm_code:
         notes.append("bloque vacío")
-        return CANONICAL_UNKNOWN
+        return CANONICAL_DESCRIPTOR
+    if norm_code in _SENTINELS:
+        notes.append("centinela")
+        return norm_code
     if _is_invalid(norm_code):
         notes.append("patrón no vocal")
         return CANONICAL_INVALID
@@ -555,6 +558,21 @@ def canonical_ensemble(text: str | None) -> CanonicalEnsemble:
                                 "EQUAL_VOICES", "FEMALE_CHOIR", "MALE_CHOIR",
                                 CANONICAL_SOLI_GROUP)):
             kind = KIND_SPECIAL
+
+    # Multi-bloque sin voces: hereda el centinela de sus segmentos (no es VOICES).
+    if kind == KIND_VOICES and sum(voices.values()) == 0:
+        special_prefix = (CANONICAL_UNISON, CANONICAL_CHILDREN, CANONICAL_TREBLE,
+                          CANONICAL_DESCANT, CANONICAL_INSTRUMENTAL, "CANTOR",
+                          "CONGREGATION", "NARRATOR", "SPEAKER", "CELEBRANT",
+                          "EQUAL_VOICES", "FEMALE_CHOIR", "MALE_CHOIR", CANONICAL_SOLI_GROUP)
+        if any(i.startswith(special_prefix) for i in ids):
+            kind = KIND_SPECIAL
+        elif any(i == CANONICAL_UNKNOWN for i in ids):
+            kind = KIND_UNKNOWN
+        elif any(i == CANONICAL_INVALID for i in ids):
+            kind = KIND_INVALID
+        elif any(i == CANONICAL_DESCRIPTOR for i in ids):
+            kind = KIND_DESCRIPTOR
 
     return CanonicalEnsemble(
         id_canonico=id_canonico,

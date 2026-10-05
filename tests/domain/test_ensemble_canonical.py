@@ -58,9 +58,17 @@ def test_idempotencia() -> None:
         "SATB", "SATB.SATB", "TTBARB", "SOLO SOPRANO", "UNISON_FEMALE", "SATB_SOLO_S",
         "CHILDREN", "FEMALE_CHOIR", "CANTOR_CONGREGATION", "SOLI_GROUP",
         "UNKNOWN", "INVALID_OR_INSTRUMENTAL", "UNSPECIFIED",
+        "UNKNOWN|UNKNOWN", "UNSPECIFIED|SATB",
     ):
         once = canonical_id(raw)
         assert canonical_id(once) == once, f"{raw!r} -> {once!r} no idempotente"
+
+
+def test_multibloque_sin_voces_hereda_centinela() -> None:
+    info = canonical_ensemble("UNKNOWN|UNKNOWN")
+    assert info.kind == "UNKNOWN"
+    assert info.total_voices == 0
+    assert canonical_ensemble("SATB|SATB").kind == "VOICES"
 
 
 def test_descomposicion_y_familia() -> None:
