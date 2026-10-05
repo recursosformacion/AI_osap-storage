@@ -65,6 +65,7 @@ def _container(settings, composer_repo) -> Container:
         delete_composer_identifier=object(),  # type: ignore[arg-type]
         list_works_admin=object(),  # type: ignore[arg-type]
         get_work_admin=object(),  # type: ignore[arg-type]
+        create_work_admin=object(),  # type: ignore[arg-type]
         update_work_admin=object(),  # type: ignore[arg-type]
         voting_repo=object(),  # type: ignore[arg-type]
         catalogue_repo=object(),  # type: ignore[arg-type]

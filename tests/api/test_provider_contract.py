@@ -81,6 +81,7 @@ def _build_container(settings: Settings, work_repo: InMemoryWorkRepository,
         delete_composer_identifier=object(),  # type: ignore[arg-type]
         list_works_admin=object(),  # type: ignore[arg-type]
         get_work_admin=object(),  # type: ignore[arg-type]
+        create_work_admin=object(),  # type: ignore[arg-type]
         update_work_admin=object(),  # type: ignore[arg-type]
         composer_review_stats=object(),  # type: ignore[arg-type]
         voting_repo=object(),  # type: ignore[arg-type]

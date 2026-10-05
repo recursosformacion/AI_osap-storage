@@ -69,6 +69,7 @@ def _container(settings, works, votes, composers) -> Container:
         delete_composer_identifier=object(),  # type: ignore[arg-type]
         list_works_admin=object(),  # type: ignore[arg-type]
         get_work_admin=object(),  # type: ignore[arg-type]
+        create_work_admin=object(),  # type: ignore[arg-type]
         update_work_admin=object(),  # type: ignore[arg-type]
         composer_review_stats=object(),  # type: ignore[arg-type]
         record_vote=RecordVote(votes, works),
