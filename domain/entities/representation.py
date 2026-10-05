@@ -19,6 +19,8 @@ class Representation:
     type: str = ""
     source_name: str | None = None
     license: str = ""
+    ensemble_code: str | None = None
+    voice_signature: str | None = None
     id: int | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None

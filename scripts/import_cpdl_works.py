@@ -36,6 +36,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from application.services.cpdl_voicing import voicing_terms  # noqa: E402
+from domain.services.ensemble_canonical import canonical_ensemble  # noqa: E402
 from infrastructure.config import Settings  # noqa: E402
 from infrastructure.db.connection import Database  # noqa: E402
 
@@ -233,7 +234,10 @@ async def _ingest(paths: list[Path], db_name: str, dry_run: bool) -> None:
                 works += 1
 
                 for term in voicing_terms(json.dumps(rec["voicing"], ensure_ascii=False)):
-                    code = term.upper()
+                    info = canonical_ensemble(term)
+                    if info.kind in ("INVALID", "UNKNOWN", "DESCRIPTOR"):
+                        continue
+                    code = info.id_canonico
                     eid = ensemble_ids.get(code)
                     if eid is None:
                         await cur.execute(

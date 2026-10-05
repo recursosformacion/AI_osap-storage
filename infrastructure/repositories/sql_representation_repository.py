@@ -16,6 +16,8 @@ def _row_to_representation(row: dict) -> Representation:
         type=row["representations_type"],
         source_name=row["representations_source_name"],
         license=row["representations_license"],
+        ensemble_code=row.get("representations_ensemble_code"),
+        voice_signature=row.get("representations_voice_signature"),
         created_at=row["representations_created_at"],
         updated_at=row["representations_updated_at"],
     )
