@@ -10,12 +10,16 @@ No se ha insertado, actualizado ni borrado ninguna fila.
 | fichero | contenido |
 |---|---|
 | `resultado.md` | entregable: tabla Markdown de 3 columnas, 1374 filas (100% de la tabla) |
+| `agrupacion_id_canonico.md` | informe inverted: una fila por `id_canonico` con todos sus `ensembles_code` en la misma linea |
+| `agrupacion_id_canonico.csv` | misma agrupacion en CSV (`;`) para tratamiento posterior |
 | `auditoria_detalle.csv` | traza de auditoria por fila (conteos, firma, familia, reglas aplicadas) |
 | `audit_ensembles.py` | pipeline completo de canonicalizacion + consultas (SELECT) |
+| `group_by_id.py` | genera la agrupacion por `id_canonico` desde el CSV de auditoria |
 | `verify.py` | verificacion independiente del entregable contra la BD |
 | `review.py` | utilidades de revision (notas, muestra, codigos largos,etc.) |
 
-Ejecucion: `python _externo/audit_ensembles.py` y despues `python _externo/verify.py`.
+Ejecucion: `python _externo/audit_ensembles.py`, despues `python _externo/group_by_id.py`
+y `python _externo/verify.py`.
 
 ## Resultado
 
@@ -48,6 +52,23 @@ identifican de forma efectiva las combinaciones derivadas que faltan en el catal
 Las dos formas equivalentes se conservan en `auditoria_detalle.csv`
 (columnas `firma_frecuencias` = `S2A2T2B2` y `etiqueta_familia` = `SATB_MIXED_4V`,
 `TTBB_MALE_4V`...).
+
+## Agrupacion por ID canonico
+
+`agrupacion_id_canonico.md` (y su twin `.csv`) invierte el resultado: una fila por
+`id_canonico` con la lista completa de `ensembles_code` que colapsa en el, ordenada
+por numero de codigos (descendente) y luego alfabeticamente.
+
+| columna | significado |
+|---|---|
+| `id_canonico` | firma canonica (o `INVALID_OR_INSTRUMENTAL`) |
+| `existe_en_tabla` | 1 si el ID ya figura como `ensembles_code` en la BD |
+| `n_ensembles_codes` | numero de codigos originales que colapsan en ese ID |
+| `ensembles_codes` | todos esos codigos, separados por coma, en la misma linea |
+
+Cobertura verificada: 443 grupos que suman 1374 codigos, sin duplicados y con el
+mismo conjunto que la tabla `ensembles`. 221 grupos tienen un unico codigo (variantes
+que ya estaban en forma canonica) y 179 agrupan mas de un original.
 
 ## Reglas aplicadas
 
