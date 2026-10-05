@@ -16,7 +16,8 @@ param(
     [string]$User = "ocw",
     [string]$RemoteDir = "/home/ocw/openmusicrepository.com/osap-storage",
     [switch]$SkipTests,
-    [switch]$SkipMigrations
+    [switch]$SkipMigrations,
+    [switch]$WithConfig
 )
 
 $ErrorActionPreference = "Stop"
@@ -41,9 +42,13 @@ if (-not $SkipTests) {
     Write-Host "[1/6] Tests omitidos"
 }
 
-Write-Host "[2/6] Comprobando config.production.yaml..."
 $prodConfig = Join-Path $root "config.production.yaml"
-if (-not (Test-Path $prodConfig)) { throw "No existe config.production.yaml" }
+if ($WithConfig) {
+    Write-Host "[2/6] Comprobando config.production.yaml..."
+    if (-not (Test-Path $prodConfig)) { throw "No existe config.production.yaml" }
+} else {
+    Write-Host "[2/6] Config NO se despliega (usa -WithConfig para subir config.production.yaml)"
+}
 
 Write-Host "[3/6] Subiendo código al servidor..."
 tar.exe -czf - `
@@ -53,10 +58,17 @@ tar.exe -czf - `
     ssh -o BatchMode=yes "$User@$Server" "mkdir -p $RemoteDir && tar -xzf - -C $RemoteDir"
 if ($LASTEXITCODE -ne 0) { throw "Fallo al subir el código" }
 
-Write-Host "[4/6] Desplegando config.production.yaml como config.yaml..."
-scp -o BatchMode=yes $prodConfig "${User}@${Server}:/tmp/config.production.yaml"
-if ($LASTEXITCODE -ne 0) { throw "Fallo al subir la configuración" }
-Invoke-Remote "cp /tmp/config.production.yaml $RemoteDir/config.yaml"
+if ($WithConfig) {
+    Write-Host "[4/6] Desplegando config.production.yaml como config.yaml (LF)..."
+    $lf = Join-Path $env:TEMP "osap-storage.config.production.lf.yaml"
+    ([IO.File]::ReadAllText($prodConfig)) -replace "`r`n", "`n" | Set-Content -LiteralPath $lf -NoNewline -Encoding utf8
+    scp -o BatchMode=yes $lf "${User}@${Server}:/tmp/config.production.yaml"
+    if ($LASTEXITCODE -ne 0) { throw "Fallo al subir la configuración" }
+    Invoke-Remote "cp /tmp/config.production.yaml $RemoteDir/config.yaml"
+} else {
+    Write-Host "[4/6] Config no se despliega; verificando config.yaml remoto..."
+    Invoke-Remote "test -f $RemoteDir/config.yaml"
+}
 
 if (-not $SkipMigrations) {
     Write-Host "[5/6] Ejecutando migraciones..."
