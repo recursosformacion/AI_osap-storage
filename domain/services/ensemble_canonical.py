@@ -12,7 +12,12 @@ Reglas (basadas en `osap_normalize`, ampliadas):
   `_SOLO_` cuando hay una voz de solista identificable.
 - Casos especiales: `UNISON[_FEMALE|_MALE|_MIXED]`, `CHILDREN`, `TREBLE`, `DESCANT`,
   `INSTRUMENTAL_<sfx>` y roles (`CANTOR`, `CONGREGATION`, …).
-- Sin voz identificable: `INVALID_OR_INSTRUMENTAL` (notación instrumental) o `UNKNOWN`.
+- Una **letra suelta** solo es voz con evidencia contextual (otra voz, un calificador tipo
+  SOLO/VERSE, un conector, o que el resto del texto sea funcional). Así `A GLÄUBIGE SEELE`,
+  `T EVANGELISTA` o `B JESUS` no se leen como formaciones.
+- Sin voz identificable: `INVALID_OR_INSTRUMENTAL` (notación instrumental), `UNKNOWN`
+  (material vocal **no interpretable**, p. ej. BAR/BARB pegados) o `UNSPECIFIED`
+  (el texto **no da** formación concreta: `MIXED`, `DIV`, `VOICE`, `PARTSONG`…).
 
 Determinista e idempotente: `canonical_ensemble(x).id_canonico` es estable.
 """
@@ -113,6 +118,24 @@ ALL_INSTRUMENT_TOKENS: frozenset[str] = frozenset(
 
 SOLO_KEYWORDS: frozenset[str] = frozenset({"SOLO", "SOLI", "SOLOIST", "SOLOISTS", "SOLISTA"})
 
+# Contexto para aceptar una letra suelta como voz (regla de evidencia).
+CONTEXT_QUALIFIERS: frozenset[str] = SOLO_KEYWORDS | frozenset({
+    "VERSE", "VERSES", "CHOIR", "CHOIRS", "CHORUS", "CHORAL",
+    "DIV", "DIVISI", "DIVSI", "RIPIENO", "RIPIENI", "PART", "PARTS",
+})
+CONNECTOR_WORDS: frozenset[str] = frozenset({"AND", "OR", "Y", "E"})
+SUPPRESSORS: frozenset[str] = frozenset({
+    "OF", "EACH", "EVERY", "ONE", "TWO", "THREE", "SOME",
+    "LOWEST", "HIGHEST", "ONLY", "PART",
+})
+FUNCTION_WORDS: frozenset[str] = frozenset({
+    "AND", "OR", "WITH", "IN", "OF", "FOR", "THE", "TO", "IS", "ARE", "WAS",
+    "PLUS", "ALSO", "NOT", "UNLESS", "OTHERWISE", "AS", "IF", "THEN", "ONLY",
+    "BOTH", "SAME", "SUCH", "THAN", "THAT", "THIS", "THESE", "THOSE",
+})
+# Letras que aparecen en notación de voces (para detectar material vocal no interpretable).
+_VOICE_LETTERS: frozenset[str] = frozenset("SATBCMZR")
+
 INVALID_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\b[A-G]-[A-G]'?\b"),      # C-A', D-D', E-G'
     re.compile(r"^[A-G]\d?$"),              # F3, F4, C2, C3
@@ -139,11 +162,21 @@ CANONICAL_DESCANT = "DESCANT"
 CANONICAL_UNISON = "UNISON"
 CANONICAL_INSTRUMENTAL = "INSTRUMENTAL"
 CANONICAL_SOLO_INFIX = "SOLO"
+# Texto sin formación concreta (descriptor): `MIXED`, `DIV`, `VOICE`, `PARTSONG`…
+CANONICAL_DESCRIPTOR = "UNSPECIFIED"
 
 KIND_VOICES = "VOICES"
 KIND_SPECIAL = "SPECIAL"
 KIND_INVALID = "INVALID"
+KIND_DESCRIPTOR = "DESCRIPTOR"
 KIND_UNKNOWN = "UNKNOWN"
+
+# Ids centinela: la función debe reconocer su propia salida (idempotencia).
+_SENTINELS: dict[str, str] = {
+    CANONICAL_UNKNOWN: KIND_UNKNOWN,
+    CANONICAL_INVALID: KIND_INVALID,
+    CANONICAL_DESCRIPTOR: KIND_DESCRIPTOR,
+}
 
 
 @dataclass(frozen=True)
@@ -204,6 +237,7 @@ def _expand_sigla(tok: str) -> Counter | None:
 
 
 def _extract_voices(norm_code: str) -> Counter:
+    """Extracción permisiva (acepta letras sueltas). Para vecinos de SOLO."""
     voices: Counter = Counter()
     for tok in _tokenize(norm_code):
         if tok in ALL_INSTRUMENT_TOKENS:
@@ -218,6 +252,71 @@ def _extract_voices(norm_code: str) -> Counter:
             expanded = _expand_sigla(tok)
             if expanded:
                 voices.update(expanded)
+    return voices
+
+
+def _others_functional(tokens: list[str], lone_indexes: set[int]) -> bool:
+    """True si todo token no-voz es funcional/modificador (letras sueltas aparte)."""
+    for i, tok in enumerate(tokens):
+        if i in lone_indexes:
+            continue
+        if tok in STOPWORDS or tok in SOLO_KEYWORDS or tok in FUNCTION_WORDS:
+            continue
+        if tok in ALL_INSTRUMENT_TOKENS or tok in VOICE_WORDS or tok in VOICE_ABBR:
+            continue
+        if len(tok) > 1 and _expand_sigla(tok) is not None:
+            continue
+        return False
+    return True
+
+
+def _looks_like_voice_material(tokens: list[str]) -> bool:
+    """True si hay material que parece notación vocal pero no se pudo interpretar.
+
+    Distingue `UNKNOWN` (formación ininterpretable) de `DESCRIPTOR` (texto sin formación).
+    """
+    for tok in tokens:
+        if tok in STOPWORDS or tok in ALL_INSTRUMENT_TOKENS:
+            continue
+        if tok in VOICE_WORDS or tok in VOICE_ABBR:
+            continue
+        if "BAR" in tok or "BRB" in tok:
+            return True
+        if len(tok) >= 2 and all(ch in _VOICE_LETTERS for ch in tok):
+            return True
+    return False
+
+
+def _extract_voices_ctx(tokens: list[str], norm_code: str) -> Counter:
+    """Extrae voces aplicando la regla de contexto de letras sueltas."""
+    voices: Counter = Counter()
+    lone: list[tuple[int, str]] = []
+    for i, tok in enumerate(tokens):
+        if tok in ALL_INSTRUMENT_TOKENS or tok in STOPWORDS:
+            continue
+        if tok in VOICE_WORDS:
+            voices[VOICE_WORDS[tok]] += 1
+        elif tok in VOICE_ABBR:
+            voices[VOICE_ABBR[tok]] += 1
+        elif len(tok) == 1 and tok in VOICE_ORDER:
+            lone.append((i, tok))
+        elif len(tok) > 1:
+            expanded = _expand_sigla(tok)
+            if expanded is not None:
+                voices.update(expanded)
+
+    has_other_voice = bool(voices)
+    has_qualifier = any(t in CONTEXT_QUALIFIERS for t in tokens)
+    has_connector = any(t in CONNECTOR_WORDS for t in tokens) or "&" in norm_code
+    others_functional = _others_functional(tokens, {i for i, _ in lone})
+    for i, letter in lone:
+        previous = tokens[i - 1] if i > 0 else None
+        right = tokens[i + 1] if i + 1 < len(tokens) else None
+        if previous in SUPPRESSORS:
+            continue
+        connected = has_connector or previous in CONNECTOR_WORDS or right in CONNECTOR_WORDS
+        if has_other_voice or has_qualifier or connected or others_functional:
+            voices[letter] += 1
     return voices
 
 
@@ -240,14 +339,18 @@ def _extract_solo_voices(norm_code: str) -> Counter:
 
 # ── Detección de rasgos ──────────────────────────────────────────────────────
 
+def _slug(text: str) -> str:
+    return re.sub(r"[_&\s]+", " ", text).strip()
+
+
 def _detect_special_role(norm_code: str) -> str | None:
     tokens = set(_tokenize(norm_code))
+    slug = _slug(norm_code)
     for canonical, keywords in SPECIAL_ROLES:
         for kw in keywords:
-            if " " in kw or "&" in kw:
-                if kw in norm_code:
-                    return canonical
-            elif kw in tokens:
+            if re.search(rf"\b{re.escape(_slug(kw))}\b", slug):
+                return canonical
+            if " " not in kw and "&" not in kw and kw in tokens:
                 return canonical
     return None
 
@@ -285,8 +388,9 @@ def _classify_segment(norm_code: str, notes: list[str]) -> str:
         notes.append("patrón no vocal")
         return CANONICAL_INVALID
 
+    tokens = _tokenize(norm_code)
     instr = _detect_instrument(norm_code)
-    voices = _extract_voices(norm_code)
+    voices = _extract_voices_ctx(tokens, norm_code)
     sig = build_signature(voices)
 
     if instr and not sig:
@@ -313,7 +417,7 @@ def _classify_segment(norm_code: str, notes: list[str]) -> str:
         notes.append(f"rol {role}")
         return f"{role}_{instr}" if instr else role
 
-    has_solo = bool(set(_tokenize(norm_code)) & SOLO_KEYWORDS)
+    has_solo = bool(set(tokens) & SOLO_KEYWORDS)
     if has_solo:
         solo_voices = _extract_solo_voices(norm_code)
         solo_sig = build_signature(solo_voices)
@@ -337,8 +441,11 @@ def _classify_segment(norm_code: str, notes: list[str]) -> str:
         notes.append("coro con firma vocal")
         return f"{sig}_{instr}" if instr else sig
 
-    notes.append(f"sin firma vocal: '{norm_code}'")
-    return CANONICAL_UNKNOWN
+    if _looks_like_voice_material(tokens):
+        notes.append("material vocal no interpretable")
+        return CANONICAL_UNKNOWN
+    notes.append("texto sin formación concreta")
+    return CANONICAL_DESCRIPTOR
 
 
 # ── Descripción y familia ────────────────────────────────────────────────────
@@ -360,6 +467,8 @@ def _describe(kind: str, id_canonico: str, voices: Mapping[str, int]) -> str:
         return "No vocal o instrumental (sin formación reconocible)"
     if kind == KIND_UNKNOWN:
         return "Formación no reconocida"
+    if kind == KIND_DESCRIPTOR:
+        return "Sin formación concreta (texto descriptivo)"
     if id_canonico.startswith(CANONICAL_UNISON):
         mod = id_canonico[len(CANONICAL_UNISON):].strip("_").lower()
         return f"Unísono{(' ' + mod) if mod else ''}"
@@ -392,14 +501,27 @@ def canonical_ensemble(text: str | None) -> CanonicalEnsemble:
     norm = lex_normalize(text)
     if not norm:
         return CanonicalEnsemble(
-            id_canonico=CANONICAL_UNKNOWN,
+            id_canonico=CANONICAL_DESCRIPTOR,
             segments=(),
             voice_counts={},
             total_voices=0,
             family="UNKNOWN",
-            kind=KIND_UNKNOWN,
-            description="Cadena vacía",
+            kind=KIND_DESCRIPTOR,
+            description="Sin formación concreta (texto vacío)",
             notes=("cadena vacía",),
+        )
+
+    if norm in _SENTINELS:
+        kind = _SENTINELS[norm]
+        return CanonicalEnsemble(
+            id_canonico=norm,
+            segments=(norm,),
+            voice_counts={},
+            total_voices=0,
+            family="UNKNOWN",
+            kind=kind,
+            description=_describe(kind, norm, {}),
+            notes=("centinela",),
         )
 
     segments = _split_segments(norm)
@@ -425,6 +547,8 @@ def canonical_ensemble(text: str | None) -> CanonicalEnsemble:
             kind = KIND_INVALID
         elif ids[0] == CANONICAL_UNKNOWN:
             kind = KIND_UNKNOWN
+        elif ids[0] == CANONICAL_DESCRIPTOR:
+            kind = KIND_DESCRIPTOR
         elif ids[0].startswith((CANONICAL_UNISON, CANONICAL_CHILDREN, CANONICAL_TREBLE,
                                 CANONICAL_DESCANT, CANONICAL_INSTRUMENTAL, "CANTOR",
                                 "CONGREGATION", "NARRATOR", "SPEAKER", "CELEBRANT",

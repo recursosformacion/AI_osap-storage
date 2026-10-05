@@ -34,6 +34,19 @@ from domain.services.ensemble_canonical import (
         ("CHILDREN'S CHOIR", "CHILDREN"),
         ("TREBLE", "TREBLE"),
         ("A cappella SATB", "SATB"),
+        ("B SOLO", "SOLO_B"),
+        # Letras sueltas sin contexto: no son voz.
+        ("A GLÄUBIGE SEELE", "UNSPECIFIED"),
+        ("T EVANGELISTA", "UNSPECIFIED"),
+        ("B JESUS", "UNSPECIFIED"),
+        # BAR/BARB pegados ambiguos: no se fuerza una formación.
+        ("TBARBARB", "UNKNOWN"),
+        ("ATBARBARB", "UNKNOWN"),
+        # Descriptores sin formación concreta.
+        ("MIXED", "UNSPECIFIED"),
+        ("DIV", "UNSPECIFIED"),
+        ("VOICE", "UNSPECIFIED"),
+        ("PARTSONG", "UNSPECIFIED"),
     ],
 )
 def test_canonical_id(raw: str, expected: str) -> None:
@@ -41,9 +54,13 @@ def test_canonical_id(raw: str, expected: str) -> None:
 
 
 def test_idempotencia() -> None:
-    for raw in ("SATB", "SATB.SATB", "TTBARB", "SOLO SOPRANO", "UNISON_FEMALE", "SATB_SOLO_S"):
+    for raw in (
+        "SATB", "SATB.SATB", "TTBARB", "SOLO SOPRANO", "UNISON_FEMALE", "SATB_SOLO_S",
+        "CHILDREN", "FEMALE_CHOIR", "CANTOR_CONGREGATION", "SOLI_GROUP",
+        "UNKNOWN", "INVALID_OR_INSTRUMENTAL", "UNSPECIFIED",
+    ):
         once = canonical_id(raw)
-        assert canonical_id(once) == once
+        assert canonical_id(once) == once, f"{raw!r} -> {once!r} no idempotente"
 
 
 def test_descomposicion_y_familia() -> None:
@@ -56,16 +73,13 @@ def test_descomposicion_y_familia() -> None:
     assert "Soprano×2" in result.description
 
 
-def test_invalid_y_unknown() -> None:
-    invalido = canonical_ensemble("BC")
-    assert invalido.kind == "INVALID"
-    assert invalido.total_voices == 0
-
-    desconocido = canonical_ensemble("LEADSHEET NOTES")
-    assert desconocido.kind == "UNKNOWN"
-
-    vacio = canonical_ensemble("")
-    assert vacio.kind == "UNKNOWN"
+def test_invalid_descriptor_y_unknown() -> None:
+    assert canonical_ensemble("BC").kind == "INVALID"
+    assert canonical_ensemble("BC").total_voices == 0
+    assert canonical_ensemble("MIXED").kind == "DESCRIPTOR"
+    assert canonical_ensemble("LEADSHEET NOTES").kind == "DESCRIPTOR"
+    assert canonical_ensemble("").kind == "DESCRIPTOR"
+    assert canonical_ensemble("TBARBARB").kind == "UNKNOWN"
 
 
 def test_tipo_retorno() -> None:
