@@ -482,8 +482,9 @@ class SqlPersonRepository(ComposerRepository):
             )
             params.extend([f"%{q}%", f"%{norm}%"])
         async with self._db.connection() as conn, conn.cursor() as cur:
+            where_sql = " AND ".join(where) if where else "1=1"
             await cur.execute(
-                f"SELECT COUNT(*) AS total FROM persons c WHERE {' AND '.join(where)}",
+                f"SELECT COUNT(*) AS total FROM persons c WHERE {where_sql}",
                 params,
             )
             return int((await cur.fetchone())["total"])
