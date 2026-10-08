@@ -77,7 +77,11 @@ class PopulateComposers:
             if existing is not None:
                 reused += 1
                 continue
-            composer = await self._composers.create(Composer(id="", name=canonical))
+            # Se crean OCULTOS: un compositor sin obras no debe ser público (se activará al
+            # recibir la primera obra o tras revisión).
+            composer = await self._composers.create(
+                Composer(id="", name=canonical, visible=False)
+            )
             await self._composers.add_alias(
                 composer.id, canonical, normalize_composer_name(canonical)
             )

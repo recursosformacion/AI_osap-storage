@@ -193,10 +193,10 @@ class SqlPersonRepository(ComposerRepository):
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
                 "INSERT INTO persons (persons_id, persons_name, persons_status, "
-                "persons_merged_into, persons_source_system) "
-                "VALUES (%s, %s, %s, %s, %s)",
+                "persons_merged_into, persons_source_system, persons_visible) "
+                "VALUES (%s, %s, %s, %s, %s, %s)",
                 (composer.id, composer.name, composer.status, composer.merged_into,
-                 composer.source_system or "app"),
+                 composer.source_system or "app", 1 if composer.visible else 0),
             )
             return composer
 

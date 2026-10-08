@@ -34,6 +34,14 @@ def test_populate_creates_composers_and_aliases():
     assert len(aliases) == 3
 
 
+def test_populate_creates_hidden_composers():
+    # Un compositor sin obras no debe ser público: se crea oculto.
+    repo = InMemoryComposerRepository()
+    asyncio.run(PopulateComposers(repo).execute(["W. A. Mozart"]))
+    composer = next(iter(repo._composers.values()))
+    assert composer.visible is False
+
+
 def test_populate_is_idempotent():
     repo = InMemoryComposerRepository()
     uc = PopulateComposers(repo)
