@@ -96,8 +96,8 @@ function loadToken(){
   else { $("tokenCard").classList.remove("hidden"); }
 }
 const SCALARS = [
-  ["title","Título"],["subtitle","Subtítulo"],["composer","Compositor"],["person_id","person_id"],
-  ["artist","Artista"],["song_name","Song name"],["genre","Género"],["opus","Opus"],
+  ["title","Título"],["subtitle","Subtítulo"],["composer","Compositor (legado)"],
+  ["artist","Artista (legado)"],["song_name","Song name"],["genre","Género"],["opus","Opus"],
   ["catalogue","Catálogo"],["musical_key","Tonalidad"],["year","Año","number"],
   ["instrumentation","Instrumentación"],["language","Idioma"],["duration","Duración"],
   ["measures","Compases","number"],["pages","Páginas","number"],["parts","Nº de partes","number"],
@@ -120,6 +120,12 @@ function valInput(k, d, editable){
       <option value="1" ${d.public_domain?"selected":""}>sí</option>
       <option value="0" ${d.public_domain?"":"selected"}>no</option></select>`;
   }
+  if (k === "attribution_type"){
+    const opts = ["","ANONIMA","TRADICIONAL","POPULAR","ATRIBUIDA"];
+    return `<select id="f_${k}" ${editable?"":"disabled"}>` +
+      opts.map(o=>`<option value="${o}" ${(d[k]||"")===o?"selected":""}>${o||"—"}</option>`).join("") +
+      `</select>`;
+  }
   return `<input id="f_${k}" value="${esc(d[k] ?? "")}" ${editable?"":"disabled"} />`;
 }
 function renderDetail(d){
@@ -132,8 +138,14 @@ function renderDetail(d){
     h += `</div>
       <label style="margin-top:10px">Descripción<br><textarea id="f_description" ${editable?"":"disabled"}>${esc(d.description||"")}</textarea></label>`;
     for (const [k,lab] of LISTS){
-      h += `<label style="margin-top:8px">${lab} (separados por coma)<br><input id="f_${k}" value="${esc((d[k]||[]).join(", "))}" /></label>`;
+      if (k === "genres" || k === "instruments"){
+        // Registros join: selector contra su catálogo (genres/instruments), nunca CSV.
+        h += `<label style="margin-top:8px">${lab} (selección múltiple)<br><select id="f_${k}" multiple size="6" data-current="${esc((d[k]||[]).join("|"))}"></select></label>`;
+      } else {
+        h += `<label style="margin-top:8px">${lab}<br><input id="f_${k}" value="${esc((d[k]||[]).join(", "))}" /></label>`;
+      }
     }
+    h += `<div id="personRolesArea" style="margin-top:10px"></div>`;
     h += `<div class="row" style="margin-top:10px"><button onclick="saveId()">Guardar</button>
       <button class="ghost" onclick="backToList()">← Volver al listado</button></div>`;
     h += `</div>`;
@@ -151,6 +163,7 @@ function renderDetail(d){
   }
   $("detailView").innerHTML = h; $("listView").classList.add("hidden");
   $("detailView").classList.remove("hidden");
+  if (editable){ fillSelectors(); loadPersonRoles(); }
 }
 async function loadDetail(){
   try{
@@ -159,7 +172,52 @@ async function loadDetail(){
   }catch(e){ msg(e.message, true); }
 }
 function num(v){ const n = parseInt(v,10); return Number.isNaN(n) ? null : n; }
-function listVal(id){ const v = $("f_"+id).value.split(",").map(s=>s.trim()).filter(Boolean); return v; }
+function listVal(id){
+  const el = $("f_"+id);
+  if (el && el.tagName === "SELECT") return Array.from(el.selectedOptions).map(o=>o.value);
+  return el.value.split(",").map(s=>s.trim()).filter(Boolean);
+}
+// Rellena los multi-select de géneros/instrumentos desde sus catálogos.
+async function fillSelectors(){
+  for (const rel of ["genres","instruments"]){
+    const sel = $("f_"+rel); if (!sel) continue;
+    try{
+      const opts = await api("/api/admin/works/options/"+rel, { headers: auth() });
+      const current = (sel.dataset.current||"").split("|").filter(Boolean);
+      sel.innerHTML = opts.options.map(o=>`<option value="${esc(o.label)}" ${current.includes(o.label)?"selected":""}>${esc(o.label)}</option>`).join("");
+    }catch(e){}
+  }
+}
+// Compositor/artista y demás roles: editor de works_person_roles (no person_id/CV).
+async function loadPersonRoles(){
+  const area = $("personRolesArea"); if (!area) return;
+  try{
+    const rels = await api("/api/admin/works/"+encodeURIComponent(wid)+"/relations", { headers: auth() });
+    const opts = await api("/api/admin/works/options/person_roles", { headers: auth() });
+    const cur = (rels.relations && rels.relations.person_roles) || [];
+    let h = `<label>Personas y roles (works_person_roles)</label><div class="row">`;
+    h += `<select id="prSel">` + opts.options.map(o=>`<option value="${esc(o.value)}" data-role="${esc(String(o.role_id))}">${esc(o.label)} — ${esc(o.role_name)}</option>`).join("") + `</select>`;
+    h += `<button class="ghost" onclick="addPersonRole()">Añadir</button></div>`;
+    h += `<div style="margin-top:6px">` + cur.map(x=>`<div>${esc(x.label||x.ref_id||"")} — ${esc(x.role_name||"")} <button class="ghost" onclick="removePersonRole('${esc(String(x.ref_id||""))}','${esc(String(x.role_id||""))}')">×</button></div>`).join("") + `</div>`;
+    area.innerHTML = h;
+  }catch(e){}
+}
+async function addPersonRole(){
+  const sel = $("prSel"); if (!sel) return;
+  const opt = sel.selectedOptions[0]; if (!opt) return;
+  try{
+    await api("/api/admin/works/"+encodeURIComponent(wid)+"/relations/person_roles",
+      { method:"POST", headers: auth(), body: JSON.stringify({ id: opt.value, role_id: opt.dataset.role }) });
+    msg("Relación añadida"); loadPersonRoles();
+  }catch(e){ msg(e.message, true); }
+}
+async function removePersonRole(personId, roleId){
+  try{
+    await api("/api/admin/works/"+encodeURIComponent(wid)+"/relations/person_roles",
+      { method:"DELETE", headers: auth(), body: JSON.stringify({ id: personId, role_id: roleId }) });
+    msg("Relación quitada"); loadPersonRoles();
+  }catch(e){ msg(e.message, true); }
+}
 async function saveId(){
   const body = {};
   for (const [k] of SCALARS){
