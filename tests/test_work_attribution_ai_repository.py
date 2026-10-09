@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import pytest
-from domain.exceptions import ProposalAssignmentError, ProposalStateError
+from domain.exceptions import ProposalStateError
 from infrastructure.repositories.sql_work_attribution_ai_repository import (
     SqlWorkAttributionAiRepository,
 )
@@ -97,33 +97,38 @@ async def test_accept_escribe_relacion_auditoria_y_estado_en_una_transaccion() -
     assert db.committed is True
     assert db.rolled_back is False
     statements = [sql for sql, _ in db.log]
-    assert "INSERT IGNORE INTO works_person_roles" in statements[0]
-    assert "INSERT INTO work_attribution_audit" in statements[1]
-    assert "UPDATE work_person_ai_proposals" in statements[2]
-    assert "status='pending'" in statements[2]
+    assert statements[0].startswith("SELECT 1 FROM works_person_roles")
+    assert statements[1].startswith("INSERT INTO works_person_roles")
+    assert statements[2].startswith("INSERT INTO work_attribution_audit")
+    assert statements[3].startswith("UPDATE work_person_ai_proposals")
+    assert "status='pending'" in statements[3]
     # La evidencia se guarda como JSON de lista una sola vez (no doblemente codificada).
-    audit_params = db.log[1][1]
+    audit_params = db.log[2][1]
     assert isinstance(audit_params, tuple)
     assert json.loads(str(audit_params[-2])) == [{"type": "source_metadata", "text": "PDMX"}]
 
 
-async def test_accept_sin_fila_real_no_acepta_ni_audita() -> None:
-    db = _TransactionDb(rowcounts=[0])
+async def test_accept_idempotente_si_la_relacion_ya_existe() -> None:
+    # El SELECT encuentra la relación → no inserta, pero acepta (antes hacía rollback).
+    db = _TransactionDb(rowcounts=[1, 1, 1], rows=[{"1": 1}])
     repo = SqlWorkAttributionAiRepository(db)  # type: ignore[arg-type]
 
-    with pytest.raises(ProposalAssignmentError):
-        await repo.accept_proposal(
-            work_id=1, person_id="p1", role_id=1, confidence=None, proposal_id=7,
-            evidence=[], created_by="admin-1", note=None,
-        )
+    await repo.accept_proposal(
+        work_id=1, person_id="p1", role_id=1, confidence=None, proposal_id=7,
+        evidence=[], created_by="admin-1", note=None,
+    )
 
-    assert db.rolled_back is True
-    assert db.committed is False
-    assert len(db.log) == 1  # no se escribió auditoría ni estado
+    assert db.committed is True
+    assert db.rolled_back is False
+    statements = [sql for sql, _ in db.log]
+    assert statements[0].startswith("SELECT 1 FROM works_person_roles")
+    assert not any(s.startswith("INSERT INTO works_person_roles") for s in statements)
+    assert statements[1].startswith("INSERT INTO work_attribution_audit")
+    assert statements[2].startswith("UPDATE work_person_ai_proposals")
 
 
 async def test_accept_con_estado_ya_cambiado_hace_rollback() -> None:
-    db = _TransactionDb(rowcounts=[1, 1, 0])
+    db = _TransactionDb(rowcounts=[1, 1, 1, 0])  # SELECT, INSERT, audit, UPDATE(0)
     repo = SqlWorkAttributionAiRepository(db)  # type: ignore[arg-type]
 
     with pytest.raises(ProposalStateError):
@@ -133,7 +138,7 @@ async def test_accept_con_estado_ya_cambiado_hace_rollback() -> None:
         )
 
     assert db.rolled_back is True
-    assert len(db.log) == 3
+    assert len(db.log) == 4
 
 
 async def test_rechazo_exige_estado_pending() -> None:

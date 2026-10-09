@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from domain.exceptions import ProposalAssignmentError, ProposalStateError
+from domain.exceptions import ProposalStateError
 from domain.services.composer_names import normalize_composer_name
 
 from infrastructure.db.connection import Database
@@ -170,15 +170,19 @@ class SqlWorkAttributionAiRepository:
     ) -> None:
         """Asigna la persona, audita la operación y acepta la propuesta, todo o nada."""
         async with self._db.transaction() as conn, conn.cursor() as cur:
+            # Idempotente: si la relación (obra, persona, rol) ya existe, la asignación ya está
+            # hecha y se acepta igual (antes el INSERT IGNORE con rowcount 0 abortaba el accept).
             await cur.execute(
-                "INSERT IGNORE INTO works_person_roles "
-                "(works_person_roles_work_id, works_person_roles_person_id, works_person_roles_role_id) "
-                "VALUES (%s,%s,%s)",
+                "SELECT 1 FROM works_person_roles WHERE works_person_roles_work_id=%s "
+                "AND works_person_roles_person_id=%s AND works_person_roles_role_id=%s LIMIT 1",
                 (work_id, person_id, role_id),
             )
-            if int(cur.rowcount or 0) != 1:
-                raise ProposalAssignmentError(
-                    f"works_person_roles no insertada (work={work_id}, person={person_id})"
+            if await cur.fetchone() is None:
+                await cur.execute(
+                    "INSERT INTO works_person_roles "
+                    "(works_person_roles_work_id, works_person_roles_person_id, "
+                    "works_person_roles_role_id) VALUES (%s,%s,%s)",
+                    (work_id, person_id, role_id),
                 )
             await cur.execute(
                 "INSERT INTO work_attribution_audit "
