@@ -319,7 +319,6 @@ def main() -> int:
                              ("persons_aliases", "person_id"),
                              ("persons_identity", "persons_id"),
                              ("persons_evidence", "persons_id"),
-                             ("cpdl_edition_persons", "persons_id"),
                              ("representation_persons", "representation_persons_person_id")):
                 cur.execute(f"UPDATE IGNORE {tbl} SET {col}=%s WHERE {col} IN ({ph})",
                             [keeper_id, *dup_ids])

@@ -1,5 +1,9 @@
 """Ejecución reversible del Lote 1A (7 merges) con snapshots y comprobaciones/abortos.
 
+[HISTÓRICO] Ejecutado una vez. Referencia `cpdl_edition_persons`, una de las tablas legacy
+`cpdl_editions*` que ya fueron **eliminadas** (el modelo vigente es `representations` +
+`works_resources` + `representation_persons`). No reejecutar.
+
 Modos: --dry-run (por defecto), --apply, --revert.
 No elimina información del destino: solo mueve/deduplica filas del origen con snapshot.
 

@@ -29,7 +29,6 @@ REF_TABLES = (
     ("persons_identity", "persons_id"),
     ("persons_evidence", "persons_id"),
     ("representation_persons", "representation_persons_person_id"),
-    ("cpdl_edition_persons", "persons_id"),
 )
 
 

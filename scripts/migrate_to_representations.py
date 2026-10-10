@@ -1,5 +1,8 @@
 """Migración paralela al modelo Work -> Representation -> Resource.
 
+[HISTÓRICO] Ya ejecutada; las tablas legacy origen (`cpdl_editions`, `cpdl_edition_files`,
+`cpdl_edition_persons`) fueron **eliminadas** tras migrar. No reejecutar.
+
 Rellena `representations` + `resources` (+ `representation_persons`) desde el esquema actual,
 SIN tocar `archive_entries` ni `cpdl_*` (transición aditiva; ver
 `docsNew/diseño-representaciones-recursos.md` §9).

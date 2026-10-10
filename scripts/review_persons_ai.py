@@ -190,7 +190,7 @@ def generate(args: argparse.Namespace) -> int:
 def _repoint(cur, keeper: str, dup: str) -> None:
     for tbl, col in (("works_person_roles", "works_person_roles_person_id"),
                      ("persons_aliases", "person_id"), ("persons_identity", "persons_id"),
-                     ("persons_evidence", "persons_id"), ("cpdl_edition_persons", "persons_id"),
+                     ("persons_evidence", "persons_id"),
                      ("representation_persons", "representation_persons_person_id")):
         cur.execute(f"UPDATE IGNORE {tbl} SET {col}=%s WHERE {col}=%s", (keeper, dup))
         cur.execute(f"DELETE FROM {tbl} WHERE {col}=%s", (dup,))

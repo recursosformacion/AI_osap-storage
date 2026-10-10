@@ -276,14 +276,6 @@ async def run(db_name: str, dry_run: bool, like: str | None) -> None:
             )
             # 4b) Vínculos con FK `ON DELETE SET NULL` (si no se repuntan, se pierden).
             await cur.execute(
-                f"UPDATE IGNORE cpdl_edition_persons SET persons_id = %s "
-                f"WHERE persons_id IN ({ph})",
-                [keeper_id, *dups],
-            )
-            await cur.execute(
-                f"DELETE FROM cpdl_edition_persons WHERE persons_id IN ({ph})", dups
-            )
-            await cur.execute(
                 f"UPDATE IGNORE representation_persons "
                 f"SET representation_persons_person_id = %s "
                 f"WHERE representation_persons_person_id IN ({ph})",

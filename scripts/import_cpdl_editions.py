@@ -1,5 +1,9 @@
 """Puebla `cpdl_editions` + `cpdl_edition_files` + `cpdl_edition_persons` desde los XML CPDL.
 
+[OBSOLETO] El modelo vigente de ediciones CPDL es `representations` + `works_resources` +
+`representation_persons` (ver `migrate_to_representations.py` y `import_cpdl_works.py`). Las
+tablas `cpdl_editions*` se eliminaron; este script se conserva solo como referencia histórica.
+
 Modela el `payload_json` de cada página CPDL: la obra (`works`, ya importada) tiene N
 ediciones (cada una con su `cpdlno` y licencia), cada edición tiene N ficheros (nombre+tipo)
 y un editor, que se modela como **persona** con rol 6 (Editor/a Musical) sobre la edición.
