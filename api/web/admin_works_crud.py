@@ -1,10 +1,11 @@
 """Página de administración: Mantenimiento de obras (CRUD convencional standalone).
 
-Listado del fichero de obras (30/página, búsqueda) y detalle Ver/Editar usando los
-endpoints de admin existentes:
-  GET /api/admin/works?q&limit&offset
-  GET /api/admin/works/{id}
-  PUT /api/admin/works/{id}
+Listado del fichero de obras (30/página, búsqueda), alta de obra y detalle Ver/Editar
+usando los endpoints de admin existentes:
+  GET  /api/admin/works?q&limit&offset
+  POST /api/admin/works                (alta: title + origin; opcionales origin_id/license/song_name/attribution_type)
+  GET  /api/admin/works/{id}
+  PUT  /api/admin/works/{id}
 
 El token de servicio llega por URL (?token=...); si no viene, se muestra la caja
 para pegarlo. La página en sí no contiene datos (exenta de auth); el API exige
@@ -61,7 +62,10 @@ _PAGE = """<!doctype html>
         <label>Buscar <input id="q" placeholder="título, compositor o catálogo" /></label>
         <button id="btnSearch">Buscar</button>
       </div>
-      <div class="muted"><span id="pageInfo"></span></div>
+      <div class="row">
+        <span class="muted"><span id="pageInfo"></span></span>
+        <button onclick="openNew()">+ Nueva obra</button>
+      </div>
     </div></div>
     <div class="card"><div id="area"><div class="muted">Cargando…</div></div>
       <div class="row" style="justify-content:space-between;margin-top:10px">
@@ -76,7 +80,7 @@ _PAGE = """<!doctype html>
 <script>
 const qs = (k) => new URLSearchParams(location.search).get(k);
 const q = qs("token") || "";
-const mode = qs("mode") === "edit" ? "edit" : "view";
+const mode = qs("mode") || "view";
 const wid = qs("id") || "";
 const state = { items: [], total: 0, limit: 30, offset: 0 };
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
@@ -251,6 +255,57 @@ function renderRows(){
   $("pageInfo").textContent = `página ${Math.floor(state.offset/state.limit)+1} · total ${state.total}`;
 }
 function openMode(m, id){ location = "?token="+encodeURIComponent(token())+"&mode="+m+"&id="+encodeURIComponent(id); }
+function openNew(){ location = "?token="+encodeURIComponent(token())+"&mode=new"; }
+function renderCreate(){
+  const h = `<h2>Nueva obra</h2>
+  <div class="card">
+    <div class="grid">
+      <label>Título *<br><input id="n_title" /></label>
+      <label>Origen (proveedor/fuente) *<br>
+        <input id="n_origin" list="originList" placeholder="OMR, IMSLP, CPDL, human…" />
+        <datalist id="originList">
+          <option value="OMR"></option><option value="IMSLP"></option>
+          <option value="CPDL"></option><option value="human"></option><option value="MANUAL"></option>
+        </datalist>
+      </label>
+      <label>Origen ID<br><input id="n_origin_id" /></label>
+      <label>Licencia<br><input id="n_license" /></label>
+      <label>Song name<br><input id="n_song_name" /></label>
+      <label>Attribution type<br>
+        <select id="n_attribution_type">
+          <option value="">—</option><option value="ANONIMA">ANONIMA</option>
+          <option value="TRADICIONAL">TRADICIONAL</option><option value="POPULAR">POPULAR</option>
+          <option value="ATRIBUIDA">ATRIBUIDA</option>
+        </select></label>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button onclick="createWork()">Crear obra</button>
+      <button class="ghost" onclick="backToList()">← Volver al listado</button>
+    </div>
+    <p class="muted">Tras crearla pasarás a la edición para completar géneros, instrumentos, personas…</p>
+  </div>`;
+  $("detailView").innerHTML = h;
+  $("listView").classList.add("hidden");
+  $("detailView").classList.remove("hidden");
+  msg("");
+}
+async function createWork(){
+  const title = $("n_title").value.trim();
+  const origin = $("n_origin").value.trim();
+  if (!title || !origin){ msg("Título y origen son obligatorios.", true); return; }
+  const body = { title, origin };
+  const oid = $("n_origin_id").value.trim(); if (oid) body.origin_id = oid;
+  const lic = $("n_license").value.trim(); if (lic) body.license = lic;
+  const sn = $("n_song_name").value.trim(); if (sn) body.song_name = sn;
+  const at = $("n_attribution_type").value; if (at) body.attribution_type = at;
+  try{
+    const d = await api("/api/admin/works",
+      { method:"POST", headers: Object.assign({}, auth(), { "Content-Type":"application/json" }),
+        body: JSON.stringify(body) });
+    msg("Obra creada (#" + (d.id ?? "") + ").");
+    openMode("edit", d.id);
+  }catch(e){ msg(e.message, true); }
+}
 async function loadList(){
   if (!token()) return msg("Introduce el service token.", true);
   const p = new URLSearchParams({ limit: String(state.limit), offset: String(state.offset) });
@@ -265,6 +320,7 @@ function backToList(){ $("detailView").classList.add("hidden");
   $("listView").classList.remove("hidden"); loadList(); }
 (async function init(){
   loadToken();
+  if (mode === "new"){ renderCreate(); return; }
   if (wid){ loadDetail(); } else {
     $("btnApply").onclick = loadList; $("btnSearch").onclick = () => { state.offset = 0; loadList(); };
     $("q").onkeydown = (e) => { if (e.key === "Enter"){ state.offset = 0; loadList(); } };
