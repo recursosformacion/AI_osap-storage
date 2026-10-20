@@ -295,6 +295,12 @@ class ComposerPublicRead(Model):
     aliases: list[str] = []
     birth_year: str | None = None
     death_year: str | None = None
+    given_name: str | None = None
+    family_name: str | None = None
+    sort_name: str | None = None
+    nationality: str | None = None
+    image_url: str | None = None
+    visible: bool = True
 
 
 class ProviderResourceDTO(Model):
