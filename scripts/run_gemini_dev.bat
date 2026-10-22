@@ -9,8 +9,16 @@ cd /d D:\Proyectos\AI_OSAP\osap-storage
 
 if not exist docs\ai mkdir docs\ai
 
-set /p GEMINI_API_KEY=<secrets\gemini.key
-set /p GEMINI_API_KEY2=<secrets\gemini.prod.key
+for /f "tokens=2 delims==" %%A in (secrets\gemini.key) do (
+  set "GEMINI_API_KEY=%%A"
+  goto :key1_done
+)
+:key1_done
+for /f "skip=1 tokens=2 delims==" %%A in (secrets\gemini.prod.key) do (
+  set "GEMINI_API_KEY2=%%A"
+  goto :key2_done
+)
+:key2_done
 if "%GEMINI_API_KEY%"=="" (
   echo ERROR: falta secrets\gemini.key
   pause
