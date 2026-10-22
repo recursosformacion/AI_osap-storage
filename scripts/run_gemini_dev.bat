@@ -18,11 +18,17 @@ if "%GEMINI_API_KEY%"=="" (
 )
 
 echo Generando lista de nombres desde la BD local de desarrollo...
-.\.venv\Scripts\python.exe -c "import pymysql,yaml; c=(yaml.safe_load(open('config.yaml',encoding='utf-8')) or {})['db']; cn=pymysql.connect(host=c.get('host','127.0.0.1'),port=int(c.get('port',3306)),user=c.get('user'),password=c.get('password'),database=c.get('name'),charset='utf8mb4'); cur=cn.cursor(); cur.execute(\"SELECT DISTINCT persons_name FROM persons WHERE persons_name IS NOT NULL AND persons_name<>'' AND (persons_review_status IS NULL OR persons_review_status<>'reviewed') ORDER BY persons_name LIMIT 200\"); rows=[r[0] for r in cur.fetchall()]; open('docs/ai/names_dev.txt','w',encoding='utf-8').write('\n'.join(rows)); print(f'{len(rows)} nombres')"
+.\.venv\Scripts\python.exe -c "import pymysql,yaml; c=(yaml.safe_load(open('config.yaml',encoding='utf-8')) or {})['db']; cn=pymysql.connect(host=c.get('host','127.0.0.1'),port=int(c.get('port',3306)),user=c.get('user'),password=c.get('password'),database=c.get('name'),charset='utf8mb4'); cur=cn.cursor(); cur.execute(\"SELECT DISTINCT persons_name FROM persons WHERE persons_name IS NOT NULL AND persons_name != '' AND (persons_review_status IS NULL OR persons_review_status != 'reviewed') ORDER BY persons_name LIMIT 200\"); rows=[r[0] for r in cur.fetchall()]; open('docs/ai/names_dev.txt','w',encoding='utf-8').write('\n'.join(rows)); print(f'{len(rows)} nombres')"
 if errorlevel 1 (
   echo ERROR generando names_dev.txt
   pause
   exit /b 1
+)
+
+if /i "%SKIP_GEMINI%"=="1" (
+  echo SKIP_GEMINI=1: no se llama a Gemini.
+  type docs\ai\names_dev.txt
+  exit /b 0
 )
 
 echo Consultando a Gemini (2 claves, solo propuestas)...
