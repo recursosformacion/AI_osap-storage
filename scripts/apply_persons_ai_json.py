@@ -81,6 +81,14 @@ def _files(dirs: list[Path]) -> list[Path]:
     return out
 
 
+def _clean(value: object) -> object:
+    if isinstance(value, list):
+        return '; '.join(str(v) for v in value if v not in (None, ''))
+    if isinstance(value, dict):
+        return json.dumps(value, ensure_ascii=False)
+    return value
+
+
 def _norm(value: object) -> str:
     return re.sub(r"\s+", " ", str(value or "").strip()).lower()
 
@@ -154,7 +162,7 @@ def main() -> int:
                             continue
                         if _norm(current.get(column)) == _norm(value):
                             continue
-                        changes[column] = value
+                        changes[column] = _clean(value)
                     if not changes:
                         skipped += 1
                         rows_report.append({"persons_id": pid, "persons_name": row.get("persons_name"),
