@@ -29,12 +29,16 @@ import pymysql
 import yaml
 from pymysql.cursors import DictCursor
 
+import llm_client
+
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 OUT_IN = DATA / "works_ai_in"
 OUT_OUT = DATA / "works_ai_out"
 PROMPT = (ROOT / "scripts" / "works_ai_prompt.txt").read_text(encoding="utf-8")
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-lite-latest")
+PROVIDER = os.environ.get("LLM_PROVIDER", "gemini").lower()
+LLM_MODEL = os.environ.get("LLM_MODEL", "")
 API = "https://generativelanguage.googleapis.com/v1beta/models"
 RETRY = {429, 500, 502, 503, 504}
 BATCH = 20
@@ -69,8 +73,8 @@ def _allowed(conn: pymysql.connections.Connection) -> dict[str, list[str]]:
         instruments = [r["name_en"] for r in cur.fetchall()]
         cur.execute("SELECT languages_code FROM languages ORDER BY languages_code")
         languages = [r["languages_code"] for r in cur.fetchall()]
-    return {"genres": genres[:400], "ensembles": ensembles[:400],
-            "instruments": instruments[:400], "languages": languages[:400]}
+    return {"genres": genres[:20], "ensembles": ensembles[:30],
+            "instruments": instruments[:40], "languages": languages[:40]}
 
 
 def _batch(conn: pymysql.connections.Connection, offset: int) -> list[dict[str, Any]]:
@@ -155,12 +159,20 @@ def main() -> int:
     ap.add_argument("--sleep", type=float, default=2.0)
     ap.add_argument("--build-only", action="store_true")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--provider", default="", help="gemini|groq|mistral|openrouter")
+    ap.add_argument("--model", default="", help="modelo del proveedor")
+    ap.add_argument("--chunk", type=int, default=5, help="obras por llamada en proveedores OpenAI")
     args = ap.parse_args()
     if sys.stdout and hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
+    provider = (args.provider or PROVIDER).lower()
+    model = args.model or LLM_MODEL
     keys = _keys()
-    if not args.build_only and not keys:
+    if not args.build_only and provider == "gemini" and not keys:
         print("ERROR: faltan GEMINI_API_KEY / GEMINI_API_KEY2", file=sys.stderr)
+        return 2
+    if not args.build_only and provider != "gemini" and not llm_client.provider_key(provider):
+        print(f"ERROR: falta la clave de {provider}", file=sys.stderr)
         return 2
     OUT_IN.mkdir(parents=True, exist_ok=True)
     OUT_OUT.mkdir(parents=True, exist_ok=True)
@@ -189,13 +201,35 @@ def main() -> int:
                     n += 1
                     continue
             rows = json.loads(src.read_text(encoding="utf-8"))
-            payload = {
-                "contents": [{"parts": [{"text": PROMPT + "\n\nLISTAS PERMITIDAS:\n" +
-                    json.dumps(allowed, ensure_ascii=False) + "\n\nLOTE:\n" +
-                    json.dumps(rows, ensure_ascii=False)}]}],
-                "generationConfig": {"responseMimeType": "application/json", "temperature": 0.1},
-            }
-            result = _call(payload, keys)
+            if provider == "gemini":
+                payload = {
+                    "contents": [{"parts": [{"text": PROMPT + "\n\nLISTAS PERMITIDAS:\n" +
+                        json.dumps(allowed, ensure_ascii=False) + "\n\nLOTE:\n" +
+                        json.dumps(rows, ensure_ascii=False)}]}],
+                    "generationConfig": {"responseMimeType": "application/json", "temperature": 0.1},
+                }
+                result = _call(payload, keys)
+            else:
+                system = (
+                    PROMPT
+                    + "\n\nLISTAS PERMITIDAS:\n"
+                    + json.dumps(allowed, ensure_ascii=False)
+                    + "\n\nDevuelve un objeto JSON con la forma {\"results\": [...]}."
+                )
+                chunk_size = max(1, min(args.chunk, len(rows)))
+                result = []
+                for start in range(0, len(rows), chunk_size):
+                    chunk = rows[start:start + chunk_size]
+                    result.extend(
+                        llm_client.call_json(
+                            provider,
+                            model,
+                            system,
+                            json.dumps(chunk, ensure_ascii=False),
+                        )
+                    )
+                    if start + chunk_size < len(rows):
+                        time.sleep(max(args.sleep, 35))
             dst.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
             print(f"  lote {n:05d}: {len(result)} respuestas -> {dst.name}")
             done += 1
