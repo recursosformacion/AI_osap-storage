@@ -17,3 +17,4 @@ __pycache__/
 dist/
 build/
 logs/
+docs/ai/

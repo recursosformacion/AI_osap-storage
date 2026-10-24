@@ -24,6 +24,8 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +40,28 @@ PROMPT = (ROOT / "scripts" / "persons_ai_prompt.txt").read_text(encoding="utf-8"
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-lite-latest")
 API = "https://generativelanguage.googleapis.com/v1beta/models"
 RETRY = {429, 500, 502, 503, 504}
+
+
+def _retry_delay(attempt: int, headers: Any, error: dict[str, Any]) -> float:
+    retry_after = headers.get("Retry-After") if headers else None
+    if retry_after:
+        try:
+            return max(0.0, float(retry_after))
+        except ValueError:
+            try:
+                retry_at = parsedate_to_datetime(retry_after)
+                if retry_at.tzinfo is None:
+                    retry_at = retry_at.replace(tzinfo=UTC)
+                return max(0.0, (retry_at - datetime.now(UTC)).total_seconds())
+            except (TypeError, ValueError, OverflowError):
+                pass
+
+    for detail in error.get("details", []):
+        retry_delay = detail.get("retryDelay") if isinstance(detail, dict) else None
+        match = re.fullmatch(r"(\d+(?:\.\d+)?)s", str(retry_delay or ""))
+        if match:
+            return float(match.group(1))
+    return min(2**attempt, 10)
 
 
 def _keys() -> list[str]:
@@ -95,6 +119,7 @@ def _call(payload: dict[str, Any], keys: list[str]) -> list[dict[str, Any]]:
     last: str = ""
     for attempt in range(max(1, len(keys) * 3)):
         key = keys[attempt % len(keys)]
+        delay = min(2**attempt, 10)
         try:
             req = urllib.request.Request(
                 f"{API}/{MODEL}:generateContent?key={key}",
@@ -121,14 +146,21 @@ def _call(payload: dict[str, Any], keys: list[str]) -> list[dict[str, Any]]:
                 raise RuntimeError("respuesta sin array JSON")
             return [x for x in parsed if isinstance(x, dict)]
         except urllib.error.HTTPError as exc:
-            last = f"HTTP {exc.code}"
+            try:
+                error_data = json.loads(exc.read())
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                error_data = {}
+            error = error_data.get("error", {}) if isinstance(error_data, dict) else {}
+            message = error.get("message", "") if isinstance(error, dict) else ""
+            last = f"HTTP {exc.code}" + (f": {message}" if message else "")
             if exc.code == 400:
                 continue
             if exc.code not in RETRY:
                 raise
+            delay = _retry_delay(attempt, exc.headers, error)
         except Exception as exc:  # noqa: BLE001
             last = str(exc)
-        time.sleep(min(2 ** attempt, 10))
+        time.sleep(delay)
     raise RuntimeError(f"Gemini no disponible: {last}")
 
 
