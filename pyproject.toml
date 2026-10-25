@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "osap-storage"
-version = "5.7.6"
+version = "5.7.7"
 description = "Gestion de almacenamiento, adquisicion y distribucion de ficheros para OSAP."
 requires-python = ">=3.11"
 dependencies = [
@@ -69,6 +69,7 @@ warn_unused_ignores = false
 # diseño), manteniendo activas el resto de comprobaciones de tipos.
 disable_error_code = ["arg-type"]
 exclude = ["tests/", "infrastructure/db/migrations/"]
+
 
 
 
