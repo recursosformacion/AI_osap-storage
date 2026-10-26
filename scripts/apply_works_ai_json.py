@@ -108,6 +108,10 @@ def main() -> int:
             for name, (_table, _col, source, column) in JOINS.items():
                 cur.execute(f"SELECT id, LOWER({column}) AS k FROM {source}")  # noqa: S608
                 maps[name] = {str(r["k"]): int(r["id"]) for r in cur.fetchall() if r["k"]}
+            la_id = maps.get("languages", {}).get("la")
+            if la_id:
+                maps["languages"].setdefault("latin", la_id)
+                maps["languages"].setdefault("lat", la_id)
             for path in files:
                 data = json.loads(path.read_text(encoding="utf-8"))
                 for row in data:
@@ -200,3 +204,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
