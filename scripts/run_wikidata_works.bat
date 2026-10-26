@@ -1,7 +1,7 @@
 @echo off
 REM Consulta Wikidata (SPARQL) para completar obras cuyo compositor tiene QID.
 REM No escribe en la BD: genera propuestas JSON/CSV en data\wikidata_works\.
-REM Uso: run_wikidata_works.bat [--limit N] [--offset N] [--out ruta.json]
+REM Uso: run_wikidata_works.bat [--limit N] [--offset N] [--title-only] [--out ruta.json]
 setlocal
 cd /d D:\Proyectos\AI_OSAP\osap-storage
 
@@ -12,5 +12,7 @@ if not exist ".venv\Scripts\python.exe" (
 )
 
 echo Consultando Wikidata para obras. Limite por defecto: 50 obras.
+echo Para obras sin compositor/QID usa: --title-only
 .\.venv\Scripts\python.exe scripts\wikidata_works.py --limit 50 %*
 pause
+

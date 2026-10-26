@@ -148,17 +148,19 @@ def _select_persons(limit: int, offset: int, person_id: str | None) -> list[dict
 def _identities(person_ids: list[str]) -> dict[str, list[dict[str, str]]]:
     if not person_ids:
         return {}
-    placeholders = ",".join(["%s"] * len(person_ids))
+    out: dict[str, list[dict[str, str]]] = {}
     with _db() as conn, conn.cursor() as cur:
-        cur.execute(
-            "SELECT persons_id, identity_type, identity_value FROM persons_identity "
-            f"WHERE persons_id IN ({placeholders})",
-            person_ids,
-        )
-        out: dict[str, list[dict[str, str]]] = {}
-        for row in cur.fetchall():
-            out.setdefault(row["persons_id"], []).append(row)
-        return out
+        for start in range(0, len(person_ids), 1000):
+            chunk = person_ids[start : start + 1000]
+            placeholders = ",".join(["%s"] * len(chunk))
+            cur.execute(
+                "SELECT persons_id, identity_type, identity_value FROM persons_identity "
+                f"WHERE persons_id IN ({placeholders})",
+                chunk,
+            )
+            for row in cur.fetchall():
+                out.setdefault(row["persons_id"], []).append(row)
+    return out
 
 
 def _query_qids(qids: list[str]) -> dict[str, dict[str, Any]]:
@@ -325,13 +327,17 @@ def _proposals(persons: list[dict[str, Any]], name_fallback: bool) -> list[dict[
         if not used:
             no_match.append(pid)
 
-    for qid, pids in qid_people.items():
-        data = _query_qids([qid]).get(qid)
-        if data:
-            for pid in pids:
-                result[pid] = {"match_method": "wikidata_qid", "confidence": 0.99, **data}
-        else:
-            no_match.extend(pids)
+    qids = list(qid_people)
+    for start in range(0, len(qids), BATCH):
+        chunk = qids[start : start + BATCH]
+        found = _query_qids(chunk)
+        for qid in chunk:
+            data = found.get(qid)
+            if data:
+                for pid in qid_people[qid]:
+                    result[pid] = {"match_method": "wikidata_qid", "confidence": 0.99, **data}
+            else:
+                no_match.extend(qid_people[qid])
 
     by_prop: dict[str, list[tuple[str, str]]] = {}
     for composite, pids in id_people.items():
@@ -446,6 +452,9 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+
 
 
 

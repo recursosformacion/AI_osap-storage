@@ -30,25 +30,43 @@ OUT_DIR = ROOT / "data" / "wikidata_works"
 BATCH = 30
 
 
-def _select(limit: int, offset: int) -> list[dict[str, Any]]:
-    sql = """
-        SELECT w.id, w.works_title, w.works_song_name, w.works_year,
-               w.works_catalogue, w.works_description,
-               p.persons_id, p.persons_name, i.identity_value AS qid
-        FROM works w
-        JOIN works_person_roles r
-          ON r.works_person_roles_work_id = w.id AND r.works_person_roles_role_id = 1
-        JOIN persons p ON p.persons_id = r.works_person_roles_person_id
-        JOIN persons_identity i
-          ON i.persons_id = p.persons_id AND i.identity_type = 'wikidata_qid'
-        WHERE (w.works_description IS NULL OR w.works_description = ''
-               OR w.works_year IS NULL OR w.works_catalogue IS NULL)
-          AND i.identity_value LIKE 'Q%%'
-        GROUP BY w.id, w.works_title, w.works_song_name, w.works_year,
-                 w.works_catalogue, w.works_description,
-                 p.persons_id, p.persons_name, i.identity_value
-        ORDER BY w.id
-    """
+def _select(limit: int, offset: int, title_only: bool = False) -> list[dict[str, Any]]:
+    if title_only:
+        sql = """
+            SELECT w.id, w.works_title, w.works_song_name, w.works_year,
+                   w.works_catalogue, w.works_description,
+                   NULL AS persons_id, NULL AS persons_name, NULL AS qid
+            FROM works w
+            LEFT JOIN works_person_roles r
+              ON r.works_person_roles_work_id = w.id AND r.works_person_roles_role_id = 1
+            LEFT JOIN persons p ON p.persons_id = r.works_person_roles_person_id
+            LEFT JOIN persons_identity i
+              ON i.persons_id = p.persons_id AND i.identity_type = 'wikidata_qid'
+            WHERE (r.works_person_roles_person_id IS NULL
+                   OR p.persons_id IS NULL OR p.persons_type != 'person'
+                   OR i.identity_value IS NULL)
+              AND w.works_title IS NOT NULL AND w.works_title <> ''
+            ORDER BY w.id
+        """
+    else:
+        sql = """
+            SELECT w.id, w.works_title, w.works_song_name, w.works_year,
+                   w.works_catalogue, w.works_description,
+                   p.persons_id, p.persons_name, i.identity_value AS qid
+            FROM works w
+            JOIN works_person_roles r
+              ON r.works_person_roles_work_id = w.id AND r.works_person_roles_role_id = 1
+            JOIN persons p ON p.persons_id = r.works_person_roles_person_id
+            JOIN persons_identity i
+              ON i.persons_id = p.persons_id AND i.identity_type = 'wikidata_qid'
+            WHERE (w.works_description IS NULL OR w.works_description = ''
+                   OR w.works_year IS NULL OR w.works_catalogue IS NULL)
+              AND i.identity_value LIKE 'Q%%'
+            GROUP BY w.id, w.works_title, w.works_song_name, w.works_year,
+                     w.works_catalogue, w.works_description,
+                     p.persons_id, p.persons_name, i.identity_value
+            ORDER BY w.id
+        """
     params: list[Any] = []
     if limit:
         sql += " LIMIT %s OFFSET %s"
@@ -59,17 +77,20 @@ def _select(limit: int, offset: int) -> list[dict[str, Any]]:
 
 
 def _query(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    values = []
-    for row in rows:
-        qid = _qid(row.get("qid"))
-        title = str(row.get("works_title") or "").strip()
-        if not qid or not title:
+    candidates: list[dict[str, Any]] = []
+    for offset in range(0, len(rows), BATCH):
+        chunk = rows[offset : offset + BATCH]
+        values = []
+        for row in chunk:
+            qid = _qid(row.get("qid"))
+            title = str(row.get("works_title") or "").strip()
+            if not qid or not title:
+                continue
+            for lang in ("es", "en"):
+                values.append(f"(wd:{qid} {json.dumps(title)}@{lang})")
+        if not values:
             continue
-        for lang in ("es", "en"):
-            values.append(f"(wd:{qid} {json.dumps(title)}@{lang})")
-    if not values:
-        return []
-    query = f"""
+        query = f"""
 SELECT ?work ?workLabel ?composer ?composerLabel ?title ?date ?catalogue
        ?genreLabel ?languageLabel ?duration ?instrumentationLabel ?description ?mbid WHERE {{
   VALUES (?composer ?title) {{ {' '.join(values)} }}
@@ -99,9 +120,99 @@ SELECT ?work ?workLabel ?composer ?composerLabel ?title ?date ?catalogue
   OPTIONAL {{ ?work wdt:P435 ?mbid. }}
   SERVICE wikibase:label {{ bd:serviceParam wikibase:language "es,en". }}
 }}"""
-    return _sparql(query)
+        candidates.extend(_sparql(query))
+    return candidates
+
+def _query_titles(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for offset in range(0, len(rows), BATCH):
+        chunk = rows[offset : offset + BATCH]
+        values = []
+        for row in chunk:
+            title = str(row.get("works_title") or "").strip()
+            if title:
+                for lang in ("es", "en"):
+                    values.append(f"{json.dumps(title)}@{lang}")
+        if not values:
+            continue
+        query = f"""
+SELECT ?work ?workLabel ?composer ?composerLabel ?title ?date ?catalogue
+       ?genreLabel ?languageLabel ?duration ?instrumentationLabel ?description ?mbid WHERE {{
+  VALUES ?title {{ {' '.join(values)} }}
+  ?work rdfs:label ?title; wdt:P86 ?composer.
+  ?composer wdt:P31 wd:Q5.
+  FILTER EXISTS {{ ?composer wdt:P106 wd:Q36834. }}
+  OPTIONAL {{ ?work wdt:P577 ?date. }}
+  OPTIONAL {{ ?work wdt:P528 ?catalogue. }}
+  OPTIONAL {{ ?work wdt:P136 ?genre.
+    ?genre rdfs:label ?genreLabel. FILTER(lang(?genreLabel) = "es") }}
+  OPTIONAL {{ ?work wdt:P407 ?language.
+    ?language rdfs:label ?languageLabel. FILTER(lang(?languageLabel) = "es") }}
+  OPTIONAL {{ ?work wdt:P2047 ?duration. }}
+  OPTIONAL {{ ?work wdt:P870 ?instrumentation.
+    ?instrumentation rdfs:label ?instrumentationLabel.
+    FILTER(lang(?instrumentationLabel) = "es") }}
+  OPTIONAL {{ ?work schema:description ?description.
+    FILTER(lang(?description) = "es") }}
+  OPTIONAL {{ ?work wdt:P435 ?mbid. }}
+  SERVICE wikibase:label {{ bd:serviceParam wikibase:language "es,en". }}
+}}"""
+        candidates.extend(_sparql(query))
+    return candidates
 
 
+def _proposals_title_only(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    candidates = _query_titles(rows)
+    by_title: dict[str, list[dict[str, Any]]] = {}
+    for candidate in candidates:
+        title = (candidate.get("title") or {}).get("value")
+        qid = _qid((candidate.get("composer") or {}).get("value"))
+        if title and qid:
+            by_title.setdefault(title.casefold(), []).append(candidate)
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        title = str(row.get("works_title") or "").strip().casefold()
+        found = {(_qid((c.get("composer") or {}).get("value"))): c for c in by_title.get(title, [])}
+        if len(found) == 1:
+            candidate = next(iter(found.values()))
+            work = candidate.get("work") or {}
+            out.append(
+                {
+                    "works_id": row["id"],
+                    "current_title": row["works_title"],
+                    "match_method": "title+composer_work",
+                    "confidence": 0.65,
+                    "qid": _qid(work.get("value")),
+                    "wikidata_label": (candidate.get("workLabel") or {}).get("value"),
+                    "composer_qid": _qid((candidate.get("composer") or {}).get("value")),
+                    "composer": (candidate.get("composerLabel") or {}).get("value"),
+                    "year": _year((candidate.get("date") or {}).get("value")),
+                    "catalogue": (candidate.get("catalogue") or {}).get("value"),
+                    "genre": (candidate.get("genreLabel") or {}).get("value"),
+                    "language": (candidate.get("languageLabel") or {}).get("value"),
+                    "description": (candidate.get("description") or {}).get("value"),
+                }
+            )
+        elif len(found) > 1:
+            out.append(
+                {
+                    "works_id": row["id"],
+                    "current_title": row["works_title"],
+                    "match_method": "ambiguous_title",
+                    "confidence": 0.0,
+                    "candidates": sorted(qid for qid in found if qid),
+                }
+            )
+        else:
+            out.append(
+                {
+                    "works_id": row["id"],
+                    "current_title": row["works_title"],
+                    "match_method": "no_match",
+                    "confidence": 0.0,
+                }
+            )
+    return out
 def _proposals(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     candidates = _query(rows)
     by_key: dict[tuple[str, str], list[dict[str, Any]]] = {}
@@ -175,13 +286,14 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=50)
     ap.add_argument("--offset", type=int, default=0)
     ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument("--title-only", action="store_true", help="obras sin compositor o sin QID: buscar por título")
     args = ap.parse_args()
 
-    rows = _select(args.limit, args.offset)
+    rows = _select(args.limit, args.offset, args.title_only)
     if not rows:
         print("No hay obras candidatas con compositor QID.")
         return 0
-    proposals = _proposals(rows)
+    proposals = _proposals_title_only(rows) if args.title_only else _proposals(rows)
     stamp = date.today().strftime("%Y%m%d")
     out_dir = args.out.parent if args.out else OUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -206,4 +318,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+
 
