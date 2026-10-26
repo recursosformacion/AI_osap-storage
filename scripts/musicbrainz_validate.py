@@ -107,6 +107,45 @@ def _person(proposal: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+
+def _escape_lucene(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _persons_batch(proposals: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    for offset in range(0, len(proposals), 50):
+        chunk = proposals[offset : offset + 50]
+        query = " OR ".join(f'artist:"{_escape_lucene(str(p.get("persons_name") or ""))}"' for p in chunk)
+        try:
+            payload = _get("artist", {"query": query, "limit": 100})
+        except Exception as exc:
+            print(f"lote {offset}: {exc}", flush=True)
+            for proposal in chunk:
+                out[proposal["persons_id"]] = {"status": "error", "error": str(exc)}
+            _save_cache()
+            continue
+        artists = [a for a in payload.get("artists", []) if a.get("type") == "Person"]
+        print(f"lote {offset}/{len(proposals)}", flush=True)
+        _save_cache()
+        for proposal in chunk:
+            name = str(proposal.get("persons_name") or "").strip().casefold()
+            found = [a for a in artists if str(a.get("name") or "").casefold() == name]
+            found.sort(key=lambda a: int(a.get("score") or 0), reverse=True)
+            if not found:
+                out[proposal["persons_id"]] = {"status": "no_match"}
+                continue
+            top = found[0]
+            out[proposal["persons_id"]] = {
+                "status": "match" if int(top.get("score") or 0) >= 95 else "weak",
+                "mbid": top.get("id"),
+                "name": top.get("name"),
+                "score": top.get("score"),
+                "disambiguation": top.get("disambiguation"),
+                "life_span": top.get("life-span"),
+                "candidate_count": len(found),
+            }
+    return out
 def _work(proposal: dict[str, Any]) -> dict[str, Any]:
     title = str(proposal.get("current_title") or proposal.get("wikidata_label") or "").strip()
     if not title:
@@ -147,8 +186,18 @@ def main() -> int:
     results: list[dict[str, Any]] = []
     if args.persons_file:
         data = json.loads(args.persons_file.read_text(encoding="utf-8"))
-        for proposal in (data if args.limit == 0 else data[: args.limit]):
-            results.append({"kind": "person", **proposal, "musicbrainz": _person(proposal)})
+        selected = data if args.limit == 0 else data[: args.limit]
+        checked = _persons_batch(selected)
+        for proposal in selected:
+            results.append(
+                {
+                    "kind": "person",
+                    **proposal,
+                    "musicbrainz": checked.get(
+                        proposal["persons_id"], {"status": "no_match"}
+                    ),
+                }
+            )
     if args.works_file:
         data = json.loads(args.works_file.read_text(encoding="utf-8"))
         for proposal in (data if args.limit == 0 else data[: args.limit]):
@@ -179,5 +228,8 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+
 
 
