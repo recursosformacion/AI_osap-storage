@@ -67,6 +67,11 @@ def _get(path: str, params: dict[str, Any]) -> dict[str, Any]:
                 time.sleep(2 ** attempt)
                 continue
             raise
+        except (urllib.error.URLError, TimeoutError) as exc:
+            if attempt < 3:
+                time.sleep(2 ** attempt)
+                continue
+            raise RuntimeError(f"MusicBrainz no responde: {exc}") from exc
     raise RuntimeError("MusicBrainz no respondió")
 
 
@@ -174,4 +179,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
 
