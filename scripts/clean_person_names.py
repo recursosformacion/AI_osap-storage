@@ -29,8 +29,10 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "data" / "person_name_cleanup"
 MARKERS = ("www.", "http", "hymnary", "vwml", "musescore", "youtube", "patreon", "imslp")
 URL_RE = re.compile(r"(?i)(?:https?\s*//|www\.)\S+")
-CREDIT_RE = re.compile(r"(?i)composed\s+by\s+(.+?)(?=\s*(?:arranged|performed|transcribed|full|source|https?|www\.|$))")
-HYMNARY_RE = re.compile(r"(?i)hymnary\.org/text/([^?#\s]+)")
+CREDIT_RE = re.compile(
+    r"(?i)composed\s+by\s+(.+?)(?=\s*(?:piano\s+arrangement|arrangement|arranged|performed|transcribed|full|if\s+you\s+want|source|chords\s+by|based\s+on|https?|www\.|$))"
+)
+HYMNARY_RE = re.compile(r"(?i)hymnary\.org/+?(?:text|hymn)/([^?#\s]+)")
 IMSLP_RE = re.compile(r"(?i)imslp\.org/wiki/([^?#\s)]+)")
 SEPARATOR_RE = re.compile(r"\s+[-–—]\s+")
 
@@ -89,8 +91,8 @@ def _propose(name: str, work_titles: list[str]) -> dict[str, Any]:
                 "confidence": 0.9,
                 "url_title": url_title,
             }
-    if url_title:
-        target = work_titles[0] if work_titles else url_title
+    if url_title or "hymnary" in name.casefold() or "vwml" in name.casefold():
+        target = work_titles[0] if work_titles else (url_title or name)
         parts = [part.strip(" .,-") for part in SEPARATOR_RE.split(target) if part.strip(" .,-")]
         if len(parts) >= 2 and not any(marker in parts[-1].casefold() for marker in MARKERS):
             words = parts[-1].split()
@@ -115,7 +117,7 @@ def _propose(name: str, work_titles: list[str]) -> dict[str, Any]:
     work_norms = {_norm(t) for t in work_titles if t}
     kept = [s for s in segments if _norm(s) not in work_norms]
     candidate = " ".join(kept).strip()
-    if candidate and not any(marker in candidate.casefold() for marker in MARKERS):
+    if candidate and not any(marker in candidate.casefold() for marker in MARKERS) and not re.search(r"(?i)transcrib|arrang|improvis|chords|performed|based on", name):
         # Evitar metros/tune names y cadenas de creditos.
         words = candidate.split()
         if 1 < len(words) <= 7 and len(candidate) <= 80:
@@ -188,6 +190,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
 
