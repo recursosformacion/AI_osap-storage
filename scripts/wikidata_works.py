@@ -140,6 +140,7 @@ SELECT ?work ?workLabel ?composer ?composerLabel ?title ?date ?catalogue
        ?genreLabel ?languageLabel ?duration ?instrumentationLabel ?description ?mbid WHERE {{
   VALUES ?title {{ {' '.join(values)} }}
   ?work rdfs:label ?title; wdt:P86 ?composer.
+  ?work wdt:P31/wdt:P279* wd:Q2188189.
   ?composer wdt:P31 wd:Q5.
   FILTER EXISTS {{ ?composer wdt:P106 wd:Q36834. }}
   OPTIONAL {{ ?work wdt:P577 ?date. }}
@@ -297,7 +298,8 @@ def main() -> int:
     stamp = date.today().strftime("%Y%m%d")
     out_dir = args.out.parent if args.out else OUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
-    json_path = args.out or (out_dir / f"proposals_{stamp}.json")
+    suffix = "title_only" if args.title_only else "composer_qid"
+    json_path = args.out or (out_dir / f"proposals_{stamp}_{suffix}.json")
     csv_path = json_path.with_suffix(".csv")
     json_path.write_text(json.dumps(proposals, ensure_ascii=False, indent=2), encoding="utf-8")
     with csv_path.open("w", encoding="utf-8", newline="") as fh:
@@ -318,6 +320,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
 
 
 
