@@ -19,6 +19,7 @@ import re
 import zipfile
 from pathlib import Path
 from typing import Any
+from xml.etree import ElementTree as ET
 
 import pymysql
 import yaml
@@ -83,6 +84,10 @@ def _path(object_key: str | None, name: str | None) -> Path | None:
     return None
 
 
+def _local(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
 def _extract(path: Path) -> dict[str, Any]:
     try:
         with zipfile.ZipFile(path) as archive:
@@ -91,13 +96,159 @@ def _extract(path: Path) -> dict[str, Any]:
         return {"error": "no_mxl"}
     if not xml:
         return {"error": "no_xml"}
-    creators = [_text(x) for x in CREATOR_RE.findall(xml)]
+
+    creators: list[dict[str, str]] = []
+    part_names: list[str] = []
+    instruments: list[str] = []
+    credits: list[str] = []
+    keys: list[str] = []
+    times: list[str] = []
+    voices: set[str] = set()
+    staves: set[str] = set()
+    measures = 0
+    notes = 0
+    parts = 0
+    midi_programs: list[str] = []
+    lyrics = 0
+    tempo = None
+    work_number = None
+    opus = None
+    movement_number = None
+    software = None
+    encoding_date = None
+    source = None
+    rights = None
+    try:
+        root = ET.fromstring(xml)
+        for elem in root.iter():
+            tag = _local(elem.tag)
+            text = _text(elem.text)
+            if tag == "creator" and text:
+                creators.append({"type": str(elem.get("type") or ""), "name": text})
+            elif tag == "part-name" and text:
+                part_names.append(text)
+            elif tag == "instrument-name" and text:
+                instruments.append(text)
+            elif tag == "credit-words" and text:
+                credits.append(text)
+            elif tag == "source" and text:
+                source = text
+            elif tag == "rights" and text:
+                rights = text
+            elif tag == "work-number" and text:
+                work_number = text
+            elif tag == "opus" and text:
+                opus = text
+            elif tag == "movement-number" and text:
+                movement_number = text
+            elif tag == "software" and text:
+                software = text
+            elif tag == "encoding-date" and text:
+                encoding_date = text
+            elif tag in {"fifths", "mode"} and text:
+                keys.append(text)
+            elif tag in {"beats", "beat-type"} and text:
+                times.append(text)
+            elif tag == "voice" and text:
+                voices.add(text)
+            elif tag == "staves" and text:
+                staves.add(text)
+            elif tag == "measure":
+                measures += 1
+            elif tag == "part":
+                parts += 1
+            elif tag == "midi-program" and text:
+                midi_programs.append(text)
+            elif tag == "note":
+                notes += 1
+            elif tag == "lyric":
+                lyrics += 1
+            elif tag == "sound" and elem.get("tempo"):
+                tempo = elem.get("tempo")
+            elif tag == "per-minute" and text:
+                tempo = tempo or text
+        title = None
+        for elem in root.iter():
+            if _local(elem.tag) in {"movement-title", "work-title"}:
+                title = _text(elem.text) or title
+                if title:
+                    break
+    except ET.ParseError:
+        title = _text((TITLE_RE.search(xml) or [None, None])[1]) if TITLE_RE.search(xml) else None
+        creators = [
+            {
+                "type": "composer" if COMPOSER_RE.search(xml) else "",
+                "name": _text(x) or "",
+            }
+            for x in CREATOR_RE.findall(xml)
+        ]
+        source = _text((SOURCE_RE.search(xml) or [None, None])[1]) if SOURCE_RE.search(xml) else None
+        rights = _text((RIGHTS_RE.search(xml) or [None, None])[1]) if RIGHTS_RE.search(xml) else None
+
+    composers = [c["name"] for c in creators if c["type"].lower() == "composer"]
+    lyricists = [c["name"] for c in creators if c["type"].lower() in {"lyricist", "poet", "text"}]
+    arrangers = [c["name"] for c in creators if "arrang" in c["type"].lower()]
+    instrumentation = list(dict.fromkeys(instruments or part_names))
+    if not instrumentation and midi_programs:
+        gm = {
+            "1": "Piano",
+            "41": "Violín",
+            "42": "Viola",
+            "43": "Violonchelo",
+            "44": "Contrabajo",
+            "57": "Trompeta",
+            "58": "Trombón",
+            "59": "Tuba",
+            "65": "Saxofón",
+            "69": "Oboe",
+            "71": "Fagot",
+            "72": "Clarinete",
+            "74": "Flauta",
+            "76": "Flautín",
+        }
+        instrumentation = list(dict.fromkeys(gm.get(p, f"MIDI {p}") for p in midi_programs))
+    has_lyrics = lyrics > 0
+    lower = " ".join(part_names + instruments + instrumentation).casefold()
+    if all(x in lower for x in ("soprano", "alto", "tenor", "bass")):
+        ensemble = "SATB"
+    elif "string quartet" in lower:
+        ensemble = "String quartet"
+    elif "orchestra" in lower:
+        ensemble = "Orchestra"
+    elif "choir" in lower or "chorus" in lower:
+        ensemble = "Choir"
+    elif "piano" in lower:
+        ensemble = "Piano"
+    elif has_lyrics and parts >= 2:
+        ensemble = "Vocal ensemble"
+    else:
+        ensemble = None
     return {
-        "xml_title": _text((TITLE_RE.search(xml) or [None, None])[1]) if TITLE_RE.search(xml) else None,
-        "composer": _text((COMPOSER_RE.search(xml) or [None, None])[1]) if COMPOSER_RE.search(xml) else None,
-        "creators": [c for c in creators if c],
-        "source": _text((SOURCE_RE.search(xml) or [None, None])[1]) if SOURCE_RE.search(xml) else None,
-        "rights": _text((RIGHTS_RE.search(xml) or [None, None])[1]) if RIGHTS_RE.search(xml) else None,
+        "xml_title": title,
+        "composer": composers[0] if composers else None,
+        "creators": [c for c in creators if c["name"]],
+        "lyricist": lyricists[0] if lyricists else None,
+        "arranger": arrangers[0] if arrangers else None,
+        "source": source,
+        "rights": rights,
+        "credits": credits[:5],
+        "work_number": work_number,
+        "opus": opus,
+        "movement_number": movement_number,
+        "software": software,
+        "encoding_date": encoding_date,
+        "instrumentation": instrumentation,
+        "ensemble_guess": ensemble,
+        "keys": keys[:4],
+        "time_signatures": list(dict.fromkeys(times)),
+        "parts_count": parts,
+        "measures": measures,
+        "notes": notes,
+        "voices": sorted(voices),
+        "staves": sorted(staves),
+        "midi_programs": midi_programs,
+        "has_lyrics": has_lyrics,
+        "tempo": tempo,
     }
 
 
@@ -148,7 +299,37 @@ def main() -> int:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(proposals, ensure_ascii=False, indent=2), encoding="utf-8")
     csv_path = args.out.with_suffix(".csv")
-    fields = ["work_id", "current_title", "xml_title", "composer", "creators", "source", "rights", "file", "error"]
+    fields = [
+        "work_id",
+        "current_title",
+        "xml_title",
+        "composer",
+        "lyricist",
+        "arranger",
+        "creators",
+        "source",
+        "rights",
+        "credits",
+        "work_number",
+        "opus",
+        "movement_number",
+        "software",
+        "encoding_date",
+        "instrumentation",
+        "ensemble_guess",
+        "keys",
+        "time_signatures",
+        "parts_count",
+        "measures",
+        "notes",
+        "voices",
+        "staves",
+        "midi_programs",
+        "has_lyrics",
+        "tempo",
+        "file",
+        "error",
+    ]
     with csv_path.open("w", encoding="utf-8", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=fields)
         writer.writeheader()
@@ -166,3 +347,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
