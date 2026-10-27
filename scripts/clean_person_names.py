@@ -117,7 +117,11 @@ def _propose(name: str, work_titles: list[str]) -> dict[str, Any]:
     work_norms = {_norm(t) for t in work_titles if t}
     kept = [s for s in segments if _norm(s) not in work_norms]
     candidate = " ".join(kept).strip()
-    if candidate and not any(marker in candidate.casefold() for marker in MARKERS) and not re.search(r"(?i)transcrib|arrang|improvis|chords|performed|based on", name):
+    if (
+        candidate
+        and not any(marker in candidate.casefold() for marker in MARKERS)
+        and not re.search(r"(?i)transcrib|arrang|improvis|chords|performed|based on", name)
+    ):
         # Evitar metros/tune names y cadenas de creditos.
         words = candidate.split()
         if 1 < len(words) <= 7 and len(candidate) <= 80:
@@ -190,4 +194,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
