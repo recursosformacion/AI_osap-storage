@@ -33,6 +33,26 @@ def _norm(value: str | None) -> str:
     return re.sub(r"[^a-z0-9]+", " ", text.casefold()).strip()
 
 
+def _clean_name(value: str) -> str:
+    text = re.sub(r"^[\s:;\"'`.,\-–—]+", "", value or "")
+    text = re.sub(r"[\s:;\"'`.,\-–—]+$", "", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _invalid_name(value: str) -> bool:
+    return (
+        len(value) < 4
+        or len(value) > 80
+        or not re.search(r"[A-Za-zÀ-ÿ]", value)
+        or bool(
+            re.search(
+                r"(?i)\b(anon|unknown|trad|folk song|popular dance|transcribed|arranged|collection|untitled)\b",
+                value,
+            )
+        )
+    )
+
+
 def _db():
     conf = (yaml.safe_load((ROOT / "config.yaml").read_text(encoding="utf-8")) or {})["db"]
     if conf.get("host") not in {"127.0.0.1", "localhost"}:
@@ -73,10 +93,10 @@ def main() -> int:
                 existing[_norm(p["persons_name"])].append(p)
 
             for candidate in candidates:
-                name = str(candidate.get("persons_name") or "").strip()
+                name = _clean_name(str(candidate.get("persons_name") or ""))
                 key = _norm(name)
                 works = [int(w) for w in candidate.get("work_ids") or []]
-                if not name or not works:
+                if not name or not works or _invalid_name(name):
                     skipped += 1
                     continue
                 targets = existing.get(key, [])
