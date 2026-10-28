@@ -21,7 +21,8 @@ from pymysql.cursors import DictCursor
 ROOT = Path(__file__).resolve().parent.parent
 BAD = re.compile(
     r"(?i)\b(anon|unknown|trad|folk song|folk hymn|popular dance|transcribed|arranged|"
-    r"collection|untitled|hand|ms\.?|no\s*\d+|vor\s*\d+|urheber|volksweise)\b"
+    r"collection|untitled|hand|ms\.?|no\s*\d+|vor\s*\d+|urheber|volksweise|"
+    r"a\s+country\s+dance|country\s+dance)\b"
 )
 
 
