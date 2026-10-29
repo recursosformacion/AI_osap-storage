@@ -146,6 +146,8 @@ def _call(payload: dict[str, Any], keys: list[str]) -> list[dict[str, Any]]:
                 continue
             if exc.code not in RETRY:
                 raise
+            if exc.code == 429 and len(keys) > 1 and (attempt + 1) % len(keys) != 0:
+                continue
         except Exception as exc:  # noqa: BLE001
             last = str(exc)
         time.sleep(min(2 ** attempt, 10))
@@ -169,7 +171,7 @@ def main() -> int:
     model = args.model or LLM_MODEL
     keys = _keys()
     if not args.build_only and provider == "gemini" and not keys:
-        print("ERROR: faltan GEMINI_API_KEY / GEMINI_API_KEY2", file=sys.stderr)
+        print("ERROR: faltan GEMINI_API_KEY / GEMINI_API_KEY2 / GEMINI_API_KEYS", file=sys.stderr)
         return 2
     if not args.build_only and provider != "gemini" and not llm_client.provider_key(provider):
         print(f"ERROR: falta la clave de {provider}", file=sys.stderr)

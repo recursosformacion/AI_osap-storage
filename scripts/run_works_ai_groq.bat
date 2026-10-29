@@ -21,5 +21,5 @@ for /f "tokens=* delims= " %%A in ("%GROQ_API_KEY%") do set "GROQ_API_KEY=%%A"
 set "LLM_PROVIDER=groq"
 set "LLM_MODEL=openai/gpt-oss-120b"
 echo Lotes de 5 obras; 35s entre llamadas. Ctrl+C para parar (reanudable).
-.\.venv\Scripts\python.exe scripts\works_ai_runner.py --start 3 --limit 2 --chunk 5 --sleep 35 %*
+.\.venv\Scripts\python.exe scripts\works_ai_runner.py --start 3 --limit 100 --chunk 5 --sleep 35 %*
 pause

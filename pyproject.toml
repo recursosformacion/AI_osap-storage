@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "osap-storage"
 version = "5.7.9"
 description = "Gestion de almacenamiento, adquisicion y distribucion de ficheros para OSAP."
+license = {text = "GPL-3.0-only"}
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.110",

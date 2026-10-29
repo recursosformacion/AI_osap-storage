@@ -172,6 +172,54 @@ def _work(proposal: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+
+def _works_batch(proposals: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    for offset in range(0, len(proposals), 20):
+        chunk = proposals[offset : offset + 20]
+        terms: list[str] = []
+        for proposal in chunk:
+            title = str(proposal.get("current_title") or proposal.get("wikidata_label") or "").strip()
+            composer = str(proposal.get("composer") or "").strip()
+            if not title:
+                continue
+            term = f'work:"{_escape_lucene(title)}"'
+            if composer:
+                term += f' AND artist:"{_escape_lucene(composer)}"'
+            terms.append(term)
+        if not terms:
+            continue
+        try:
+            payload = _get("work", {"query": " OR ".join(terms), "limit": 100})
+        except Exception as exc:
+            print(f"lote works {offset}: {exc}", flush=True)
+            for proposal in chunk:
+                out[proposal["works_id"]] = {"status": "error", "error": str(exc)}
+            _save_cache()
+            continue
+        works = payload.get("works", [])
+        for proposal in chunk:
+            title = str(proposal.get("current_title") or proposal.get("wikidata_label") or "").strip().casefold()
+            found = [w for w in works if str(w.get("title") or "").casefold() == title]
+            found.sort(key=lambda w: int(w.get("score") or 0), reverse=True)
+            if not found:
+                out[proposal["works_id"]] = {"status": "no_match"}
+                continue
+            top = found[0]
+            out[proposal["works_id"]] = {
+                "status": "match" if int(top.get("score") or 0) >= 95 else "weak",
+                "mbid": top.get("id"),
+                "title": top.get("title"),
+                "score": top.get("score"),
+                "ambiguous": len(found) > 1,
+                "composer": (
+                    (top.get("artist-relation") or [{}])[0].get("artist", {}).get("name")
+                    if top.get("artist-relation") else None
+                ),
+            }
+        print(f"lote works {offset}/{len(proposals)}", flush=True)
+        _save_cache()
+    return out
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--persons-file", type=Path)
@@ -200,8 +248,17 @@ def main() -> int:
             )
     if args.works_file:
         data = json.loads(args.works_file.read_text(encoding="utf-8"))
-        for proposal in (data if args.limit == 0 else data[: args.limit]):
-            results.append({"kind": "work", **proposal, "musicbrainz": _work(proposal)})
+        data = [p for p in data if p.get("qid") or p.get("composer") or p.get("match_method") != "no_match"]
+        selected = data if args.limit == 0 else data[: args.limit]
+        checked = _works_batch(selected)
+        for proposal in selected:
+            results.append(
+                {
+                    "kind": "work",
+                    **proposal,
+                    "musicbrainz": checked.get(proposal["works_id"], {"status": "no_match"}),
+                }
+            )
     _save_cache()
     out = args.out or OUT_DIR / "validation.json"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -228,6 +285,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
 
 
 
