@@ -26,3 +26,7 @@ The target V6 catalogue model is **Work → Resource → File**. Representation,
 - [AI_osap-auth](https://github.com/recursosformacion/AI_osap-auth) — identity and authentication service.
 - [AI_osap-support](https://github.com/recursosformacion/AI_osap-support) — donations, memberships and support services.
 - Public catalogue: [openmusicrepository.com](https://openmusicrepository.com)
+
+## V6: área de trabajo personal y aportaciones
+
+El alcance V6 incluye el espacio privado del usuario, los borradores y el flujo de aportación/revisión/publicación de nuevas piezas y Resources. Véase [la especificación funcional](docs/v6-user-workspace-contributions.md), coordinada con el plan de reconstrucción V6.
