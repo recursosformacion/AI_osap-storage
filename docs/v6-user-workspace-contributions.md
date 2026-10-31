@@ -332,3 +332,28 @@ No se debe resolver ninguno de estos puntos inventando tablas o permisos existen
 9. Incluir datos de prueba y migración solo cuando existan registros previos equivalentes; no inventar espacios personales para usuarios sin evidencia.
 
 Este trabajo forma parte del alcance V6 y debe planificarse junto con el corte Work → Resource → File. No se debe posponer como una fase opcional posterior al lanzamiento de V6.
+
+## 2.6 Autoría, propiedad editorial y modificación de obras (decisión vinculante)
+
+Esta regla prevalece sobre cualquier redacción anterior que pudiera interpretarse como edición colaborativa de una Work pública:
+
+1. **Solo el usuario que subió/aportó originalmente una Work puede modificar esa Work.** Ningún otro usuario, aunque esté autenticado o sea colaborador del catálogo, puede editar directamente sus datos, Resources o Files publicados.
+2. Si otro usuario desea tomar una Work existente y modificarla, OSAP crea automáticamente una **copia independiente en el área de trabajo de ese usuario**. La copia pasa a ser privada desde su creación.
+3. La Work pública original permanece intacta: no se actualizan sus metadatos, atribuciones, Resources ni Files como consecuencia de la operación de copia.
+4. El usuario que realiza la modificación queda reconocido como **arreglista** de su versión derivada. En el modelo de roles actual, el rol canónico `arranger` corresponde al rol ID 3, sujeto a confirmar que la persona autenticada está vinculada a una identidad `persons` válida.
+5. La copia privada debe conservar la referencia de procedencia a la Work original (`derived_from_work_id` o relación equivalente), sin compartir su identidad ni convertirla en una Work pública.
+6. La copia y sus Resources/Files tienen ciclo de vida, permisos y modificaciones propios. El usuario puede editar su copia; no puede modificar ni borrar la original.
+7. La copia no se incorpora al catálogo público ni al índice general mientras siga privada. Si el usuario decide aportarla al catálogo, se somete a un proceso separado de publicación y revisión, con trazabilidad de la Work de origen, el arreglista y las licencias.
+8. La operación «modificar esta obra» debe ser atómica desde la perspectiva de usuario: crear la copia privada, conservar sus relaciones necesarias, asignar propiedad al usuario y registrar el rol de arreglista antes de abrir el editor. No debe existir un intervalo en el que la copia sea pública.
+9. Añadir una Work al espacio personal sin modificarla sigue siendo una simple relación personal y no crea copia. La duplicación automática ocurre al iniciar una acción de modificación/derivación, no al guardar una obra en la biblioteca personal.
+10. La privacidad no elimina obligaciones de licencia, atribución o derechos de adaptación. La copia debe conservar la información de licencia/procedencia aplicable y bloquear o advertir cuando sus condiciones no permitan la modificación o redistribución prevista.
+
+### Diferencia entre las tres operaciones
+
+| Acción | Resultado | ¿Copia Work? | ¿Puede modificar? |
+|---|---|---:|---|
+| Añadir al espacio personal | Referencia privada a la Work pública | No | No; solo organización personal |
+| Modificar/crear arreglo a partir de una Work ajena | Nueva Work derivada, privada y propiedad editorial del usuario | Sí, automáticamente | Sí, sobre su copia |
+| Modificar una Work propia | Actualización de la Work aportada por ese mismo usuario, con auditoría | No | Sí, sobre la propia |
+
+La identidad del aportante original debe ser un dato persistente y no inferirse del último editor, del usuario que subió un File posterior ni del propietario de una copia derivada. Para registros históricos sin aportante identificable, la migración debe marcarlos como propiedad editorial no resuelta y aplicar una política explícita; no asignar la propiedad al usuario que primero abra la ficha.
