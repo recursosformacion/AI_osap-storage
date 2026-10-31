@@ -19,19 +19,15 @@
 - SHA-256 es integridad, nunca identidad ni deduplicación.
 - Los IDs antiguos deben conservarse cuando sea posible y seguro; cualquier cambio exige tabla de correspondencia.
 
-### 1.2 Propiedad editorial y modificación
+### 1.2 Permisos de edición y cardinalidad
 
-La regla de propiedad editorial es vinculante:
-
-1. Solo el usuario/fuente que incorporó originalmente la Work puede modificarla. Como la procedencia pertenece a Resource, esa autorización se identifica a través del Resource que introdujo originalmente la Work; no se añade un campo duplicado de aportante en Work.
-2. Si otro usuario inicia una modificación de una Work ajena, se crea automáticamente una Work derivada independiente dentro de su área personal y privada.
-3. La Work original no se modifica.
-4. El usuario que crea esa versión derivada recibe el crédito de **arreglista** (rol canónico arranger, ID 3, si la vinculación usuario↔persona está resuelta).
-5. La Work derivada mantiene una referencia de linaje a la Work original, pero no comparte su identidad ni se publica.
-6. Añadir una Work a la biblioteca personal sin modificarla no crea copia.
-7. La Work derivada solo pasa al catálogo público mediante una aportación/publicación separada, respetando licencias y trazabilidad.
-
-La especificación funcional está en [v6-user-workspace-contributions.md](v6-user-workspace-contributions.md).
+1. Solo el compositor identificado y autenticado puede modificar los metadatos catalográficos de Work: nombres, títulos, variantes y demás datos descriptivos de la identidad de la obra.
+2. Cada Resource solo puede ser modificado por el usuario que lo creó. En recursos importados, la procedencia identifica la fuente/sistema que lo incorporó y su gestión corresponde al proceso de esa fuente.
+3. Cualquier otro usuario que quiera aportar un arreglo, edición, transcripción, partitura, interpretación, grabación o versión crea un Resource nuevo bajo la misma Work. No modifica Work ni Resources ajenos y no crea una Work derivada.
+4. Toda Work debe tener al menos un Resource. Un Resource puede ser URL-only o de referencia y no tener File, pero debe representar un material o fuente real.
+5. El aportante de un Resource creado por un usuario se obtiene de la sesión autenticada; no se pregunta ni se acepta un user_id enviado por el cliente.
+6. Añadir una Work a Mi Actividad solo crea una relación personal; no crea copia ni Resource.
+7. No existe propiedad editorial de Work basada en el primer aportante ni campo editorial_owner_user_id.
 
 ## 2. Inventario de tablas de origen y destino
 
@@ -106,30 +102,17 @@ No se puede dar por sentado que todas esas rutas significan lo mismo. El adaptad
 
 **Prohibido durante la migración:** PutObject, CopyObject, DeleteObject, upload, rename, cambio de bucket/prefix, derivación de clave desde hash.
 
-## 5. Propiedad editorial y derivación privada: datos nuevos requeridos
+## 5. Permisos por creador y visibilidad de Resource
 
-El esquema antiguo de Storage inspeccionado no contiene un campo fiable y universal que identifique al usuario que aportó originalmente cada Work. Por ello, V6 necesita representar explícitamente:
+No se crea una entidad de propiedad editorial de Work. Los permisos son directos:
 
-| Dato lógico | Uso | Regla |
-|---|---|---|
-| `created_by_user_id` / `original_contributor_user_id` | Usuario aportante original | Identificador estable de la cuenta autenticada; no usar email como PK |
-| `editorial_owner_user_id` | No se crea en V6 | El permiso de edición de Work corresponde al compositor autenticado; no se deriva del aportante de Resource |
-| `visibility` | public/private/pending u otro enum definido | La copia derivada nace privada; nunca hereda visibilidad pública automáticamente |
-| `derived_from_work_id` | No requerido por la regla general de aportación | Los nuevos arreglos/versiones se representan como Resources de la misma Work, no como Works derivadas |
-| `derivation_type` | Tipo de copia (arreglo/adaptación/edición u otro) | Vocabulario explícito; el usuario recibe crédito de arreglista según regla definida |
-| `created_in_workspace_user_id` | Área personal donde se creó | Debe coincidir con usuario autenticado que inicia la derivación |
-| `published_at`, `published_by` | Publicación aprobada | Solo se completa al terminar publicación |
-| `contribution_id` / relación de auditoría | Expediente que promovió la copia | Mantener vínculo de procedencia y revisión |
+- Work: el compositor autenticado puede editar únicamente sus metadatos catalográficos.
+- Resource: su creador autenticado puede editarlo. El identificador del creador debe guardarse en Resource cuando sea un alta de usuario. En recursos importados, la fuente/sistema es el actor de procedencia y no se inventa una cuenta humana.
+- Resource puede tener visibilidad pública, privada o pendiente según el flujo de aportación; esa visibilidad no modifica Work.
+- Una aportación nueva crea un Resource nuevo bajo Work existente. No requiere WorkLineage ni derived_from_work_id.
+- «Añadir Work a Mi Actividad» se representa mediante la relación personal mínima workspace_works(user_id, work_id); no crea Work ni Resource.
 
-No se fija aún si estos campos viven directamente en Work o en tablas de ownership/lineage. El diseño debe permitir más de un tipo de contribución sin convertir Work en un objeto ambiguo. El vínculo a User debe usar la clave primaria real del sistema de autenticación, que está pendiente de inspección.
-
-### 5.1 Diferencia entre Work añadida y Work derivada
-
-- **Work añadida:** tabla/relación personal `workspace_works(user_id, work_id, added_at, personal_state, notes...)`; no crea Work ni Resource.
-- **Work derivada:** crea una nueva Work privada y sus Resources/Files propios; guarda `derived_from_work_id`; asigna propiedad editorial al usuario y crédito de arreglista. La original permanece intacta.
-- **Work propia:** solo su aportante original puede editarla directamente. Cualquier otro usuario debe derivar copia privada.
-
-La copia debe conservar los datos necesarios para identificar el material de origen y la atribución original, pero no debe compartir File físico con la Work original: los Files de la Work derivada son propios. Si se necesita reutilizar contenido binario, eso exige un objeto físico independiente o un flujo de copia aprobado fuera del corte V6; nunca se comparte una fila File entre Resources. La migración de V6 no toca los objetos R2 existentes.
+El identificador de cuenta debe usar la PK real del sistema de autenticación, pendiente de confirmar en la auditoría de AI_osap-auth. No usar email como clave. No almacenar datos de creador duplicados si ya existe una relación de autoría autenticada que resuelve exactamente la identidad.
 
 ## 6. Inventario de migración de usuarios y aportaciones
 
@@ -139,7 +122,7 @@ Estas entidades son nuevas en V6; no se deben presentar como tablas antiguas exi
 |---|---|---|---|
 | WorkspaceWork | user_id, work_id, fecha, estado personal, notas/etiquetas privadas | No identificado en Storage | Crear esquema V6; no migrar automáticamente salvo que exista fuente fiable |
 | WorkOwnership | No crear | No existe propietario editorial por primer aportante; Work la modifica el compositor autenticado |
-| WorkLineage | derived_work_id, source_work_id, derivation_type, created_by_user_id | Nueva funcionalidad | Crear solo para copias derivadas; conservar linaje sin modificar original |
+| WorkLineage | No crear por el flujo normal de aportación | Los arreglos/versiones de terceros son Resources nuevos de la misma Work |
 | Contribution | aportante, tipo, estado, fecha, versión | No identificado como modelo equivalente en Storage | Nuevo flujo V6 |
 | ContributionVersion | snapshot lógico sometido, versión, fecha | No identificado | Congelar lo revisado sin copiar binarios innecesariamente |
 | ContributionReview | revisor, decisión, comentario, fecha | Revisión existente puede ser reutilizable tras auditoría | Mapear solo si semántica/refs coinciden; si no, crear historial V6 separado |
@@ -162,7 +145,7 @@ Estas entidades son nuevas en V6; no se deben presentar como tablas antiguas exi
 12. referencias de audit/review a IDs retirados.
 13. Work cuyo compositor no puede vincularse a una cuenta autenticada para permisos de edición.
 14. Resource creado por usuario cuyo creador no puede identificarse de forma fiable.
-15. Work derivada sin linaje o sin arreglista asociado.
+15. Work sin Resource; Work con compositor no vinculado a una cuenta para edición; Resource de usuario sin creador identificable.
 16. duplicados de Work por coincidencia de título/compositor: generar candidatos, no fusionar automáticamente.
 
 Los conflictos se exportan a un informe revisable con tabla, ID antiguo, campos implicados, clasificación, evidencia y decisión pendiente. No se corrigen por heurística silenciosa.
