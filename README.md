@@ -30,3 +30,7 @@ The target V6 catalogue model is **Work → Resource → File**. Representation,
 ## V6: área de trabajo personal y aportaciones
 
 El alcance V6 incluye el espacio privado del usuario, los borradores y el flujo de aportación/revisión/publicación de nuevas piezas y Resources. Véase [la especificación funcional](docs/v6-user-workspace-contributions.md), coordinada con el plan de reconstrucción V6.
+
+## V6: inventario de migración
+
+El mapeo inicial de tablas/campos, punteros R2, conflictos, propiedad editorial y datos nuevos de Mi Actividad está en [docs/v6-data-migration-mapping.md](docs/v6-data-migration-mapping.md). Es una especificación contrastada con el esquema versionado, pendiente de validación contra snapshot real.
