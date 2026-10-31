@@ -353,8 +353,8 @@ Esta regla prevalece sobre cualquier redacción anterior que pudiera interpretar
 | Acción | Resultado | ¿Copia Work? | ¿Puede modificar? |
 |---|---|---:|---|
 | Añadir al espacio personal | Referencia privada a la Work pública | No | No; solo organización personal |
-| Modificar/crear arreglo a partir de una Work ajena | Nueva Work derivada, privada y propiedad editorial del usuario | Sí, automáticamente | Sí, sobre su copia |
-| Modificar una Work propia | Actualización de la Work aportada por ese mismo usuario, con auditoría | No | Sí, sobre la propia |
+| Aportar arreglo/edición/versión a una Work existente | Nuevo Resource privado bajo la misma Work, propiedad de su creador | Sí, nuevo Resource | Sí, solo sobre ese Resource |
+| Modificar metadatos de Work | Solo el compositor autenticado puede modificar nombres y demás metadatos catalográficos | No | Sí, sobre Work |
 
 La identidad del aportante original debe ser un dato persistente y no inferirse del último editor, del usuario que subió un File posterior ni del propietario de una copia derivada. Para registros históricos sin aportante identificable, la migración debe marcarlos como propiedad editorial no resuelta y aplicar una política explícita; no asignar la propiedad al usuario que primero abra la ficha.
 
