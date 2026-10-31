@@ -157,7 +157,7 @@ Estas entidades son nuevas en V6; no se deben presentar como tablas antiguas exi
 7. Hash duplicado: permitido; no fusionar Files.
 8. URL externa mezclada con File local en una misma fila.
 9. tipo/name/relative_path con semántica incompatible.
-10. Licencia de Work frente a licencia de Representation/Resource contradictoria.
+10. Derechos/licencia contradictorios entre Resources o asociados de forma ambigua a una Work; no migrar como licencia de Work.
 11. créditos de Representation sin persona canónica resuelta.
 12. referencias de audit/review a IDs retirados.
 13. Work histórica sin propietario original verificable.
