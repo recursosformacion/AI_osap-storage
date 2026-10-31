@@ -366,6 +366,12 @@ La identidad del aportante original debe ser un dato persistente y no inferirse 
 - El titular de derechos puede ser el compositor o un tercero. No se deduce de la autoría ni de quién sube el material.
 - Se guardan solo datos conocidos y necesarios. Los datos desconocidos quedan sin determinar; no se crean entidades ficticias ni estructuras adicionales para escenarios hipotéticos.
 
-### Procedencia inicial y permiso para modificar Work
+### Permisos sin propietario único de Work
 
-La procedencia pertenece a Resource, pero la regla editorial de Work necesita reconocer quién la introdujo originalmente. Se consulta el aportante del Resource inicial que dio entrada a la Work, sin añadir un atributo redundante de uploader/owner a Work. Un usuario que aporta un Resource nuevo a una Work existente solo es aportante de ese Resource; no adquiere por ello permiso para modificar la Work. Si no se puede demostrar cuál fue el Resource inicial o quién lo aportó, la autorización queda sin resolver y no se concede edición directa por inferencia.
+No existe una propiedad editorial de Work basada en quién subió el primer Resource. El permiso para modificar los metadatos de Work corresponde al compositor autenticado. El permiso para modificar un Resource corresponde a su creador. La procedencia inicial no concede derechos de edición sobre Work y no se necesita identificar un Resource inicial para aplicar estos permisos.
+
+## Regla de cardinalidad y permisos
+
+Toda Work debe tener al menos un Resource. El Resource puede ser URL-only y no tener File. Work no se crea como ficha vacía a la espera de un Resource.
+
+El compositor autenticado puede modificar los metadatos descriptivos de Work. El creador de un Resource puede modificar exclusivamente ese Resource. Los demás usuarios no duplican Work para aportar material: crean otro Resource bajo la misma Work. No hay un campo editorial_owner de Work derivado del primer aportante.
