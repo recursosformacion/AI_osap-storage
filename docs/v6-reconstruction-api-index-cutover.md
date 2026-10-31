@@ -71,9 +71,9 @@ Se ha revisado código y documentación versionados en `main` de ambos repositor
 
 Work conserva la identidad y los metadatos de la obra, independientes de una edición o archivo concreto. Debe seguir siendo posible encontrar y describir una obra aunque no tenga ningún Resource descargable.
 
-Como mínimo, la migración debe conservar todos los datos catalográficos que hoy se encuentran en `works` y sus relaciones: título, subtítulo, compositor/personas y roles, catálogo, origen e identificador de origen, claves musicales, descripción, géneros, instrumentos, voces, conjuntos, idiomas, partes, etiquetas, atribución, licencias y demás metadatos existentes.
+Como mínimo, la migración debe conservar los datos propios de la identidad de la obra que hoy se encuentran en `works` y sus relaciones: título, subtítulo, autoría/compositoría, catálogo, año/época, descripción y clasificaciones que realmente describan la obra.
 
-No se debe trasladar a Work una característica que describa solamente un Resource. La procedencia de la obra como registro de catálogo y la procedencia de un material concreto son conceptos distintos y deben conservarse sin mezclarlos.
+La procedencia/aportante, los derechos y la licencia no son atributos de Work: pertenecen a cada Resource. Un identificador externo mínimo de Work puede conservarse únicamente si es necesario para reconciliar la identidad o mantener la idempotencia de una fuente; no representa procedencia ni titularidad.
 
 ### 3.2 Resource
 
@@ -82,12 +82,12 @@ Resource es hijo directo de Work. No existe un nivel intermedio.
 Resource debe poder describir, según el tipo de material y los datos disponibles:
 
 - clase o naturaleza del material;
-- origen/proveedor de ese material e identificador externo;
-- URL de origen cuando el material es externo y no está alojado;
-- licencia y condiciones aplicables a ese material;
+- procedencia/aportante del material (PDMX, IMSLP, CPDL o usuario autenticado), cuando se conozca;
+- identificador externo o URL de origen, solo si son necesarios para localizar/reconciliar ese Resource;
+- derechos y licencia aplicables a ese Resource, cuando se conozcan; el titular puede ser el compositor o un tercero;
 - edición, arreglo, transcripción, versión o interpretación, si procede;
 - instrumentación, voces/conjunto, idioma, tonalidad u otras características que correspondan al material;
-- procedencia y metadatos editoriales que antes estaban ligados a Representation;
+- metadatos editoriales útiles que antes estaban ligados a Representation;
 - relación con sus Files.
 
 La lista anterior es un inventario semántico, no una declaración de que todos esos campos deban ser columnas escalares. El diseño físico definitivo debe revisar cardinalidades, vocabularios y datos reales antes de fijar el DDL.
@@ -791,3 +791,12 @@ La distribución es vinculante para el contrato, la migración, los importadores
 - Se conserva solo información disponible y necesaria. No se añaden tablas/campos de titularidad, evidencias o historial sin un caso de uso y datos reales. Los valores desconocidos permanecen sin determinar.
 
 Este criterio prevalece sobre cualquier frase anterior que proponga `works_origin`, `works_license` o `works_public_domain` como atributos de Work. En migración, esos datos solo pasan a Resource si su asociación con el material es inequívoca; no se asignan por heurística.
+
+
+## Corrección vinculante: Work contiene autoría; Resource contiene procedencia y derechos
+
+La autoría/compositoría se define una sola vez en Work y es común a todos sus Resources. Una misma Work no puede tener compositores alternativos según el Resource; si dos materiales tienen autorías incompatibles porque representan obras intelectualmente distintas, debe revisarse la identidad Work. Se admiten coautores reales. La atribución distingue compositor identificado, anónimo declarado, tradicional y desconocido/no resuelto, sin crear personas ficticias.
+
+Cada Resource contiene su procedencia/aportante (fuente externa como PDMX, IMSLP o CPDL, o usuario autenticado) y los derechos/licencia que se conozcan y apliquen a ese material. En altas directas de usuario, el aportante se obtiene de la sesión autenticada; no se pregunta ni se acepta una identidad elegida por el cliente. El titular de derechos puede ser el compositor o un tercero: no se deduce de autoría ni de aportante.
+
+Se aplica un principio de mínima información: no se añaden campos, tablas de titularidad, historiales ni evidencias para escenarios hipotéticos. Se conservan solo datos disponibles, fiables y con uso funcional claro. Lo desconocido queda sin determinar. Los campos históricos de procedencia/licencia en Work solo se trasladan a un Resource si la relación es inequívoca; en otro caso se clasifican como conflicto/no migrable, sin inferencias.
