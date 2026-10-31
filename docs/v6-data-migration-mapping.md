@@ -56,7 +56,7 @@ Las tablas que aparecen a continuación se han observado en los archivos de migr
 | `persons_aliases` | `person_id`, alias | PersonAlias | Conservar relación y texto, sin fusionar alias con cuentas de usuario. |
 | `persons_identity`, `persons_identifiers`, `persons_evidence`, `persons_merge_history`, `persons_authority*` | identidad, identificadores, evidencias, fusiones y autoridad | Identidad/personas y auditoría | Conservar estado vigente e historial necesario. Revisar migraciones posteriores que hayan eliminado/reemplazado tablas antiguas; la copia se hace desde el esquema efectivo, no sumando variantes históricas. |
 | `roles` | `id`, `role_name`, descripción | Role | Conservar vocabulario e IDs semánticos. Arreglista corresponde al rol canónico ID 3 según el catálogo actual; validar en snapshot final. |
-| `works_person_roles` | work_id, person_id, role_id, order | WorkCredit | Conservar créditos de la obra. Añadir crédito de arreglista a la Work derivada privada, no a la Work original. |
+| `works_person_roles` | work_id, person_id, role_id, order | Créditos de Work | Conservar autoría/compositoría de Work. Los créditos de arreglista/editor/intérprete que describan un Resource deben asociarse al Resource cuando sean conocidos; no crear Work derivada por un arreglo.
 | `works_person_import` | nombre, rol, fuente, resolved | Staging/auditoría de resolución | Conservar si hay propuestas pendientes o historial útil; no duplicar créditos ya materializados en works_person_roles. |
 | `work_genres`, `work_instruments`, `work_language`, `work_parts`, `work_tag`, `work_voices`, `work_ensembles` | relaciones de clasificación/partes/plantilla musical | Work y sus relaciones normalizadas | Conservar cardinalidad, cantidades, orden y contexto. No mover a Resource salvo que el dato describa exclusivamente una realización concreta y haya evidencia para hacerlo. |
 | `genres`, `instruments`, `languages`, `voices`, `ensembles`, `ensemble_voices`, `epochs`, `tag_work`, `catalog` | vocabularios/catálogos | Catálogos de dominio | Conservar IDs y relaciones. Revisar seeds frente a datos productivos y evitar duplicar catálogos por una carga de semillas. |
@@ -138,7 +138,7 @@ Estas entidades son nuevas en V6; no se deben presentar como tablas antiguas exi
 | Entidad lógica candidata | Contenido mínimo | Origen | Tratamiento |
 |---|---|---|---|
 | WorkspaceWork | user_id, work_id, fecha, estado personal, notas/etiquetas privadas | No identificado en Storage | Crear esquema V6; no migrar automáticamente salvo que exista fuente fiable |
-| WorkOwnership | work_id, original_contributor_user_id, editorial_owner_user_id, fecha/evidencia | Auth/OSAP/ingestión | Reconstruir desde evidencia real; no inferir desde email/origin/vote |
+| WorkOwnership | No crear | No existe propietario editorial por primer aportante; Work la modifica el compositor autenticado |
 | WorkLineage | derived_work_id, source_work_id, derivation_type, created_by_user_id | Nueva funcionalidad | Crear solo para copias derivadas; conservar linaje sin modificar original |
 | Contribution | aportante, tipo, estado, fecha, versión | No identificado como modelo equivalente en Storage | Nuevo flujo V6 |
 | ContributionVersion | snapshot lógico sometido, versión, fecha | No identificado | Congelar lo revisado sin copiar binarios innecesariamente |
