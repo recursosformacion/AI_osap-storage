@@ -255,3 +255,18 @@ Si se usa works.reference_resource_id, el DDL debe garantizar que el Resource el
 Se mantiene: compositor y coautores pertenecen exclusivamente a Work; Resource no admite compositor. Los créditos de arreglista, editor, adaptador, intérprete, traductor y otros propios del material se migran a Resource cuando la asociación sea inequívoca.
 
 Cualquier matriz, checklist o regla de migración anterior que exigiera un original por Work queda sustituida por esta corrección.
+
+
+
+## Corrección de migración: no materializar fuentes federadas como Resources OMR
+
+Esta regla prevalece sobre las matrices o frases anteriores que sugieran crear Resources para cada registro externo o impedir Works sin Resource.
+
+- La migración V6 de osap-storage conserva y transforma únicamente los datos que pertenecen al catálogo/repositorio OMR. Una Work OMR puede quedar con cero Resources OMR si la fuente histórica solo acredita la ficha catalográfica y no hay un material concreto incorporado.
+- No crear Resources vacíos, URL-only ficticios ni referencias artificiales para cumplir una cardinalidad.
+- Los registros de proveedores externos que el índice de OSAP consulta (IMSLP, CPDL, Mutopia, etc.) pertenecen a la federación de API, salvo que hayan sido incorporados expresamente al repositorio OMR. No deben copiarse a la tabla Resource de Storage durante la migración por el mero hecho de estar presentes en el índice.
+- Los enlaces, IDs de origen y metadatos externos que necesite API se conservan/reconstruyen en el índice o almacenamiento de reconciliación de API, no como recursos OMR.
+- La migración debe distinguir Work sin Resource, Resource sin File y material externo federado. Son tres estados diferentes, no errores equivalentes.
+- reference_resource_id continúa siendo opcional y solo referencia un Resource OMR de la misma Work.
+
+La auditoría de código confirma además que API reúne candidatos de índice y proveedores en vivo, agrupa dinámicamente y puede emitir resultados parciales antes de finalizar las consultas externas. Por ello, el índice federado y la reconciliación deben tratarse como responsabilidad de API y no confundirse con el catálogo maestro de Storage.
