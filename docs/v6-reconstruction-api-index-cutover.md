@@ -867,3 +867,72 @@ El Resource señalado conserva su resource_id propio: ese ID identifica el mater
 Se mantiene la regla independiente: compositor y coautores se relacionan exclusivamente con Work. Resource no admite el rol compositor. Los créditos propios del material (arreglista, editor, adaptador, intérprete, traductor, etc.) pueden relacionarse con Resource cuando se conocen.
 
 Las secciones anteriores de este documento que contradigan esta corrección quedan reemplazadas por esta decisión más reciente.
+
+
+
+## 10. Corrección de arquitectura: Storage OMR y federación de fuentes externas
+
+Esta sección incorpora la auditoría del flujo real de búsqueda de OSAP-API y prevalece sobre cualquier frase anterior que presuponga que todo material devuelto por un proveedor externo debe convertirse en Resource de osap-storage.
+
+### 10.1 Responsabilidades separadas
+
+- **osap-storage V6** es el sistema de catálogo y almacenamiento de los datos y materiales que pertenecen al repositorio OMR. Su modelo persistente es Work → Resource → File. Mantiene identidad catalográfica OMR, materiales OMR, créditos, procedencia/derechos de esos Resources y punteros físicos de sus Files.
+- **OSAP-API** es la capa de federación y experiencia de búsqueda. Consulta OMR y proveedores externos, normaliza sus respuestas, agrupa candidatos, ordena resultados y presenta Work junto con los materiales disponibles en las distintas fuentes.
+- Un material externo (IMSLP, CPDL, Mutopia u otra fuente) no se convierte por defecto en un Resource de Storage. Puede permanecer como registro/candidato federado de API con su identificador de proveedor, identificador de origen, URL y metadatos necesarios para resolverlo.
+- Solo se crea un Resource OMR cuando el material se incorpora realmente al catálogo/repositorio OMR mediante el flujo de importación o aportación correspondiente. No se copia a Storage por el mero hecho de aparecer en una búsqueda federada.
+- La misma Work canónica puede tener Resources propios de OMR y, simultáneamente, materiales federados externos gestionados por API. No se deben confundir sus IDs ni su propiedad.
+
+### 10.2 Dos niveles de identidad y reconciliación
+
+La búsqueda inmediata y la identidad persistente son operaciones distintas:
+
+1. **Agrupación provisional de búsqueda:** durante una consulta, API puede agrupar candidatos OMR y externos que parezcan corresponder a la misma obra para ofrecer un resultado unificado sin esperar a un proceso batch. Es una decisión de presentación, contextual y revisable; no modifica por sí sola el catálogo ni crea asociaciones persistentes.
+2. **Identidad persistente/reconciliada:** las asociaciones confirmadas entre una Work canónica y registros de fuentes externas se mantienen como datos de reconciliación del índice/capa federada de API. Las coincidencias dudosas requieren reglas y revisión; no se promueven automáticamente por una coincidencia transitoria de título/compositor.
+
+La reconciliación persistente debe conservar, como mínimo, la identidad de la fuente y el identificador original estable. Debe ser idempotente y permitir detectar cambios, desapariciones y conflictos sin duplicar Works ni Resources OMR.
+
+### 10.3 Lo que demuestra el código actual de búsqueda
+
+La ruta de búsqueda de API no usa una única operación de agrupación. El flujo inspeccionado es, de forma resumida:
+
+- ResolveRequestBuilder construye y normaliza la petición.
+- work_resolution_engine().gather(...) reúne candidatos del índice local y proveedores en vivo; puede publicar resultados parciales del índice antes de terminar las consultas externas.
+- build_results(candidates) llama a work_merge_service().group(candidates) para agrupar candidatos en WorkGroups.
+- work_ranker().rank(...) ordena los grupos; después se aplican filtros y se convierten los candidatos en materiales de respuesta.
+- _enrich_search_results() puede fusionar variantes de título, reutilizar una caché y ejecutar búsquedas enfocadas adicionales en el índice local.
+
+Por tanto, el comportamiento actual incluye agregación/deduplicación de candidatos, agrupación dinámica, ranking y enriquecimiento/caché como etapas distintas. No debe documentarse como si ProviderResultAggregator decidiera por sí solo la identidad final de cada Work.
+
+El índice persistente también contiene decisiones de agrupación propias: script/index_works.py construye index_works e index_representations a partir de fuentes y actualmente utiliza claves normalizadas de título/persona. Esa agrupación batch no es necesariamente idéntica a las reglas de work_merge_service() aplicadas durante la búsqueda en vivo. La V6 debe medir y resolver esa posible divergencia.
+
+### 10.4 Cambios permitidos en OSAP-API
+
+V6 puede y debe modificar OSAP-API cuando sea necesario para que el contrato, la identidad y la búsqueda sean coherentes con el modelo nuevo. No se limita a adaptar el fetcher a una API Storage inmutable. Se permite rediseñar en API, entre otros:
+
+- contratos SearchResponse, WorkInfo y DTO de materiales;
+- nombres y semántica de RepresentationInfo y clases internas que hoy mezclan material, candidato y representación de proveedor;
+- work_merge_service, WorkGrouper, WorkGroupingMatcher, agregación, ranking y enriquecimiento;
+- index_works, index_representations y el esquema/rebuild/sync del índice;
+- cachés de Work y de materiales, resolución de detalle y descarga;
+- OmrStorageFetcher, adaptadores y contratos OMR;
+- rutas HTTP y pruebas de integración.
+
+No se debe hacer un renombrado mecánico de todo lo llamado Representation. Hay que distinguir material externo, Resource OMR, candidato de proveedor, asociación federada y grupo de resultados. El nombre y la abstracción finales deben expresar esa semántica.
+
+### 10.5 Identificadores y descarga
+
+- El ID de Work canónica, el ID de Resource OMR, el ID de File, el ID interno de material federado y el ID original del proveedor son espacios de identidad diferentes.
+- API debe conservar provider_id y source_id (o equivalentes explícitos) para volver a resolver cada material externo. El ID interno de API no sustituye al ID original del proveedor.
+- La descarga OMR se resuelve mediante Resource → File → enlace generado por Storage. API no construye ni expone claves físicas R2.
+- La descarga externa se resuelve mediante el adaptador del proveedor y su identificador/URL de origen; no se fuerza a pasar por Storage OMR.
+- Se elimina en V6 cualquier fallback que interprete un ID numérico de File heredado como ID de material o que confunda los espacios de identidad.
+
+### 10.6 Claves de caché
+
+La caché actual _work_rep_cache usa una clave normalizada de título y compositor, mientras que el agrupamiento dinámico aplica una lógica más rica. Esa diferencia puede hacer que caché y grupos no representen la misma identidad.
+
+Para Works reconciliadas, las cachés V6 deben preferir el ID canónico de Work y versionar/inutilizar sus entradas cuando cambien asociaciones o metadatos relevantes. Para resultados aún no reconciliados puede utilizarse una clave provisional explícita, no presentada como ID canónico. La caché nunca debe convertir una agrupación provisional en una asociación persistente.
+
+### 10.7 Regla de diseño
+
+La búsqueda federada debe seguir siendo inmediata y útil. No se obliga a esperar al batch para mostrar materiales externos. Lo que se separa es la rapidez de presentación de la autoridad de identidad: la primera puede ser provisional; la segunda requiere reconciliación persistente. Storage conserva la responsabilidad sobre OMR; API puede evolucionar ampliamente para resolver correctamente la federación.
