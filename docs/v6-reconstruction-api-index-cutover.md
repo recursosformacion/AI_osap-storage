@@ -541,7 +541,7 @@ Revisar scripts y tareas que creen o modifiquen:
 - relaciones de personas/roles;
 - conjuntos, voces, idiomas e instrumentación.
 
-En particular, inspeccionar importadores PDMX, CPDL, IMSLP, RISM y cualquier sincronización de autoridad. Los importadores de catálogo que solo crean Work no deben verse obligados a crear un Resource/File. Los que materializan archivos deben crear Resource y File conforme al nuevo ownership.
+En particular, inspeccionar importadores PDMX, CPDL, IMSLP, RISM y cualquier sincronización de autoridad. Toda Work debe tener al menos un Resource. Los importadores que solo reciben una ficha catalográfica deben crear un Resource de referencia únicamente si hay un material/fuente concreta que lo sustente; puede carecer de File. Los Resources importados conservan la fuente como aportante.
 
 No reactivar importadores hasta que:
 - sus escrituras apunten al esquema V6;
@@ -598,7 +598,7 @@ No se debe perder evidencia de matching al eliminar Representation. Deben actual
 
 - `/api/version` devuelve el contrato V6 esperado;
 - lookup/search/detail devuelven DTO V6 sin Representation;
-- Work sin Resource aparece en búsqueda;
+- Work siempre tiene al menos un Resource; comprobar que el índice admite Resources URL-only o sin File;
 - Resource sin File aparece como inventario no descargable;
 - Resource con varios Files devuelve formatos correctos;
 - descarga resuelve un único tipo de ID;
@@ -778,7 +778,7 @@ El alcance V6 incluye también el área privada de trabajo de cada usuario y el 
 
 ## 16. Inventario de migración campo a campo y propiedad editorial
 
-El inventario inicial de tablas, campos, referencias R2, reglas de transformación, conflictos y validaciones está en [V6 — inventario de migración de datos y propiedad editorial](v6-data-migration-mapping.md). Este documento también incorpora la regla de que solo el aportante original puede modificar su Work; cualquier otro usuario debe crear automáticamente una copia privada derivada, con crédito de arreglista y linaje a la original. El inventario está contrastado con migraciones/código versionados, pero aún debe validarse contra el snapshot real de producción.
+El inventario inicial de tablas, campos, referencias R2, reglas de transformación, conflictos y validaciones está en [V6 — inventario de migración de datos y propiedad editorial](v6-data-migration-mapping.md). La regla vigente es que solo el compositor autenticado puede modificar los metadatos catalográficos de Work y solo el creador puede modificar su Resource; cualquier otro usuario aporta un nuevo Resource bajo la misma Work. El inventario está contrastado con migraciones/código versionados, pero aún debe validarse contra el snapshot real de producción.
 
 ## Decisión de modelo: autoría, procedencia y derechos
 
@@ -800,3 +800,11 @@ La autoría/compositoría se define una sola vez en Work y es común a todos sus
 Cada Resource contiene su procedencia/aportante (fuente externa como PDMX, IMSLP o CPDL, o usuario autenticado) y los derechos/licencia que se conozcan y apliquen a ese material. En altas directas de usuario, el aportante se obtiene de la sesión autenticada; no se pregunta ni se acepta una identidad elegida por el cliente. El titular de derechos puede ser el compositor o un tercero: no se deduce de autoría ni de aportante.
 
 Se aplica un principio de mínima información: no se añaden campos, tablas de titularidad, historiales ni evidencias para escenarios hipotéticos. Se conservan solo datos disponibles, fiables y con uso funcional claro. Lo desconocido queda sin determinar. Los campos históricos de procedencia/licencia en Work solo se trasladan a un Resource si la relación es inequívoca; en otro caso se clasifican como conflicto/no migrable, sin inferencias.
+
+## Regla vinculante de cardinalidad y permisos Work/Resource
+
+Toda Work tiene siempre uno o más Resources. No existe Work sin Resource. Un Resource puede ser URL-only o de referencia y carecer de File; la ausencia de archivo físico no justifica eliminar el Resource ni dejar Work huérfana.
+
+Solo el compositor identificado y autenticado puede modificar los metadatos descriptivos/catalográficos de Work (nombres, títulos, variantes y demás datos de identidad). El permiso de Work no autoriza a modificar Resources creados por terceros. Cada Resource solo puede ser modificado por el usuario que lo creó; en recursos importados, la fuente importadora es el aportante de procedencia. Cualquier otro usuario incorpora su material como un nuevo Resource de la misma Work.
+
+Queda retirada la regla anterior de crear una Work derivada privada al modificar una obra ajena. Los arreglos, ediciones, versiones, partituras y grabaciones aportados por terceros se representan como Resources nuevos. Los créditos específicos de arreglista/editor/intérprete se asocian al Resource concreto cuando sean necesarios y conocidos, sin alterar la autoría de Work.
