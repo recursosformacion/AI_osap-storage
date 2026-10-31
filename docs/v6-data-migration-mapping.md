@@ -23,7 +23,7 @@
 
 La regla de propiedad editorial es vinculante:
 
-1. Solo el usuario que aportó originalmente una Work puede modificar esa Work.
+1. Solo el usuario/fuente que incorporó originalmente la Work puede modificarla. Como la procedencia pertenece a Resource, esa autorización se identifica a través del Resource que introdujo originalmente la Work; no se añade un campo duplicado de aportante en Work.
 2. Si otro usuario inicia una modificación de una Work ajena, se crea automáticamente una Work derivada independiente dentro de su área personal y privada.
 3. La Work original no se modifica.
 4. El usuario que crea esa versión derivada recibe el crédito de **arreglista** (rol canónico arranger, ID 3, si la vinculación usuario↔persona está resuelta).
@@ -160,8 +160,8 @@ Estas entidades son nuevas en V6; no se deben presentar como tablas antiguas exi
 10. Derechos/licencia contradictorios entre Resources o asociados de forma ambigua a una Work; no migrar como licencia de Work.
 11. créditos de Representation sin persona canónica resuelta.
 12. referencias de audit/review a IDs retirados.
-13. Work histórica sin propietario original verificable.
-14. Work con posible procedencia de usuario pero sin cuenta autenticada asociable.
+13. Work histórica cuyo Resource inicial o aportante original no puede verificarse.
+14. Resource inicial con posible aportación de usuario pero sin cuenta autenticada asociable.
 15. Work derivada sin linaje o sin arreglista asociado.
 16. duplicados de Work por coincidencia de título/compositor: generar candidatos, no fusionar automáticamente.
 
@@ -223,3 +223,9 @@ Esta distribución sustituye cualquier mapeo anterior que colocara procedencia o
 - **No acumular datos hipotéticos.** No crear una estructura de derechos compleja, tablas de evidencias, historiales, campos de titular o fuentes alternativos si no hay un uso real y datos disponibles. Guardar lo mínimo necesario y fiable. Si un dato no se conoce, dejarlo sin determinar; no inferir ni completar por defecto.
 
 Regla de migración: `works_origin`, `works_origin_id`, `works_license` y `works_public_domain` no son atributos V6 de Work. Solo se trasladan a un Resource cuando el registro antiguo permite asociarlos inequívocamente con ese Resource. Si no, se registra el conflicto y no se asigna por heurística. La autoría histórica de Work no se modifica por diferencias de procedencia/licencia entre Resources.
+
+### 2.4 Relación entre procedencia del Resource inicial y permiso editorial de Work
+
+La procedencia/aportante sigue perteneciendo a Resource. No se crea un segundo campo `work_uploader` o `work_owner` en Work. La regla editorial previa —solo quien incorporó originalmente la Work puede modificarla— se resuelve identificando el Resource que introdujo esa Work al catálogo y consultando su aportante/procedencia. Añadir después otro Resource a una Work existente no concede al nuevo aportante permiso para modificar la Work.
+
+Durante la migración debe identificarse ese Resource inicial únicamente cuando exista evidencia fiable (relación de importación, fecha/orden verificable u otra referencia directa). No inferirlo desde `works_origin`, email, último editor, votos ni el primer ID por conveniencia. Si no puede determinarse, la propiedad editorial queda sin resolver y no se concede edición directa por heurística.
