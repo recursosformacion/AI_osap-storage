@@ -829,3 +829,41 @@ Consecuencias para el DDL y la validación:
 - La base de datos/servicio debe impedir más de un Resource original por Work y la aceptación/publicación debe impedir Work sin Resource original. La creación de Work y su Resource original debe ser una única operación lógica/atómica.
 - La relación de personas/roles de Resource no admite el rol compositor; la relación de autoría de Work sí.
 - La migración debe informar por separado Works sin Resource, Works sin original demostrable, Works con más de un candidato original y Resources cuyo crédito de compositor contradiga la autoría de Work.
+
+---
+
+## Corrección vinculante: Resource de referencia opcional (sustituye la regla de Resource original obligatorio)
+
+Esta decisión sustituye íntegramente cualquier regla anterior de este documento que exija que toda Work tenga un Resource, que el primer Resource sea el original, que los Resources posteriores sean arreglos, o que la migración deba encontrar un original histórico para cada Work.
+
+### Semántica correcta
+
+- **Work** identifica la obra musical.
+- **Resource** identifica un material concreto asociado a esa obra: por ejemplo, una partitura, una edición, un arreglo, una transcripción, una interpretación, una grabación u otro material.
+- Una Work puede tener cero, uno o varios Resources. No se crea un Resource ficticio para poder dar de alta una Work.
+- Una Work puede señalar opcionalmente uno de sus Resources como **Resource de referencia**. Es una elección catalográfica/práctica que indica qué material queremos destacar al presentar o consultar la obra.
+- El Resource de referencia no tiene por qué ser el original histórico. Puede ser, por ejemplo, la partitura original de una obra contemporánea cuando se conoce; para una obra clásica puede ser una edición crítica, una partitura de uso o cualquier material de referencia elegido, aunque se desconozca el original.
+- No se presupone que exista, se conserve o se conozca el original histórico. No se deduce por antigüedad, orden de alta, proveedor, presencia de File ni ningún otro indicio técnico.
+- La condición de original puede describirse en un Resource únicamente cuando esté respaldada por información fiable. No es obligatoria ni determina automáticamente el Resource de referencia.
+- Los arreglos, ediciones, transcripciones, interpretaciones y grabaciones son tipos o características de Resources. No se consideran automáticamente arreglos todos los Resources creados después del primero.
+- Los Resources pertenecen directamente a Work. No se establece una jerarquía entre ellos ni una relación obligatoria con el Resource de referencia.
+
+### Representación en el modelo y restricciones
+
+La selección de referencia es opcional y pertenece a Work. Si se implementa mediante works.reference_resource_id, la integridad debe garantizar que el Resource señalado pertenece a esa misma Work. No se debe crear primary_resource_id, original_resource_id ni una entidad de Resource principal/original obligatoria. También puede resolverse mediante una relación equivalente si el DDL demuestra que es más adecuada, pero debe existir como máximo una referencia elegida por Work.
+
+El Resource señalado conserva su resource_id propio: ese ID identifica el material, no la obra. El identificador estable de la obra sigue siendo work_id. Si no se ha elegido un Resource de referencia, el campo/relación queda NULL y la interfaz no debe inventar una selección.
+
+### Migración histórica
+
+- No hay que clasificar cada Work como si tuviera un Resource original.
+- No hay que bloquear el corte por no poder demostrar cuál fue el original histórico.
+- No se asigna automáticamente como referencia el Resource más antiguo, el primero insertado, el primero devuelto por una consulta, el único que tiene File ni el procedente de una fuente determinada.
+- Solo se migra una selección de referencia si existe una decisión/dato previo que realmente exprese esa preferencia. En caso contrario queda sin seleccionar.
+- Los conflictos que sí deben revisarse son los de identidad de Work, asociaciones Resource→Work dudosas y créditos incompatibles; no la ausencia de un supuesto original obligatorio.
+
+### Autoría
+
+Se mantiene la regla independiente: compositor y coautores se relacionan exclusivamente con Work. Resource no admite el rol compositor. Los créditos propios del material (arreglista, editor, adaptador, intérprete, traductor, etc.) pueden relacionarse con Resource cuando se conocen.
+
+Las secciones anteriores de este documento que contradigan esta corrección quedan reemplazadas por esta decisión más reciente.
