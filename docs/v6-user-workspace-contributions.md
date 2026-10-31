@@ -23,7 +23,7 @@ Principios obligatorios:
 2. La pertenencia a un espacio personal no convierte al usuario en propietario de la Work ni modifica su visibilidad pública.
 3. El material privado o pendiente no debe aparecer en búsquedas, páginas públicas, feeds ni índices generales.
 4. Una aportación aceptada se integra en las entidades canónicas Work/Resource/File; no se publica una copia paralela.
-5. La procedencia, autoría declarada, licencia, usuario aportante, decisiones de revisión y fechas deben poder auditarse.
+5. La autoría se define en Work; la procedencia/aportante y los derechos/licencia corresponden a cada Resource. Solo se conserva información disponible y necesaria para el flujo; no se exige ni inventa un titular o una licencia desconocidos.
 6. La identidad de usuario se obtiene del contexto autenticado del servidor. Nunca se acepta como autoridad un user_id enviado libremente por el navegador.
 7. La autorización se comprueba en servidor para cada operación y cada objeto; ocultar botones en la interfaz no es control de acceso.
 8. Los Files privados y pendientes utilizan el mismo modelo File V6 y el mismo adaptador de almacenamiento, pero con control de acceso privado. No se publican URLs permanentes que permitan eludir permisos.
@@ -56,7 +56,7 @@ Antes de crear una Work pública se ejecutará una búsqueda de posibles coincid
 
 El usuario puede proponer una nueva realización/material para una Work existente: por ejemplo, arreglo, edición, transcripción, partitura, grabación o interpretación.
 
-El Resource propuesto debe quedar diferenciado de los Resources ya publicados hasta que la aportación sea aceptada. Debe guardar la Work objetivo, la descripción del material, su procedencia, los créditos declarados y la licencia aplicable.
+El Resource propuesto debe quedar diferenciado de los Resources ya publicados hasta que la aportación sea aceptada. Debe guardar la Work objetivo, la descripción del material y, cuando se conozcan, su procedencia/aportante y los derechos/licencia aplicables. La autoría pertenece a Work y no se vuelve a declarar por Resource.
 
 No se debe crear una Work nueva cuando la aportación es simplemente otro Resource de una Work conocida.
 
@@ -357,3 +357,11 @@ Esta regla prevalece sobre cualquier redacción anterior que pudiera interpretar
 | Modificar una Work propia | Actualización de la Work aportada por ese mismo usuario, con auditoría | No | Sí, sobre la propia |
 
 La identidad del aportante original debe ser un dato persistente y no inferirse del último editor, del usuario que subió un File posterior ni del propietario de una copia derivada. Para registros históricos sin aportante identificable, la migración debe marcarlos como propiedad editorial no resuelta y aplicar una política explícita; no asignar la propiedad al usuario que primero abra la ficha.
+
+## Decisión vinculante sobre metadatos de Work y Resource
+
+- La **autoría/compositoría** pertenece a Work y es común a todos sus Resources. Un Resource no puede introducir una autoría alternativa para la misma Work.
+- La **procedencia/aportante** y los **derechos/licencia** pertenecen a Resource y pueden variar entre materiales de una misma Work.
+- En una aportación directa, el usuario aportante se obtiene de la sesión autenticada; no se pregunta ni se permite que el cliente elija otra identidad.
+- El titular de derechos puede ser el compositor o un tercero. No se deduce de la autoría ni de quién sube el material.
+- Se guardan solo datos conocidos y necesarios. Los datos desconocidos quedan sin determinar; no se crean entidades ficticias ni estructuras adicionales para escenarios hipotéticos.
