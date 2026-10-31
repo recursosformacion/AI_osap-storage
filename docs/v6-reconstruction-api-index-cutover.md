@@ -779,3 +779,15 @@ El alcance V6 incluye también el área privada de trabajo de cada usuario y el 
 ## 16. Inventario de migración campo a campo y propiedad editorial
 
 El inventario inicial de tablas, campos, referencias R2, reglas de transformación, conflictos y validaciones está en [V6 — inventario de migración de datos y propiedad editorial](v6-data-migration-mapping.md). Este documento también incorpora la regla de que solo el aportante original puede modificar su Work; cualquier otro usuario debe crear automáticamente una copia privada derivada, con crédito de arreglista y linaje a la original. El inventario está contrastado con migraciones/código versionados, pero aún debe validarse contra el snapshot real de producción.
+
+## Decisión de modelo: autoría, procedencia y derechos
+
+La distribución es vinculante para el contrato, la migración, los importadores y la API V6:
+
+- **Work:** autoría/compositoría de la obra, compartida por todos sus Resources. Una misma Work no admite compositores alternativos según el Resource; si la diferencia refleja obras distintas, debe revisarse la identidad de Work.
+- **Resource:** procedencia/aportante (PDMX, IMSLP, CPDL o usuario autenticado) y derechos/licencia aplicables a ese material. Estos datos pueden variar entre Resources de una Work.
+- En altas de usuario, el aportante se toma automáticamente de la identidad autenticada; no se pregunta ni se confía en un user_id del cliente.
+- El titular de derechos puede ser el compositor o un tercero; no se infiere de autoría ni procedencia.
+- Se conserva solo información disponible y necesaria. No se añaden tablas/campos de titularidad, evidencias o historial sin un caso de uso y datos reales. Los valores desconocidos permanecen sin determinar.
+
+Este criterio prevalece sobre cualquier frase anterior que proponga `works_origin`, `works_license` o `works_public_domain` como atributos de Work. En migración, esos datos solo pasan a Resource si su asociación con el material es inequívoca; no se asignan por heurística.
