@@ -365,3 +365,7 @@ La identidad del aportante original debe ser un dato persistente y no inferirse 
 - En una aportación directa, el usuario aportante se obtiene de la sesión autenticada; no se pregunta ni se permite que el cliente elija otra identidad.
 - El titular de derechos puede ser el compositor o un tercero. No se deduce de la autoría ni de quién sube el material.
 - Se guardan solo datos conocidos y necesarios. Los datos desconocidos quedan sin determinar; no se crean entidades ficticias ni estructuras adicionales para escenarios hipotéticos.
+
+### Procedencia inicial y permiso para modificar Work
+
+La procedencia pertenece a Resource, pero la regla editorial de Work necesita reconocer quién la introdujo originalmente. Se consulta el aportante del Resource inicial que dio entrada a la Work, sin añadir un atributo redundante de uploader/owner a Work. Un usuario que aporta un Resource nuevo a una Work existente solo es aportante de ese Resource; no adquiere por ello permiso para modificar la Work. Si no se puede demostrar cuál fue el Resource inicial o quién lo aportó, la autorización queda sin resolver y no se concede edición directa por inferencia.
