@@ -373,3 +373,24 @@ No existe una propiedad editorial de Work basada en quién subió el primer Reso
 Toda Work debe tener al menos un Resource. El Resource puede ser URL-only y no tener File. Work no se crea como ficha vacía a la espera de un Resource.
 
 El compositor autenticado puede modificar los metadatos descriptivos de Work. El creador de un Resource puede modificar exclusivamente ese Resource. Los demás usuarios no duplican Work para aportar material: crean otro Resource bajo la misma Work. No hay un campo editorial_owner de Work derivado del primer aportante.
+
+
+## Corrección vinculante: Resource original y arreglos; compositor exclusivamente en Work
+
+Esta regla sustituye cualquier frase anterior que permita Resources sin distinguir el original de los arreglos, que admita compositoría en Resource o que deje abierta la selección de un Resource principal:
+
+1. Una Work solo puede existir si tiene al menos un Resource.
+2. Al crear una Work, su primer Resource representa el **material original de la obra**. No es un arreglo ni una copia derivada.
+3. Los Resources posteriores de esa Work representan **arreglos de la obra original**. No se crea otra Work para un arreglo que conserva la identidad de la misma obra.
+4. El compositor o los coautores se relacionan exclusivamente con Work. **No existe relación de compositor en Resource ni se admite el rol de compositor en sus créditos.** Si un material tiene una autoría compositiva diferente, debe tratarse como otra Work, no como Resource de la primera.
+5. Los demás créditos personales que describan un Resource (por ejemplo, arreglista, editor, adaptador, intérprete o traductor) se relacionan con ese Resource cuando estén documentados. El arreglista no se convierte por ello en compositor de Work.
+6. No se necesita un campo `primary_resource_id`: el Resource original es el primero de la secuencia de creación de la Work y los siguientes son arreglos. El significado original/arreglo debe quedar representado explícitamente en el tipo/clase del Resource, sin deducirlo de que tenga un File, de su fecha de importación o de su proveedor.
+7. En Works históricas, solo se clasificará un Resource como original si hay evidencia suficiente. No se elegirá arbitrariamente el primero que aparezca en una consulta ni se inferirá que un Resource es original por ser el más antiguo en la base de datos. Si no puede identificarse el original o no existe material que lo sustente, la Work queda como conflicto de migración y debe resolverse antes del corte; no se inventa un Resource vacío ni se convierte un arreglo en original por conveniencia.
+8. La autoría de Work se conserva desde las relaciones de compositoría de Work. Los créditos históricos de Resource se migran excluyendo cualquier rol de compositor; si un crédito revela una composición diferente, se revisa la identidad de Work.
+
+Consecuencias para el DDL y la validación:
+- Work debe tener exactamente un Resource original y puede tener cero o más Resources de tipo arreglo.
+- Cada Resource pertenece a una única Work y se clasifica como original o arreglo.
+- La base de datos/servicio debe impedir más de un Resource original por Work y la aceptación/publicación debe impedir Work sin Resource original. La creación de Work y su Resource original debe ser una única operación lógica/atómica.
+- La relación de personas/roles de Resource no admite el rol compositor; la relación de autoría de Work sí.
+- La migración debe informar por separado Works sin Resource, Works sin original demostrable, Works con más de un candidato original y Resources cuyo crédito de compositor contradiga la autoría de Work.
