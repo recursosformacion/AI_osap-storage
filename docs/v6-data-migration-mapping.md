@@ -235,3 +235,23 @@ Consecuencias para el DDL y la validación:
 - La base de datos/servicio debe impedir más de un Resource original por Work y la aceptación/publicación debe impedir Work sin Resource original. La creación de Work y su Resource original debe ser una única operación lógica/atómica.
 - La relación de personas/roles de Resource no admite el rol compositor; la relación de autoría de Work sí.
 - La migración debe informar por separado Works sin Resource, Works sin original demostrable, Works con más de un candidato original y Resources cuyo crédito de compositor contradiga la autoría de Work.
+
+---
+
+## Corrección vinculante: no inferir Resource original; referencia opcional
+
+Esta regla sustituye cualquier instrucción anterior de este documento que obligue a crear un Resource original para cada Work, considere original el primer Resource o clasifique automáticamente los Resources posteriores como arreglos.
+
+- Una Work puede tener cero, uno o varios Resources. No se inventa un Resource vacío/ficticio para satisfacer una cardinalidad obligatoria.
+- El Resource de referencia es una selección opcional de Work: identifica el material que el catálogo quiere destacar como referencia. No significa necesariamente original histórico.
+- Ejemplo: en una obra contemporánea puede señalarse la partitura original conocida; en repertorio clásico puede señalarse una edición crítica u otra partitura útil, aunque el original se desconozca o no se conserve.
+- No se deduce originalidad ni referencia por orden de inserción, fecha, proveedor, presencia de File o resultado de consulta.
+- Solo se migra una referencia si los datos antiguos expresan realmente esa elección. En ausencia de evidencia, queda NULL/sin seleccionar.
+- No se generan conflictos de migración por no poder demostrar un original. Sí se mantienen los controles de identidad, integridad de relaciones y créditos de compositor contradictorios.
+- resource_id identifica el material; work_id identifica la obra. El Resource de referencia no sustituye ni identifica a Work.
+
+Si se usa works.reference_resource_id, el DDL debe garantizar que el Resource elegido pertenece a la misma Work. La referencia es nullable y como máximo hay una por Work. No crear primary_resource_id ni original_resource_id obligatorios.
+
+Se mantiene: compositor y coautores pertenecen exclusivamente a Work; Resource no admite compositor. Los créditos de arreglista, editor, adaptador, intérprete, traductor y otros propios del material se migran a Resource cuando la asociación sea inequívoca.
+
+Cualquier matriz, checklist o regla de migración anterior que exigiera un original por Work queda sustituida por esta corrección.
