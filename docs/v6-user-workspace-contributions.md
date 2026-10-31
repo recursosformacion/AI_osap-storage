@@ -410,3 +410,13 @@ La creación de una Work y la aportación de Resources no deben imponer la exist
 - La aportación de un Resource no cambia automáticamente la referencia existente. Cambiarla es una decisión catalográfica explícita y separada de la autoría y de los permisos de edición del Resource.
 
 Se mantiene la separación de permisos: el compositor autenticado puede editar metadatos catalográficos de Work cuando su identidad esté vinculada de forma fiable; cada Resource solo lo modifica su creador. Ser Resource de referencia no concede permisos adicionales ni altera los derechos/licencias.
+
+
+
+## Corrección: aportaciones OMR y materiales externos federados
+
+- El área personal y el flujo de aportaciones trabajan sobre Works OMR y Resources que el usuario incorpora al repositorio OMR. Un material de IMSLP, CPDL, Mutopia u otra fuente que aparece en una búsqueda federada no se convierte por ello en Resource de Storage.
+- «Añadir a Mi Actividad» puede guardar una relación personal con una Work OMR aunque esa Work tenga cero Resources OMR. No crea un Resource ni copia materiales externos.
+- Si el usuario decide aportar realmente un material externo al repositorio OMR, se ejecuta el flujo explícito de incorporación y se crea un Resource OMR nuevo con procedencia correctamente registrada y derechos/licencia conocidos. No se altera el registro federado original ni se confunden sus IDs.
+- Las aportaciones privadas o pendientes siguen aisladas del índice público general. Su publicación incorpora el Resource OMR mediante el proceso editorial correspondiente.
+- La existencia de materiales federados en API no cambia permisos: el usuario no puede editar el registro del proveedor ni los Resources de otros usuarios por el mero hecho de tener la Work en Mi Actividad.
