@@ -394,3 +394,19 @@ Consecuencias para el DDL y la validación:
 - La base de datos/servicio debe impedir más de un Resource original por Work y la aceptación/publicación debe impedir Work sin Resource original. La creación de Work y su Resource original debe ser una única operación lógica/atómica.
 - La relación de personas/roles de Resource no admite el rol compositor; la relación de autoría de Work sí.
 - La migración debe informar por separado Works sin Resource, Works sin original demostrable, Works con más de un candidato original y Resources cuyo crédito de compositor contradiga la autoría de Work.
+
+---
+
+## Corrección vinculante: aportaciones y Resource de referencia
+
+La creación de una Work y la aportación de Resources no deben imponer la existencia de un Resource original obligatorio.
+
+- Una Work puede existir en el catálogo con cero, uno o varios Resources.
+- Un usuario que aporta una partitura, arreglo, edición, transcripción, interpretación o grabación crea un Resource nuevo asociado directamente a la Work correspondiente, respetando permisos y procedencia.
+- La aportación no se convierte automáticamente en el Resource de referencia ni se etiqueta como arreglo por ser posterior.
+- La Work puede tener opcionalmente un Resource de referencia elegido de entre sus propios Resources. Esa elección destaca el material útil para consultar la obra; no afirma que sea el original histórico.
+- Si se conoce y está documentado cuál es la partitura original, puede elegirse ese Resource como referencia y describirse su condición de original. En repertorio clásico, si se desconoce el original, se puede elegir una edición crítica u otro material de referencia, o no elegir ninguno.
+- Añadir una Work a «Mi Actividad» sigue siendo una relación personal y no crea un Resource ni modifica la selección de referencia.
+- La aportación de un Resource no cambia automáticamente la referencia existente. Cambiarla es una decisión catalográfica explícita y separada de la autoría y de los permisos de edición del Resource.
+
+Se mantiene la separación de permisos: el compositor autenticado puede editar metadatos catalográficos de Work cuando su identidad esté vinculada de forma fiable; cada Resource solo lo modifica su creador. Ser Resource de referencia no concede permisos adicionales ni altera los derechos/licencias.
