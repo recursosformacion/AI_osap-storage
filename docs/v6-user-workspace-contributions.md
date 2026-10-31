@@ -333,30 +333,28 @@ No se debe resolver ninguno de estos puntos inventando tablas o permisos existen
 
 Este trabajo forma parte del alcance V6 y debe planificarse junto con el corte Work → Resource → File. No se debe posponer como una fase opcional posterior al lanzamiento de V6.
 
-## 2.6 Autoría, propiedad editorial y modificación de obras (decisión vinculante)
+## 2.6 Permisos de edición de Work y Resource (decisión vinculante)
 
-Esta regla prevalece sobre cualquier redacción anterior que pudiera interpretarse como edición colaborativa de una Work pública:
+La regla anterior basada en el usuario que subió primero la Work y la copia automática de Work derivadas queda retirada.
 
-1. **Solo el usuario que subió/aportó originalmente una Work puede modificar esa Work.** Ningún otro usuario, aunque esté autenticado o sea colaborador del catálogo, puede editar directamente sus datos, Resources o Files publicados.
-2. Si otro usuario desea tomar una Work existente y modificarla, OSAP crea automáticamente una **copia independiente en el área de trabajo de ese usuario**. La copia pasa a ser privada desde su creación.
-3. La Work pública original permanece intacta: no se actualizan sus metadatos, atribuciones, Resources ni Files como consecuencia de la operación de copia.
-4. El usuario que realiza la modificación queda reconocido como **arreglista** de su versión derivada. En el modelo de roles actual, el rol canónico `arranger` corresponde al rol ID 3, sujeto a confirmar que la persona autenticada está vinculada a una identidad `persons` válida.
-5. La copia privada debe conservar la referencia de procedencia a la Work original (`derived_from_work_id` o relación equivalente), sin compartir su identidad ni convertirla en una Work pública.
-6. La copia y sus Resources/Files tienen ciclo de vida, permisos y modificaciones propios. El usuario puede editar su copia; no puede modificar ni borrar la original.
-7. La copia no se incorpora al catálogo público ni al índice general mientras siga privada. Si el usuario decide aportarla al catálogo, se somete a un proceso separado de publicación y revisión, con trazabilidad de la Work de origen, el arreglista y las licencias.
-8. La operación «modificar esta obra» debe ser atómica desde la perspectiva de usuario: crear la copia privada, conservar sus relaciones necesarias, asignar propiedad al usuario y registrar el rol de arreglista antes de abrir el editor. No debe existir un intervalo en el que la copia sea pública.
-9. Añadir una Work al espacio personal sin modificarla sigue siendo una simple relación personal y no crea copia. La duplicación automática ocurre al iniciar una acción de modificación/derivación, no al guardar una obra en la biblioteca personal.
-10. La privacidad no elimina obligaciones de licencia, atribución o derechos de adaptación. La copia debe conservar la información de licencia/procedencia aplicable y bloquear o advertir cuando sus condiciones no permitan la modificación o redistribución prevista.
+1. **Work:** solo su compositor identificado y autenticado puede modificar los metadatos catalográficos: nombres, títulos, variantes y demás datos descriptivos de identidad. Esta facultad no permite modificar Resources creados por otras personas.
+2. **Resource:** solo su creador puede modificar ese Resource. El compositor no adquiere permisos sobre Resources de terceros por ser autor de la Work.
+3. Cualquier otro usuario que quiera aportar un arreglo, edición, versión, transcripción, partitura, interpretación o grabación crea un **nuevo Resource bajo la misma Work**. No modifica la Work, no sobrescribe Resources existentes y no crea una Work derivada.
+4. El creador de un Resource de usuario se obtiene de la sesión autenticada. No se pregunta ni se acepta un user_id enviado por el cliente. Para Resources importados, la procedencia identifica la fuente/sistema que los incorporó.
+5. Toda Work debe tener al menos un Resource. Puede ser URL-only o de referencia sin File, pero debe representar un material/fuente real.
+6. Añadir una Work a Mi Actividad solo crea una relación personal; no copia Work ni crea Resource.
+7. La privacidad/publicación se gestiona por Resource y no cambia la autoría ni los metadatos de Work.
+8. La licencia y los derechos aplicables deben respetarse al crear un Resource nuevo. La posibilidad de aportarlo no implica permiso legal para modificar o redistribuir el material.
 
 ### Diferencia entre las tres operaciones
 
-| Acción | Resultado | ¿Copia Work? | ¿Puede modificar? |
+| Acción | Resultado | ¿Crea Work? | ¿Puede modificar? |
 |---|---|---:|---|
-| Añadir al espacio personal | Referencia privada a la Work pública | No | No; solo organización personal |
-| Aportar arreglo/edición/versión a una Work existente | Nuevo Resource privado bajo la misma Work, propiedad de su creador | Sí, nuevo Resource | Sí, solo sobre ese Resource |
-| Modificar metadatos de Work | Solo el compositor autenticado puede modificar nombres y demás metadatos catalográficos | No | Sí, sobre Work |
+| Añadir al espacio personal | Referencia privada a la Work existente | No | No; solo organización personal |
+| Aportar arreglo/edición/versión | Nuevo Resource privado bajo la misma Work | No | Sí, solo ese Resource |
+| Modificar metadatos catalográficos | Edición de nombres y demás datos descriptivos por el compositor autenticado | No | Sí, solo metadatos de Work |
 
-La identidad del aportante original debe ser un dato persistente y no inferirse del último editor, del usuario que subió un File posterior ni del propietario de una copia derivada. Para registros históricos sin aportante identificable, la migración debe marcarlos como propiedad editorial no resuelta y aplicar una política explícita; no asignar la propiedad al usuario que primero abra la ficha.
+No se identifica un propietario editorial de Work a partir del primer aportante. Para registros históricos, la autorización de edición de Work depende de poder vincular al compositor con una cuenta autenticada; la autorización de un Resource depende de poder identificar a su creador. Si esas relaciones no pueden demostrarse, no se concede edición por inferencia.
 
 ## Decisión vinculante sobre metadatos de Work y Resource
 
