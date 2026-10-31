@@ -775,3 +775,7 @@ Los puntos siguientes requieren definición explícita antes de DDL/implementaci
 ## 15. Área de trabajo personal y aportaciones de usuarios
 
 El alcance V6 incluye también el área privada de trabajo de cada usuario y el flujo de aportación de nuevas piezas o Resources al catálogo. La especificación funcional completa está en [V6 — área de trabajo personal y aportaciones de usuarios](v6-user-workspace-contributions.md). Este bloque debe diseñarse junto con Work → Resource → File: los Files privados usan el mismo modelo de almacenamiento, pero su visibilidad y publicación dependen de la autorización y del flujo editorial de OSAP. No duplicar Works públicas para incorporarlas a un espacio personal.
+
+## 16. Inventario de migración campo a campo y propiedad editorial
+
+El inventario inicial de tablas, campos, referencias R2, reglas de transformación, conflictos y validaciones está en [V6 — inventario de migración de datos y propiedad editorial](v6-data-migration-mapping.md). Este documento también incorpora la regla de que solo el aportante original puede modificar su Work; cualquier otro usuario debe crear automáticamente una copia privada derivada, con crédito de arreglista y linaje a la original. El inventario está contrastado con migraciones/código versionados, pero aún debe validarse contra el snapshot real de producción.
