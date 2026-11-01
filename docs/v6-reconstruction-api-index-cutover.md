@@ -967,3 +967,91 @@ La ruta de migración del índice debe preservar el inventario de fuentes y sus 
 ### CPDL heredado
 
 El indexador de API documenta que CPDL se encuentra actualmente materializado en el Storage histórico con works_origin='CPDL'. Esto exige un paso de clasificación de datos durante la migración: distinguir material efectivamente incorporado al repositorio OMR de una mera referencia/registro de proveedor. El nombre CPDL no basta para determinar el destino. No eliminar ni recrear esos datos hasta que el inventario y la regla de clasificación estén aprobados.
+
+
+## 12. Auditoría del contrato HTTP real de osap-storage (2026-11-01)
+
+Esta sección documenta la lectura del código actual de `main`. No se han ejecutado llamadas contra producción, consultado la base de datos productiva ni realizado cambios de código, datos o R2.
+
+### 12.1 Superficies HTTP que hoy consume OSAP-API
+
+| Ruta | Función actual | Observación para V6 |
+|---|---|---|
+| `GET /api/search` | Búsqueda completa de Works con metadatos, Resources y representaciones; permite corpus `omr/cpdl/rism/all` | Contrato de proveedor V1; devuelve estructura heredada y mezcla material OMR con RISM |
+| `GET /api/lookup` | Autocompletado de Works | Puede mantenerse como operación de búsqueda ligera, pero debe devolver identidad OMR explícita |
+| `GET /api/resource/{work_id}` | Detalle completo de una Work | Nombre singular engañoso: el parámetro es Work ID |
+| `GET /api/v1/works` | Lista de Works | DTO interno distinto del contrato `/api/search` |
+| `GET /api/v1/works/{work_id}` | Work más lista plana de Resources | No devuelve Files como objetos hijos; construye URL desde relative_path/file_id |
+| `GET /api/v1/files/{file_id}` | Detalle File | Expone SHA, estado y ubicaciones/proveedores físicos |
+| `GET /api/v1/files/{file_id}/url` y `/content` | URL o streaming del File | El identificador es File ID, no Resource ID |
+| `GET /api/download/{resource_id}` | Descarga publicada del proveedor | Acepta un string, pero lo convierte a entero y resuelve primero archive_entry por File ID; después intenta Resource ID |
+| `GET /api/v1/entries/resolve` y `GET /api/v1/search` (router de búsqueda) | Resolución histórica por ruta/logical_id y búsqueda de entries | Superficie legacy basada en archive_entries/relative_path; no debe ser el contrato canónico Work→Resource→File |
+| `/api/admin/representations` y `/api/admin/resources` | CRUD de entidades heredadas | Deben desaparecer como conceptos/contratos V6, no solo ocultarse en el cliente |
+
+Hay por tanto más de un contrato de búsqueda y detalle. OSAP-API no debe depender de que el DTO de proveedor V1 y los DTO internos coincidan: hoy no coinciden ni en forma ni en semántica.
+
+### 12.2 Estructura efectiva de los DTO actuales
+
+- `WorkRead` expone muchos metadatos de Work, incluyendo `license`, `relative_path`, `attribution_type` y `attribution_note`. En V6, licencia y derechos específicos del material deben salir de Resource; el puntero de File no debe mezclarse con la identidad de Work.
+- `ResourceRead` es una proyección mínima con `relative_path`, `format`, `file_id`, `available` y `url`. No expone una identidad Resource estable en este DTO.
+- `WorkDetailRead` contiene `work` y `resources`, pero no representa explícitamente cada File hijo ni los Resources sin File de forma suficientemente completa.
+- `FileRead` incluye `sha256`, `locations`, `provider_id`, `provider_name`, `provider_type` y `object_key`. Esto revela al consumidor detalles físicos y contradice el contrato público V6: File debe tener puntero interno opaco y la API pública no debe revelar SHA ni claves/proveedores R2.
+- El contrato `osap-provider-v1` devuelve `ProviderWorkRead` con `resources` y `representations`; cada representación vuelve a contener Resources. Es una estructura Work→Representation→Resource, no el modelo V6.
+- En `_work()`, los Resources planos y los anidados en representaciones se generan por separado. `_resources()` filtra los que no están disponibles; por ello la vista plana no es inventario completo de los materiales.
+- `_resource_id()` elige Resource ID si existe, pero en su defecto usa File ID; el DTO no indica qué espacio de identidad se ha utilizado. El enlace se forma como `/api/download/{rid}`.
+
+### 12.3 Hallazgo crítico: espacio de IDs ambiguo en descarga
+
+La ruta `/api/download/{resource_id}` convierte el valor a entero y busca primero `archive_entries.get_by_file_id(rid)`. Solo si no encuentra una entrada intenta `representations.get_resource(rid)`.
+
+El propio comentario del código explica que los enlaces publicados históricamente transportan File IDs y que ambos espacios numéricos pueden colisionar. La prioridad actual reduce un tipo de error histórico, pero no elimina la ambigüedad: si el llamante envía un Resource ID cuyo valor coincide con un File ID presente en archive_entries, puede resolverse otro objeto.
+
+V6 debe eliminar esta ruta ambigua del contrato canónico. Los IDs opacos de Resource y File deben ser distintos e inequívocos. La operación pública de descarga recibe el ID del Resource (o un token opaco de acceso) y resuelve sus Files; el File ID nunca se interpreta como Resource ID ni viceversa. Los endpoints internos de File, si se conservan para operaciones de servicio, deben estar autenticados y separados de la API pública de catálogo.
+
+### 12.4 Hallazgos de implementación que afectan a la reconstrucción
+
+1. **Representación sigue siendo entidad real:** `GetWork` y `SearchWorksFull` consultan `RepresentationRepository`, agrupan Resources por `representation_id` y construyen `WorkDetail.representations`. No basta con cambiar los nombres de los DTO.
+2. **Resource todavía depende del nivel intermedio:** la entidad `Resource` tiene `representation_id` y el repositorio implementa consultas por representación. El campo `work_id` existe como compatibilidad, pero la relación dominante sigue siendo indirecta.
+3. **Compatibilidad dual:** `GetWork` puede caer al modelo antiguo `archive_entries` si no se inyecta el repositorio de representaciones. V6 debe retirar esta bifurcación y definir una única ruta Work→Resource→File.
+4. **File no cumple identidad V6:** `File.storage_key()` deriva `<sha-prefix>/<sha256>`; la migración V6 debe copiar el puntero R2 existente y no llamar a esa función para reconstruir objetos.
+5. **SHA único actual:** el baseline SQL define `UNIQUE(sha256)`. Debe retirarse en V6; no se debe fusionar Files por hash ni usarlo como clave física.
+6. **Ubicaciones y proveedores siguen en la respuesta:** `FileRead` materializa una lista de ubicaciones y sus proveedores. En V6 se elimina esa estructura del dominio y se mantiene el adaptador R2 como implementación interna.
+7. **URL-only:** el modelo de Resource permite URL sin File. La ruta `/api/v1/works/{id}` construye sus ResourceRead usando `relative_path` y `file_id`, sin proyectar de forma equivalente todos los casos URL-only. V6 debe devolver el Resource aunque no tenga File y expresar su acceso externo por separado.
+8. **Disponibilidad mezcla conceptos:** los DTO reducen a `available` si el File está disponible o si Resource tiene URL. No distingue existencia del material, existencia de File, posibilidad de abrir en proveedor, descarga directa ni disponibilidad temporal. V6 debe separar material, Files y opciones de acceso.
+9. **Licencia heredada:** `_resources()` pasa `detail.work.license` a cada Resource plano y la representación usa `representation.license or work.license`. Esa herencia implícita no puede trasladarse sin revisar la procedencia: los derechos/licencia aplicables pertenecen al Resource y no se deducen de Work.
+10. **RISM en contrato Storage:** `/api/search?corpus=rism` añade resultados RISM al mismo `ProviderSearchResult`, aunque RISM es externo y no un Resource OMR. En V6 la federación RISM corresponde a OSAP-API; Storage devuelve solo catálogo/material OMR.
+
+### 12.5 Contrato objetivo recomendado
+
+La superficie V6 para OSAP-API debe ser pequeña, tipada y única:
+
+- búsqueda/listado de Works OMR con paginación y filtros;
+- detalle de Work con identidad/metadatos, créditos de autoría y selección opcional de Resource de referencia;
+- colección completa de Resources directos de esa Work, incluidos los que no tengan File;
+- detalle de Resource con procedencia/aportante, derechos/licencia, créditos del material y características propias;
+- colección de Files hijos de cada Resource, cada uno con ID propio, formato/MIME/tamaño/estado y acceso resuelto por Storage;
+- operación de descarga/visualización por Resource o File con IDs opacos y no intercambiables;
+- operaciones de escritura separadas y autorizadas para Work, Resource y File.
+
+Storage no devuelve candidatos IMSLP/CPDL/RISM ni crea Resources por materiales externos que solo aparecen en una búsqueda federada. OSAP-API mantiene esas fuentes en su capa de federación.
+
+No se fija aquí un path HTTP definitivo: se debe cerrar junto con el OpenAPI V6 y los consumidores reales. Sí queda fijado que el contrato no conservará `Representation`, no usará File IDs como Resource IDs, no expondrá datos físicos R2 y no tendrá una segunda ruta legacy basada en archive_entries para resolver el mismo concepto.
+
+### 12.6 Pruebas de contrato obligatorias antes del corte
+
+- Una Work con cero Resources puede existir en el catálogo si así se decide en el modelo actual; la respuesta debe ser válida y no inventar un Resource.
+- Una Work con varios Resources devuelve todos, incluidos los URL-only.
+- Un Resource con cero Files se muestra como material identificado sin inventar descarga.
+- Un Resource con varios Files devuelve cada formato/archivo con identidad inequívoca.
+- La descarga de Resource ID nunca puede resolver un File o Resource distinto por colisión numérica.
+- Un File ID no puede ser aceptado por el endpoint de Resource.
+- El detalle de Work no duplica Resources ni los filtra por disponibilidad.
+- La licencia de Resource no se hereda silenciosamente de Work.
+- La respuesta pública no incluye SHA-256, object_key, bucket, provider_id ni configuración física.
+- Ningún resultado externo de IMSLP/CPDL/RISM se transforma en Resource OMR por aparecer en búsqueda.
+- Reiniciar Storage no cambia la resolución de Work, Resource o File.
+- Las pruebas se ejecutan contra base de desarrollo V6 y objetos de prueba; no requieren mutar R2 productivo.
+
+### 12.7 Alcance y límites
+
+Esta auditoría se ha basado en los archivos de código y migración versionados en GitHub en la rama `main`, revisados el 1 de noviembre de 2026. No se ha inspeccionado el estado de producción, las filas reales de las tablas ni las respuestas HTTP desplegadas. Las rutas descritas son las declaradas en el código revisado; su accesibilidad efectiva en el entorno productivo queda pendiente de prueba controlada.
