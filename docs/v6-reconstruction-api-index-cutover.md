@@ -936,3 +936,34 @@ Para Works reconciliadas, las cachés V6 deben preferir el ID canónico de Work 
 ### 10.7 Regla de diseño
 
 La búsqueda federada debe seguir siendo inmediata y útil. No se obliga a esperar al batch para mostrar materiales externos. Lo que se separa es la rapidez de presentación de la autoridad de identidad: la primera puede ser provisional; la segunda requiere reconciliación persistente. Storage conserva la responsabilidad sobre OMR; API puede evolucionar ampliamente para resolver correctamente la federación.
+
+
+
+## 11. Auditoría de extremo a extremo: identidad, ficha y descarga en API
+
+La auditoría detallada está en AI_GAMEPC2/docs/osap/v6-api-material-identity-audit.md. Debe formar parte de los requisitos de reconstrucción V6, no tratarse como una limpieza posterior.
+
+### Hallazgos que afectan al contrato
+
+- SearchResponse entrega WorkInfo y RepresentationInfo. El concepto Representation mezcla actualmente material OMR, registro externo, página de metadatos y opción de descarga.
+- El ID determinista del índice no incluye todos los discriminantes que la tabla index_representations considera únicos (source_rep_id y title_provider quedan fuera).
+- IndexCatalogProvider.get_representation() no filtra de forma completa por source_rep_id y formato en todas sus ramas.
+- Los IDs de candidatos vivos dependen de _representations en memoria; no hay reconstrucción general por proveedor después de reiniciar el proceso.
+- El detalle de Work mezcla resultados del índice con Resources de Storage mediante _merge_index_resources(), búsqueda por título/compositor y extracción de un file_id desde la URL.
+- Las cuotas y la analítica parsean el ID de material para recuperar proveedor, Work, Resource y formato.
+
+### Decisiones de reconstrucción
+
+1. Definir un servicio/registro de identidad de materiales en API, con origen tipado (OMR o proveedor externo) e identidad nativa completa.
+2. Emitir IDs opacos, estables y resolubles tras reinicios; no construir la identidad a partir de URLs ni de segmentos interpretados por los clientes.
+3. Modelar por separado Resource OMR y material externo federado. Los Files son hijos del Resource OMR; las opciones de acceso de un proveedor externo las resuelve su adaptador.
+4. Eliminar la composición artificial de _merge_index_resources(). El detalle de Work devuelve Work, Resources OMR y materiales federados en propiedades distintas.
+5. Resolver ficha, probe, vista, descarga, cuotas y analítica desde el objeto tipado ya resuelto.
+6. Rehacer claves de caché: Work canónica cuando existe; identidad provisional explícita mientras no haya reconciliación.
+7. No perder identificadores nativos de proveedor ni colapsar filas distintas admitidas por la clave única del índice.
+
+La ruta de migración del índice debe preservar el inventario de fuentes y sus identificadores originales, pero no trasladar el índice federado a Storage ni convertir sus registros externos en Resources OMR.
+
+### CPDL heredado
+
+El indexador de API documenta que CPDL se encuentra actualmente materializado en el Storage histórico con works_origin='CPDL'. Esto exige un paso de clasificación de datos durante la migración: distinguir material efectivamente incorporado al repositorio OMR de una mera referencia/registro de proveedor. El nombre CPDL no basta para determinar el destino. No eliminar ni recrear esos datos hasta que el inventario y la regla de clasificación estén aprobados.
