@@ -1,0 +1,21 @@
+[Unit]
+Description=OSAP AI enrichment (persons and works)
+After=network.target mariadb.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ocw
+Group=ocw
+WorkingDirectory=/home/ocw/openmusicrepository.com/osap-storage
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/ocw/openmusicrepository.com/osap-storage/.venv/bin/python scripts/ai_enrich_prod.py --persons-start 2 --works-start 723
+Restart=on-failure
+RestartSec=30
+Nice=10
+IOSchedulingClass=best-effort
+
+[Install]
+WantedBy=multi-user.target
+
+
