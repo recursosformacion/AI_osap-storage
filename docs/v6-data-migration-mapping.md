@@ -270,3 +270,18 @@ Esta regla prevalece sobre las matrices o frases anteriores que sugieran crear R
 - reference_resource_id continúa siendo opcional y solo referencia un Resource OMR de la misma Work.
 
 La auditoría de código confirma además que API reúne candidatos de índice y proveedores en vivo, agrupa dinámicamente y puede emitir resultados parciales antes de finalizar las consultas externas. Por ello, el índice federado y la reconciliación deben tratarse como responsabilidad de API y no confundirse con el catálogo maestro de Storage.
+
+
+
+## Corrección adicional: identidad federada y compatibilidad del índice
+
+La auditoría del recorrido API añade estos requisitos a la transformación:
+
+- No migrar el ID de Representation actual como si fuera un ID de Resource o File V6.
+- Conservar por separado provider, source_rep_id, resource_id histórico, formato y title_provider cuando estén presentes; son discriminantes distintos en la clave única del índice actual.
+- No asumir que resource_id=0 significa que existe un único material por Work/proveedor/formato. La identidad histórica puede depender también de title_provider y source_rep_id.
+- Los IDs de candidatos externos consultados en vivo no son necesariamente reconstruibles desde la caché de API. La migración/reconstrucción debe conservar los identificadores nativos de fuente, no solo el ID temporal emitido en una búsqueda.
+- La ficha de Work no debe materializar filas de index_representations como Resources/Files de Storage por extracción de IDs desde URLs.
+- Cuotas y analítica V6 deben recibir los IDs de Resource/Work ya resueltos, no depender de parsing de IDs públicos heredados.
+
+El indexador actual indica que CPDL está materializado en el Storage histórico (works_origin='CPDL'). Antes de clasificarlo como fuente externa no incorporada, inspeccionar sus Works, Resources y Files reales. La regla V6 debe conservar materiales ya incorporados y separar referencias externas que nunca se incorporaron.
