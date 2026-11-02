@@ -58,32 +58,61 @@ def run(args: list[str], env: dict[str, str]) -> int:
     return result.returncode
 
 
-def apply_persons(env: dict[str, str]) -> int:
-    return run(
-        [
-            sys.executable,
-            str(SCRIPTS / "apply_persons_ai_json.py"),
-            "--dirs",
-            str(DATA / "ai_out"),
-            "--apply",
-            "--allow-prod",
-        ],
-        env,
-    )
+def _apply_one(script: str, flag: str, source: Path, env: dict[str, str]) -> int:
+    staging = DATA / ".apply_one"
+    staging.mkdir(parents=True, exist_ok=True)
+    target = staging / source.name
+    target.write_bytes(source.read_bytes())
+    try:
+        return run(
+            [
+                sys.executable,
+                str(SCRIPTS / script),
+                flag,
+                str(staging),
+                "--apply",
+                "--allow-prod",
+            ],
+            env,
+        )
+    finally:
+        target.unlink(missing_ok=True)
+        try:
+            staging.rmdir()
+        except OSError:
+            pass
 
 
-def apply_works(env: dict[str, str]) -> int:
-    return run(
-        [
-            sys.executable,
-            str(SCRIPTS / "apply_works_ai_json.py"),
-            "--dir",
-            str(DATA / "works_ai_out"),
-            "--apply",
-            "--allow-prod",
-        ],
-        env,
-    )
+def apply_persons(env: dict[str, str], source: Path | None = None) -> int:
+    if source is None:
+        return run(
+            [
+                sys.executable,
+                str(SCRIPTS / "apply_persons_ai_json.py"),
+                "--dirs",
+                str(DATA / "ai_out"),
+                "--apply",
+                "--allow-prod",
+            ],
+            env,
+        )
+    return _apply_one("apply_persons_ai_json.py", "--dirs", source, env)
+
+
+def apply_works(env: dict[str, str], source: Path | None = None) -> int:
+    if source is None:
+        return run(
+            [
+                sys.executable,
+                str(SCRIPTS / "apply_works_ai_json.py"),
+                "--dir",
+                str(DATA / "works_ai_out"),
+                "--apply",
+                "--allow-prod",
+            ],
+            env,
+        )
+    return _apply_one("apply_works_ai_json.py", "--dir", source, env)
 
 
 def main() -> int:
@@ -158,7 +187,7 @@ def main() -> int:
                         time.sleep(max(60.0, args.pause_hours * 3600))
                         continue
                     changed = True
-                rc = apply_persons(env)
+                rc = apply_persons(env, target)
                 if rc != 0:
                     log("aplicación de personas falló; pausa")
                     time.sleep(max(60.0, args.pause_hours * 3600))
@@ -197,7 +226,7 @@ def main() -> int:
                         break
                     continue
                 changed = True
-            rc = apply_works(env)
+            rc = apply_works(env, target)
             if rc != 0:
                 log("aplicación de obras falló; pausa")
                 time.sleep(max(60.0, args.pause_hours * 3600))
