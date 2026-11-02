@@ -217,9 +217,51 @@ async def resource(work_id: int, uc: GetWork = Depends(GetWorkDep)) -> ProviderR
 
 
 @router.get(
+    "/api/download/file/{file_id}",
+    summary="Descargar un fichero por File ID",
+    description="ID tipado: nunca se interpreta como Resource ID.",
+)
+async def download_file(
+    file_id: int,
+    entries: ArchiveEntryRepository = Depends(get_archive_entry_repo),
+    settings: Settings = Depends(get_settings),
+) -> RedirectResponse:
+    entry = await entries.get_by_file_id(file_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="fichero no encontrado")
+    url, available = build_resource_url(entry.relative_path, entry.file_id, settings)
+    if not available or not url:
+        raise HTTPException(status_code=404, detail="fichero no disponible")
+    return RedirectResponse(url, status_code=302)
+
+
+@router.get(
+    "/api/download/resource/{resource_id}",
+    summary="Descargar un recurso por Resource ID",
+    description="ID tipado: nunca se interpreta como File ID.",
+)
+async def download_resource(
+    resource_id: int,
+    representations: RepresentationRepository | None = Depends(get_representation_repo),
+    settings: Settings = Depends(get_settings),
+) -> RedirectResponse:
+    resource = await representations.get_resource(resource_id) if representations is not None else None
+    if resource is None:
+        raise HTTPException(status_code=404, detail="recurso no encontrado")
+    if resource.url:
+        return RedirectResponse(resource.url, status_code=302)
+    url, available = build_resource_url(
+        resource.relative_path or "", resource.file_id, settings
+    )
+    if available and url:
+        return RedirectResponse(url, status_code=302)
+    raise HTTPException(status_code=404, detail="recurso no disponible")
+
+
+@router.get(
     "/api/download/{resource_id}",
-    summary="Descargar un recurso",
-    description="Storage resuelve el recurso físico internamente (CDN/R2/disco). Nunca expone hashes ni rutas internas.",
+    summary="Descargar un recurso (compatibilidad)",
+    description="Compatibilidad: id de File con prioridad sobre Resource. Los clientes nuevos deben usar /file/ o /resource/.",
 )
 async def download(
     resource_id: str,
@@ -232,10 +274,6 @@ async def download(
     except ValueError:
         raise HTTPException(status_code=404, detail="recurso no encontrado") from None
 
-    # Orden de resolución EXPLÍCITO para que un id numérico no sea ambiguo: los enlaces
-    # publicados y el índice de osap-api usan `{storage}/api/download/{file_id}`, así que
-    # el id de FICHERO tiene prioridad. Antes se probaba `resources` primero y un id
-    # numérico podía colisionar (p. ej. 632 = id de recurso) sirviendo OTRO fichero.
     entry = await entries.get_by_file_id(rid)
     if entry is not None:
         url, available = build_resource_url(entry.relative_path, entry.file_id, settings)
@@ -243,7 +281,6 @@ async def download(
             raise HTTPException(status_code=404, detail="recurso no disponible")
         return RedirectResponse(url, status_code=302)
 
-    # Modelo nuevo: el id del recurso es el de `resources`.
     resource = await representations.get_resource(rid) if representations is not None else None
     if resource is not None:
         if resource.url:
