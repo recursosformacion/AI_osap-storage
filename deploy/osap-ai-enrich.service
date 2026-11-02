@@ -9,11 +9,13 @@ User=ocw
 Group=ocw
 WorkingDirectory=/home/ocw/openmusicrepository.com/osap-storage
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/ocw/openmusicrepository.com/osap-storage/.venv/bin/python scripts/ai_enrich_prod.py --persons-start 2 --works-start 723
+ExecStart=/home/ocw/openmusicrepository.com/osap-storage/.venv/bin/python scripts/ai_enrich_prod.py --persons-start 2 --works-start 723 --sleep 10 --pause-hours 24
 Restart=on-failure
-RestartSec=30
-Nice=10
-IOSchedulingClass=best-effort
+RestartSec=60
+Nice=19
+IOSchedulingClass=idle
+CPUQuota=25%
+MemoryMax=2G
 
 [Install]
 WantedBy=multi-user.target
