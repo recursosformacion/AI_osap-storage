@@ -6,7 +6,7 @@
 
 - Único modelo: Work → Resource → File. Representation desaparece de rutas, DTO y dominio.
 - Resource pertenece directamente a Work; File pertenece a un Resource.
-- Work publicada debe tener al menos un Resource. Crear Work + primer Resource + publicar es una operación atómica.
+- Work puede existir con cero Resources. La creación de Work no exige fabricar un Resource; cuando se incorpora material OMR se crea un Resource explícito. La publicación/indexación de Work no depende de tener Resource ni File.
 - Resource admite cero Files; también puede tener varios Files (formatos del mismo material).
 - IDs públicos opacos, estables y tipados. Work ID, Resource ID y File ID nunca se convierten ni interpretan como otro tipo.
 - No exponer SHA-256, object_key, bucket, provider_id, StorageLocation ni StorageProvider.
@@ -150,7 +150,7 @@ POST access acepta action (download/view) y, opcionalmente, TTL solicitado sujet
 
 | Método y ruta | Operación y regla |
 |---|---|
-| POST /api/v6/works | Crear Work + primer Resource y publicar atómicamente; respuesta 201 WorkDetail |
+| POST /api/v6/works | Crear Work canónica; no exige crear Resource ficticio. Respuesta 201 WorkDetail, con `resources: []` si todavía no hay material OMR |
 | PATCH /api/v6/works/{work_id} | Modificar metadatos/autoría de Work; autorización de compositor aplicada por OSAP-API |
 | POST /api/v6/works/{work_id}/resources | Añadir Resource a Work existente; no crear Work duplicada |
 | PATCH /api/v6/resources/{resource_id} | Modificar solo ese Resource según permisos; no cambiar Work padre |
@@ -173,10 +173,10 @@ La reconciliación de fuente externa con Work OMR requiere revisión cuando exis
 
 HTTP: 200 lectura/actualización; 201 creación; 202 proceso asíncrono; 400 formato inválido; 401/403 autenticación/autorización; 404 entidad inexistente; 409 conflicto; 422 regla de dominio; 429 límite; 500/503 fallo de servicio.
 
-Códigos de dominio: work_not_found, resource_not_found, file_not_found, resource_not_in_work, work_requires_resource, composer_role_not_allowed_on_resource, reference_resource_must_belong_to_work, file_access_unavailable, concurrent_update.
+Códigos de dominio: work_not_found, resource_not_found, file_not_found, resource_not_in_work, composer_role_not_allowed_on_resource, reference_resource_must_belong_to_work, file_access_unavailable, concurrent_update.
 
 Pruebas obligatorias:
-1. Work publicada siempre tiene Resource y alta inicial es atómica.
+1. Work puede existir con cero Resources; la respuesta no inventa material. Cuando se crea un Resource, queda vinculado a una Work existente.
 2. Resource sin File se devuelve sin inventar descarga.
 3. Resource con múltiples Files devuelve todos.
 4. IDs de Work/Resource/File no se resuelven cruzados ni colisionan semánticamente.
@@ -191,6 +191,7 @@ Pruebas obligatorias:
 ## 8. Pendiente antes de congelar OpenAPI
 
 1. Cerrar campos Work contrastando tabla completa y consumidores.
+9. Alinear la semántica de Work sin Resources con la regla vigente de V6.
 2. Cerrar vocabularios kind, roles de Resource y estados File.
 3. Definir contexto autenticado OSAP-API→Storage y auditoría.
 4. Definir carga directa/delegada, límites, formatos y jobs.
