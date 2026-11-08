@@ -7,6 +7,9 @@ from domain.exceptions import (
     DuplicateComposerAlias,
     DuplicateVote,
     EntityNotFound,
+    ExportConversionFailed,
+    ExportFormatUnavailable,
+    ExportToolUnavailable,
     FileNotAvailable,
     IntegrityVerificationError,
     InvalidFileData,
@@ -48,6 +51,18 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(FileNotAvailable)
     async def _conflict(_: Request, exc: FileNotAvailable) -> JSONResponse:
         return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(ExportFormatUnavailable)
+    async def _not_acceptable(_: Request, exc: ExportFormatUnavailable) -> JSONResponse:
+        return JSONResponse(status_code=406, content={"detail": str(exc)})
+
+    @app.exception_handler(ExportToolUnavailable)
+    async def _export_tool_unavailable(_: Request, exc: ExportToolUnavailable) -> JSONResponse:
+        return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+    @app.exception_handler(ExportConversionFailed)
+    async def _export_failed(_: Request, exc: ExportConversionFailed) -> JSONResponse:
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
 
     @app.exception_handler(UnsupportedProvider)
     async def _unsupported(_: Request, exc: UnsupportedProvider) -> JSONResponse:

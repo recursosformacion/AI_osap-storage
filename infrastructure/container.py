@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from application.services.file_publisher import FilePublisher
 from application.services.mirror_resources import MirrorResourceRegistrar
@@ -31,6 +32,7 @@ from application.use_cases.composer_admin import (
 )
 from application.use_cases.delete_file import DeleteFile
 from application.use_cases.enrich_metadata import EnrichWork
+from application.use_cases.export_file import ExportFile
 from application.use_cases.get_download_job import GetDownloadJob
 from application.use_cases.get_download_url import GetDownloadUrl
 from application.use_cases.get_file import GetFile
@@ -141,6 +143,8 @@ from infrastructure.repositories.sql_work_attribution_ai_repository import (
     SqlWorkAttributionAiRepository,
 )
 from infrastructure.repositories.sql_work_repository import SqlWorkRepository
+from infrastructure.score.cache import ExportCache
+from infrastructure.score.converter import ExternalScoreConverter
 from infrastructure.tasks.asyncio_scheduler import AsyncioTaskScheduler
 
 
@@ -227,6 +231,7 @@ class Container:
     search_rism_sources: SearchRismSources | None = None
     representation_admin: RepresentationAdminCrud | None = None
     resource_admin: ResourceAdminCrud | None = None
+    export_file: ExportFile | None = None
     # Subida service-to-service de ficheros (capacidad adicional, no cambia el import).
     upload_file: UploadFile | None = None
     # Personas (modelo nuevo): consultas por rol para la API de osap-api.
@@ -300,6 +305,17 @@ def build_container(settings: Settings) -> Container:
     get_download_job = GetDownloadJob(job_repo)
     get_download_url = GetDownloadUrl(file_repo, location_repo, provider_repo, availability, registry)
     stream_file = StreamFile(get_download_url, registry, archive_entry_repo)
+    export_cache_dir = Path(settings.export_cache_dir or Path(settings.temp_dir) / "score-export")
+    export_file = ExportFile(
+        file_repo,
+        stream_file,
+        ExternalScoreConverter(
+            lilypond_bin=settings.export_lilypond_bin,
+            musicxml2ly_bin=settings.export_musicxml2ly_bin,
+            timeout_seconds=settings.export_timeout_seconds,
+        ),
+        ExportCache(export_cache_dir, settings.export_cache_ttl_seconds),
+    )
     create_provider = CreateProvider(provider_repo, registry)
     get_provider = GetProvider(provider_repo)
     list_providers = ListProviders(provider_repo)
@@ -459,6 +475,7 @@ def build_container(settings: Settings) -> Container:
         get_download_job=get_download_job,
         get_download_url=get_download_url,
         stream_file=stream_file,
+        export_file=export_file,
         create_provider=create_provider,
         get_provider=get_provider,
         list_providers=list_providers,

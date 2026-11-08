@@ -114,6 +114,14 @@ def _load_yaml_config(path: Path) -> dict[str, Any]:
     if "temp_dir" in data:
         cfg["temp_dir"] = data["temp_dir"]
 
+    export = data.get("export") or {}
+    for key in (
+        "cache_dir", "cache_ttl_seconds", "timeout_seconds",
+        "lilypond_bin", "musicxml2ly_bin",
+    ):
+        if key in export:
+            cfg[f"export_{key}"] = export[key]
+
     repository = data.get("repository") or {}
     if "provider" in repository:
         cfg["repository_provider"] = repository["provider"]
@@ -198,6 +206,13 @@ class Settings(BaseSettings):
 
     # Directorio temporal para descargas/materialización en curso
     temp_dir: str
+
+    # Exportación bajo demanda de partituras (caché temporal, nunca en works_resources)
+    export_cache_dir: str = ""
+    export_cache_ttl_seconds: int = 3600
+    export_timeout_seconds: int = 60
+    export_lilypond_bin: str = "lilypond"
+    export_musicxml2ly_bin: str = "musicxml2ly"
 
     # Repositorio oficial (no "backend"): local | cloudflare_r2
     repository_provider: str

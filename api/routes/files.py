@@ -4,22 +4,25 @@ import re
 from urllib.parse import quote
 
 from application.use_cases.delete_file import DeleteFile
+from application.use_cases.export_file import ExportFile
 from application.use_cases.get_download_url import DownloadTarget, GetDownloadUrl
 from application.use_cases.get_file import FileDetail, GetFile
 from application.use_cases.list_files import ListFiles
 from application.use_cases.register_file import RegisterFile, RegisterFileCommand
 from application.use_cases.start_download import StartDownload, StartDownloadCommand
-from application.use_cases.stream_file import StreamFile
+from application.use_cases.stream_file import FileStream, StreamFile
 from application.use_cases.upload_file import UploadFile, UploadFileCommand
 from application.use_cases.verify_file import VerifyFile
 from domain.entities.storage_location import StorageLocation
 from domain.entities.storage_provider import StorageProvider
+from domain.services.score_export import ExportFormat, parse_export_format
 from fastapi import APIRouter, Depends, Query, Request, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from infrastructure.config import Settings
 
 from api.dependencies import (
     DeleteFileDep,
+    ExportFileDep,
     GetDownloadUrlDep,
     GetFileDep,
     ListFilesDep,
@@ -209,17 +212,7 @@ async def download_url(
     return DownloadUrlRead(url=url, provider_id=target.provider.id)
 
 
-@router.get(
-    "/{file_id}/content",
-    summary="Descargar contenido",
-    description="Transmite el contenido del fichero (streaming) desde su proveedor.",
-)
-async def stream_file(
-    file_id: int,
-    provider_id: int | None = Query(default=None),
-    uc: StreamFile = Depends(StreamFileDep),
-) -> StreamingResponse:
-    stream = await uc.execute(file_id, provider_id)
+def _stream_response(stream: FileStream) -> StreamingResponse:
     ascii_name = re.sub(r"[^\x20-\x7e]", "_", stream.friendly_name)
     headers = {
         "Content-Disposition": (
@@ -233,6 +226,49 @@ async def stream_file(
         media_type=stream.file.mime_type or "application/octet-stream",
         headers=headers,
     )
+
+
+@router.get(
+    "/{file_id}/export",
+    summary="Exportar a otro formato",
+    description=(
+        "Genera un derivado efímero bajo demanda (PDF/MIDI/SVG/LilyPond). "
+        "No se registra como recurso ni representación; solo se cachea temporalmente."
+    ),
+)
+async def export_file(
+    file_id: int,
+    format: str = Query(default="original", description="original|pdf|midi|svg|ly|mxl"),
+    provider_id: int | None = Query(default=None),
+    stream_uc: StreamFile = Depends(StreamFileDep),
+    export_uc: ExportFile | None = Depends(ExportFileDep),
+):
+    target = parse_export_format(format)
+    if target == ExportFormat.ORIGINAL:
+        return _stream_response(await stream_uc.execute(file_id, provider_id))
+    if export_uc is None:
+        from domain.exceptions import ExportToolUnavailable
+
+        raise ExportToolUnavailable("exportación no configurada")
+    artifact = await export_uc.execute(file_id, target, provider_id)
+    return FileResponse(
+        path=artifact.path,
+        media_type=artifact.media_type,
+        filename=artifact.filename,
+    )
+
+
+@router.get(
+    "/{file_id}/content",
+    summary="Descargar contenido",
+    description="Transmite el contenido del fichero (streaming) desde su proveedor.",
+)
+async def stream_file(
+    file_id: int,
+    provider_id: int | None = Query(default=None),
+    uc: StreamFile = Depends(StreamFileDep),
+) -> StreamingResponse:
+    return _stream_response(await uc.execute(file_id, provider_id))
 
 
 @router.post(

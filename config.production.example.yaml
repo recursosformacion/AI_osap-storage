@@ -32,6 +32,14 @@ http:
 
 temp_dir: /home/ocw/openmusicrepository.com/tmp
 
+# Exportación bajo demanda (caché temporal; no crea recursos)
+export:
+  cache_dir: /home/ocw/openmusicrepository.com/tmp/score-export
+  cache_ttl_seconds: 3600
+  timeout_seconds: 60
+  lilypond_bin: lilypond
+  musicxml2ly_bin: musicxml2ly
+
 bootstrap:
   create_default_provider: true
 

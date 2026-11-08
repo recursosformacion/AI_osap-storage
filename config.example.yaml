@@ -30,6 +30,15 @@ http:
 # Directorio temporal
 temp_dir: /tmp
 
+# Exportación bajo demanda (derivados efímeros, nunca recursos de OSAP).
+# Requiere lilypond/musicxml2ly; musescore es opcional.
+export:
+  cache_dir: /tmp/osap-score-export
+  cache_ttl_seconds: 3600
+  timeout_seconds: 60
+  lilypond_bin: lilypond
+  musicxml2ly_bin: musicxml2ly
+
 # Repositorio oficial de OpenMusicRepository (no "backend").
 #   provider: local          -> desarrollo (disco de la máquina)
 #   provider: cloudflare_r2  -> producción (Cloudflare R2)

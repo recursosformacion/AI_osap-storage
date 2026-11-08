@@ -28,6 +28,18 @@ class FileNotAvailable(DomainError):
     pass
 
 
+class ExportFormatUnavailable(DomainError):
+    """El formato de salida no es posible para el formato original."""
+
+
+class ExportToolUnavailable(DomainError):
+    """No está instalado el conversor necesario para el formato solicitado."""
+
+
+class ExportConversionFailed(DomainError):
+    """El conversor falló o produjo una salida inválida."""
+
+
 class DownloadFailed(DomainError):
     pass
 
