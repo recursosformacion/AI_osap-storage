@@ -62,7 +62,12 @@ def call_json(
         "temperature": 0.1,
         "response_format": {"type": "json_object"},
     }
-    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json", "Accept": "application/json", "User-Agent": "OSAP-Catalog/1.0"}
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "OSAP-Catalog/1.0",
+    }
     if provider == "openrouter":
         headers["HTTP-Referer"] = "https://app.openmusicrepository.com"
         headers["X-Title"] = "OSAP catalog enrichment"

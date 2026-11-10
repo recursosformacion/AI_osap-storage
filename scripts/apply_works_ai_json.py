@@ -133,11 +133,25 @@ def main() -> int:
                     comment = str(row.get("comentario") or "").strip()
                     if work not in {"sí", "si", "yes"}:
                         manual += 1
-                        report.append({"works_id": wid, "title": row.get("title"), "status": "not_work", "reason": comment})
+                        report.append(
+                            {
+                                "works_id": wid,
+                                "title": row.get("title"),
+                                "status": "not_work",
+                                "reason": comment,
+                            }
+                        )
                         continue
                     if comment and DELICATE.search(comment):
                         manual += 1
-                        report.append({"works_id": wid, "title": row.get("title"), "status": "manual", "reason": comment})
+                        report.append(
+                            {
+                                "works_id": wid,
+                                "title": row.get("title"),
+                                "status": "manual",
+                                "reason": comment,
+                            }
+                        )
                         continue
                     changes: dict[str, Any] = {}
                     for key, column in SCALAR.items():
@@ -180,10 +194,18 @@ def main() -> int:
                         applied += 1
                     else:
                         applied += 1
-                    report.append({"works_id": wid, "title": row.get("title"),
-                                   "status": "applied" if args.apply else "would_apply",
-                                   "changed": ",".join(changes) + ((" joins:" + ",".join(join_values)) if join_values else ""),
-                                   "unknown": "; ".join(unknown)})
+                    changed_text = ",".join(changes)
+                    if join_values:
+                        changed_text += " joins:" + ",".join(join_values)
+                    report.append(
+                        {
+                            "works_id": wid,
+                            "title": row.get("title"),
+                            "status": "applied" if args.apply else "would_apply",
+                            "changed": changed_text,
+                            "unknown": "; ".join(unknown),
+                        }
+                    )
                 if args.limit and (applied + skipped + manual + missing) >= args.limit:
                     break
         if args.apply:

@@ -146,7 +146,9 @@ def _allowed(conn: pymysql.connections.Connection, table: str, column: str) -> l
         return [str(row["name"]) for row in cur.fetchall() if row["name"]]
 
 
-def _ask_works(conn: pymysql.connections.Connection, rows: list[dict[str, Any]], keys: list[str]) -> list[dict[str, Any]]:
+def _ask_works(
+    conn: pymysql.connections.Connection, rows: list[dict[str, Any]], keys: list[str]
+) -> list[dict[str, Any]]:
     genres = _allowed(conn, "genres", "name")
     ensembles = _allowed(conn, "ensembles", "ensembles_name")
     instruments = _allowed(conn, "instruments", "name_en")
@@ -166,7 +168,15 @@ def _ask_works(conn: pymysql.connections.Connection, rows: list[dict[str, Any]],
     return [item for item in results if isinstance(item, dict)]
 
 
-def _apply_works(conn: pymysql.connections.Connection, rows: list[dict[str, Any]], results: list[dict[str, Any]], *, overwrite: bool, min_confidence: float, log: list[dict[str, Any]]) -> None:
+def _apply_works(
+    conn: pymysql.connections.Connection,
+    rows: list[dict[str, Any]],
+    results: list[dict[str, Any]],
+    *,
+    overwrite: bool,
+    min_confidence: float,
+    log: list[dict[str, Any]],
+) -> None:
     by_id = {int(r["id"]): r for r in rows if str(r.get("id", "")).isdigit()}
     with conn.cursor() as cur:
         cur.execute("SELECT id, LOWER(name) AS name FROM genres")
@@ -204,9 +214,15 @@ def _apply_works(conn: pymysql.connections.Connection, rows: list[dict[str, Any]
             if scalar:
                 sets = ", ".join((f"{c} = %s" if overwrite else f"{c} = COALESCE({c}, %s)") for c in scalar)
                 cur.execute(f"UPDATE works SET {sets} WHERE id = %s", (*scalar.values(), wid))  # noqa: S608
-            names = lambda values: {_norm(v): genres[_norm(v)] for v in values if _norm(v) in genres}
+            def names(values: list[str]) -> dict[str, int]:
+                return {_norm(v): genres[_norm(v)] for v in values if _norm(v) in genres}
+
             gids = list(names(item.get("genres") or []).values())
-            eids = list(names(item.get("ensembles") or []).values()) if False else [ensembles[k] for k in (_norm(v) for v in item.get("ensembles") or []) if k in ensembles]
+            eids = [
+                ensembles[k]
+                for k in (_norm(v) for v in item.get("ensembles") or [])
+                if k in ensembles
+            ]
             iids = [instruments[k] for k in (_norm(v) for v in item.get("instruments") or []) if k in instruments]
             lids = [languages[str(v).lower()] for v in item.get("languages") or [] if str(v).lower() in languages]
             upsert_join("work_genres", "genres_id", wid, gids)
@@ -217,9 +233,23 @@ def _apply_works(conn: pymysql.connections.Connection, rows: list[dict[str, Any]
                         "genres": gids, "ensembles": eids, "instruments": iids, "languages": lids})
 
 
-def _providers(conn: pymysql.connections.Connection, db: str, limit: int, min_confidence: float, keys: list[str], *, apply: bool, list_only: bool, log: list[dict[str, Any]]) -> None:
+def _providers(
+    conn: pymysql.connections.Connection,
+    db: str,
+    limit: int,
+    min_confidence: float,
+    keys: list[str],
+    *,
+    apply: bool,
+    list_only: bool,
+    log: list[dict[str, Any]],
+) -> None:
     with conn.cursor() as cur:
-        cur.execute(f"SELECT provider_id, name, kind, base_url, description FROM {db}.providers ORDER BY provider_id LIMIT %s", (limit,))
+        cur.execute(
+            f"SELECT provider_id, name, kind, base_url, description FROM {db}.providers "
+            "ORDER BY provider_id LIMIT %s",
+            (limit,),
+        )
         rows = list(cur.fetchall())
     if list_only:
         for row in rows:
@@ -257,7 +287,10 @@ def _providers(conn: pymysql.connections.Connection, db: str, limit: int, min_co
                     except json.JSONDecodeError:
                         current = {}
                 merged = {**current, **{k: v for k, v in desc.items() if v}}
-                cur.execute(f"UPDATE {db}.providers SET description=%s WHERE provider_id=%s", (json.dumps(merged, ensure_ascii=False), pid))
+                cur.execute(
+                    f"UPDATE {db}.providers SET description=%s WHERE provider_id=%s",
+                    (json.dumps(merged, ensure_ascii=False), pid),
+                )
 
 
 def main() -> int:
@@ -298,7 +331,16 @@ def main() -> int:
                 if args.apply:
                     conn.commit()
         if args.mode in {"providers", "all"}:
-            _providers(conn, args.api_db, args.limit, args.min_confidence, _keys(), apply=args.apply, list_only=args.list, log=log)
+            _providers(
+                conn,
+                args.api_db,
+                args.limit,
+                args.min_confidence,
+                _keys(),
+                apply=args.apply,
+                list_only=args.list,
+                log=log,
+            )
             if args.apply:
                 conn.commit()
     finally:

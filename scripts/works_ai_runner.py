@@ -25,11 +25,10 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+import llm_client
 import pymysql
 import yaml
 from pymysql.cursors import DictCursor
-
-import llm_client
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
@@ -94,11 +93,14 @@ def _batch(conn: pymysql.connections.Connection, offset: int) -> list[dict[str, 
                (SELECT GROUP_CONCAT(DISTINCT g.name ORDER BY g.name SEPARATOR '; ')
                   FROM work_genres wg JOIN genres g ON g.id = wg.genres_id WHERE wg.works_id = w.id) AS genres,
                (SELECT GROUP_CONCAT(DISTINCT e.ensembles_name ORDER BY e.ensembles_name SEPARATOR '; ')
-                  FROM work_ensembles we JOIN ensembles e ON e.id = we.ensembles_id WHERE we.works_id = w.id) AS ensembles,
+                  FROM work_ensembles we JOIN ensembles e ON e.id = we.ensembles_id
+                 WHERE we.works_id = w.id) AS ensembles,
                (SELECT GROUP_CONCAT(DISTINCT i.name_en ORDER BY i.name_en SEPARATOR '; ')
-                  FROM work_instruments wi JOIN instruments i ON i.id = wi.instruments_id WHERE wi.works_id = w.id) AS instruments,
+                  FROM work_instruments wi JOIN instruments i ON i.id = wi.instruments_id
+                 WHERE wi.works_id = w.id) AS instruments,
                (SELECT GROUP_CONCAT(DISTINCT l.languages_code ORDER BY l.languages_code SEPARATOR '; ')
-                  FROM work_language wl JOIN languages l ON l.id = wl.languages_id WHERE wl.works_id = w.id) AS languages
+                  FROM work_language wl JOIN languages l ON l.id = wl.languages_id
+                 WHERE wl.works_id = w.id) AS languages
         FROM works w
         ORDER BY w.id
         LIMIT %s OFFSET %s

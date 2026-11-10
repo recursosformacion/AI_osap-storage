@@ -14,6 +14,7 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import fcntl
 import os
 import subprocess
@@ -77,10 +78,8 @@ def _apply_one(script: str, flag: str, source: Path, env: dict[str, str]) -> int
         )
     finally:
         target.unlink(missing_ok=True)
-        try:
+        with contextlib.suppress(OSError):
             staging.rmdir()
-        except OSError:
-            pass
 
 
 def apply_persons(env: dict[str, str], source: Path | None = None) -> int:
