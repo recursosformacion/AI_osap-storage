@@ -219,8 +219,8 @@ async def _ingest(paths: list[Path], db_name: str, dry_run: bool) -> None:
                     """
                     INSERT INTO works
                         (works_origin, works_origin_id, works_title, works_catalogue,
-                         works_license, works_instrumentation)
-                    VALUES ('CPDL', %s, %s, %s, %s, %s)
+                         works_license, works_instrumentation, works_source_url)
+                    VALUES ('CPDL', %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         str(page_id),
@@ -228,6 +228,7 @@ async def _ingest(paths: list[Path], db_name: str, dry_run: bool) -> None:
                         rec["catalogue_hint"],
                         rec["license"],
                         json.dumps(rec["instrumentation"], ensure_ascii=False),
+                        f"https://www.cpdl.org/wiki/index.php?curid={page_id}",
                     ),
                 )
                 work_id = cur.lastrowid
