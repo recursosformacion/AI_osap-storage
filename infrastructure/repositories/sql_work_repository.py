@@ -85,6 +85,7 @@ def _row_to_work(row: dict) -> Work:
         relative_path=row.get("works_relative_path"),
         origin=row.get("works_origin"),
         origin_id=row.get("works_origin_id"),
+        source_url=row.get("works_source_url"),
         voicing=_terms_json(row.get("voicing")),
         created_at=row.get("works_created_at"),
         updated_at=row.get("works_updated_at"),

@@ -170,6 +170,7 @@ class WorkRead(Model):
     description: str | None = None
     thumbnails: str | None = None
     work_key: str | None = None
+    source_url: str | None = None
     relative_path: str | None = None
     attribution_type: str | None = None
     attribution_note: str | None = None

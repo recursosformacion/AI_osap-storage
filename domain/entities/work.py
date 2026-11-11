@@ -54,6 +54,7 @@ class Work:
     relative_path: str | None = None
     origin: str | None = None
     origin_id: str | None = None
+    source_url: str | None = None
     voicing: str | None = None
     id: int | None = None
     created_at: datetime | None = None
