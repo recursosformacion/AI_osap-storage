@@ -5,6 +5,9 @@ en una lote, aplica inmediatamente las respuestas a la BD de producción y, si l
 API rechaza las claves o se agota la cuota, espera `--pause-hours` (24 h por
 defecto) antes de reintentar el mismo lote.
 
+Si el lote de obras falla con Gemini y existe `secrets/groq.prod.key`, reintenta
+ese mismo lote con Groq (`openai/gpt-oss-120b`) antes de pausar.
+
 Uso:
     .venv/bin/python scripts/ai_enrich_prod.py --once
     .venv/bin/python scripts/ai_enrich_prod.py
@@ -26,6 +29,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 SCRIPTS = ROOT / "scripts"
 KEY_FILE = ROOT / "secrets" / "gemini.prod.key"
+GROQ_KEY_FILE = ROOT / "secrets" / "groq.prod.key"
 LOG = DATA / "ai_enrich_prod.log"
 LOCK = DATA / "ai_enrich_prod.lock"
 
@@ -42,6 +46,17 @@ def keys() -> list[str]:
     found: list[str] = []
     if KEY_FILE.exists():
         for line in KEY_FILE.read_text(encoding="utf-8").splitlines():
+            value = line.split("=", 1)[-1].strip() if "=" in line else line.strip()
+            if value and value not in found:
+                found.append(value)
+    return found
+
+
+def groq_keys() -> list[str]:
+    """Claves de respaldo para cuando Gemini devuelve 503/429 de forma persistente."""
+    found: list[str] = []
+    if GROQ_KEY_FILE.exists():
+        for line in GROQ_KEY_FILE.read_text(encoding="utf-8").splitlines():
             value = line.split("=", 1)[-1].strip() if "=" in line else line.strip()
             if value and value not in found:
                 found.append(value)
@@ -129,6 +144,9 @@ def main() -> int:
         return 2
     env = os.environ.copy()
     env["GEMINI_API_KEYS"] = ",".join(available)
+    fallback = groq_keys()
+    if fallback:
+        log(f"respaldo Groq disponible: {len(fallback)} claves")
 
     DATA.mkdir(parents=True, exist_ok=True)
     lock = LOCK.open("w", encoding="utf-8")
@@ -204,16 +222,26 @@ def main() -> int:
                 changed = True
                 continue
             else:
-                rc = run(
-                    [
-                        sys.executable,
-                        str(SCRIPTS / "works_ai_runner.py"),
-                        "--start", str(works_n),
-                        "--limit", "1",
-                        "--sleep", str(args.sleep),
-                    ],
-                    env,
-                )
+                runner = [
+                    sys.executable,
+                    str(SCRIPTS / "works_ai_runner.py"),
+                    "--start", str(works_n),
+                    "--limit", "1",
+                    "--sleep", str(args.sleep),
+                ]
+                rc = run(runner, env)
+                if rc != 0 and fallback:
+                    log(f"obras {works_n:05d}: Gemini falló; reintento con Groq")
+                    groq_env = env.copy()
+                    groq_env["GROQ_API_KEY"] = fallback[works_n % len(fallback)]
+                    rc = run(
+                        runner + [
+                            "--provider", "groq",
+                            "--model", "openai/gpt-oss-120b",
+                            "--chunk", "5",
+                        ],
+                        groq_env,
+                    )
                 if rc != 0:
                     log(f"obras {works_n:05d}: fallo de cuota/API; pausa {args.pause_hours} h")
                     time.sleep(max(60.0, args.pause_hours * 3600))

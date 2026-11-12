@@ -9,7 +9,8 @@ User=ocw
 Group=ocw
 WorkingDirectory=/home/ocw/openmusicrepository.com/osap-storage
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/ocw/openmusicrepository.com/osap-storage/.venv/bin/python scripts/ai_enrich_prod.py --persons-start 2 --works-start 723 --sleep 10 --pause-hours 24
+Environment=GEMINI_MODEL=gemini-3.1-flash-lite
+ExecStart=/home/ocw/openmusicrepository.com/osap-storage/.venv/bin/python scripts/ai_enrich_prod.py --persons-start 2 --works-start 723 --sleep 10 --pause-hours 1
 Restart=on-failure
 RestartSec=60
 Nice=19
