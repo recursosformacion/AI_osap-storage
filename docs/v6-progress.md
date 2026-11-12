@@ -229,3 +229,29 @@ La extracción es una **propuesta derivada**, no una identidad:
 - `ruff` y `mypy` limpios en los módulos y scripts nuevos.
 - Sin escrituras: el informe solo lee `works` e `instruments`/`persons` para el predicado.
 
+## Producción (2026-11-12, versión 5.11.0)
+
+- Migraciones **026–028 aplicadas** en producción con el ejecutor de storage
+  (`OSAP_CONFIG=config.yaml .venv/bin/python -m infrastructure.db.migrate`). Son aditivas:
+  `resources`, columnas V6 de `files` y `works.reference_resource_id`.
+- Mapeo ejecutado con `scripts/v6_apply_mapping.py --apply` sobre los datos reales (no se
+  subió la copia de desarrollo):
+
+| Concepto | Valor |
+| --- | ---: |
+| Resources | 602.283 |
+| desde Representations | 81.983 |
+| desde `works_resources` | 254.035 |
+| de referencia | 266.265 |
+| Files enlazados a Resource | 254.035 |
+| Files con `storage_key` | 254.049 |
+| Files sin Resource (PNG admin) | 14 |
+
+- `scripts/v6_acceptance_check.py` en producción: **PASS** (0 Works sin Resource, 0
+  Resources sin Work, 0 Files con Resource inexistente, 0 claves descuadradas, 0 URL-only).
+- El índice público **sigue siendo el v1**: no se han cambiado IDs, títulos ni slugs. El
+  corte del índice V6 queda pendiente de su ventana y de la tabla de correspondencia + 301.
+- Backup previo en `~/backups/20261112-1700/` (dumps de las cuatro BBDD verificados con
+  `gzip -t` y tars de los programas).
+
+
