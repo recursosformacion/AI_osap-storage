@@ -63,3 +63,19 @@ son del snapshot de desarrollo; hay que repetir el informe sobre la copia de pro
 1. Resolver los 14 PNG huérfanos.
 2. API `/api/v6` y reconstrucción del índice sobre Resources.
 3. Corte y validación final (R2 intacto; sin borrar Representation hasta verificar).
+## API V6 de lectura (2026-11-12)
+
+- `/api/v6/works`: búsqueda de Works con Resources (`q`, `composer`, `catalogue`, `cursor`, `limit`).
+- `/api/v6/works/{id}`: Work + Resources.
+- `/api/v6/resources/{id}`: Resource + Files.
+- `/api/v6/files/{id}`: metadatos públicos (sin `storage_key`).
+- Aditiva sobre `/api/v1`; no expone claves físicas.
+- Verificado contra la copia de producción en dev: Work 287062 con 22 Resources; búsqueda
+  “Ave verum” con `resource_count`; Resource con File; File sin `storage_key`.
+- 4 pruebas de mapeo de DTO.
+
+## Pendiente
+
+- Endpoints de escritura/acceso (`POST/PATCH`, `access`), autenticación de servicio.
+- Reconstrucción del índice sobre Resources y corte final.
+- Los 14 PNG huérfanos quedan fuera del catálogo V6 (sin Resource); archivar/borrar más adelante.

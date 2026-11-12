@@ -42,6 +42,7 @@ from api.routes import (
     resolution,
     search,
     statistics,
+    v6,
     voting,
     works,
 )
@@ -127,6 +128,7 @@ def create_app() -> FastAPI:
     app.include_router(statistics.router)
     app.include_router(public_statistics.router)
     app.include_router(works.router)
+    app.include_router(v6.router)
     app.include_router(provider.router)
     app.include_router(admin_composers.router)
     app.include_router(admin_works.router)
