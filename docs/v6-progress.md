@@ -79,3 +79,17 @@ son del snapshot de desarrollo; hay que repetir el informe sobre la copia de pro
 - Endpoints de escritura/acceso (`POST/PATCH`, `access`), autenticación de servicio.
 - Reconstrucción del índice sobre Resources y corte final.
 - Los 14 PNG huérfanos quedan fuera del catálogo V6 (sin Resource); archivar/borrar más adelante.
+## Invariante Google (2026-11-12)
+
+- Los IDs públicos de obra (`index-<works.id>`) y los títulos (`works_title`) **no se
+  modifican** con el mapeo V6. El slug canónico sigue siendo `slugify(works_title)`.
+- Comprobado con el sitemap real de producción (`/sitemaps/works-1.xml`, 500 URLs):
+  - 0 Works ausentes en Storage.
+  - 0 Works sin Resource V6.
+  - 0 fallos HTTP en la muestra (URLs 200).
+  - 334 slugs históricos (con compositor) difieren del canónico actual (solo título),
+    pero siguen devolviendo 200. Es una discrepancia previa al corte, no de V6.
+- Recomendación antes del corte: regenerar/limpiar la caché del sitemap y alinear
+  sitemap y canónico; después ejecutar `v6_url_stability.py --strict`.
+- El futuro índice V6 debe construir `index-<works.id>` y el slug desde `works_title`;
+  cualquier limpieza de títulos exige tabla de correspondencia y 301.
