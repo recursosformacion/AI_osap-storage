@@ -18,6 +18,10 @@ class ResourceKind(StrEnum):
     PARTS = "parts"
     RECORDING = "recording"
     MIDI = "midi"
+    EDITION = "edition"
+    ARRANGEMENT = "arrangement"
+    TRANSCRIPTION = "transcription"
+    INTERPRETATION = "interpretation"
     REFERENCE = "reference"
     OTHER = "other"
 

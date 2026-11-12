@@ -41,6 +41,17 @@ class V6ResourceDetail(V6ResourceRead):
     files: list[V6FileRead] = []
 
 
+class V6ResourceCreate(BaseModel):
+    kind: str = "score"
+    title: str | None = Field(default=None, max_length=255)
+    source_system: str | None = Field(default=None, max_length=64)
+    external_id: str | None = Field(default=None, max_length=255)
+    external_url: str | None = Field(default=None, max_length=1024)
+    license: str | None = Field(default=None, max_length=255)
+    rights_holder: str | None = Field(default=None, max_length=255)
+    metadata: dict[str, Any] | None = None
+
+
 class V6IndexResource(BaseModel):
     id: int
     kind: str

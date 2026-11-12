@@ -119,3 +119,11 @@ son del snapshot de desarrollo; hay que repetir el informe sobre la copia de pro
 ## Escritura V6
 
 Pendiente: `POST/PATCH` de Work/Resource/File con permisos de compositor/creador.
+## Escritura de Resource (2026-11-12)
+
+- `POST /api/v6/works/{work_id}/resources` da de alta un Resource con procedencia,
+  licencia, URL externa y metadata. El actor llega en `X-Actor-User-Id`, cabecera de
+  confianza puesta por OSAP-API tras validar la sesión; en producción la ruta queda
+  detrás de la autenticación de servicio.
+- Verificado en dev: alta de un `arrangement` bajo la Work 287062 y borrado de prueba.
+- **Pendiente**: comprobar que el actor es compositor de la Work y cubrir PATCH/DELETE.

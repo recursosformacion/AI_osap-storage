@@ -10,7 +10,7 @@ import json
 from typing import Any
 
 from application.use_cases.get_download_url import GetDownloadUrl
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from infrastructure.config import Settings
 from infrastructure.db.connection import Database
 
@@ -22,6 +22,7 @@ from api.schemas_v6 import (
     V6IndexPage,
     V6IndexResource,
     V6IndexWork,
+    V6ResourceCreate,
     V6ResourceDetail,
     V6ResourceRead,
     V6WorkDetail,
@@ -126,6 +127,53 @@ async def list_works(
         await cur.execute(sql, params)
         rows = await cur.fetchall()
     return [_work(row) for row in rows]
+
+
+@router.post(
+    "/works/{work_id}/resources",
+    response_model=V6ResourceRead,
+    status_code=201,
+    summary="Añadir Resource a una Work",
+)
+async def create_resource(
+    work_id: int,
+    body: V6ResourceCreate,
+    actor: str | None = Header(default=None, alias="X-Actor-User-Id"),
+    db: Database = Depends(get_db),
+) -> V6ResourceRead:
+    """Alta de Resource desde la fachada de servicio.
+
+    El actor llega en una cabecera de confianza puesta por OSAP-API tras validar
+    la sesión; en producción la ruta está detrás de la autenticación de servicio.
+    La comprobación de que el actor es compositor de la Work queda pendiente.
+    """
+    async with db.connection() as conn, conn.cursor() as cur:
+        await cur.execute("SELECT id FROM works WHERE id = %s", (work_id,))
+        if await cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="Work not found")
+        await cur.execute(
+            "INSERT INTO resources (work_id, kind, title, source_system, external_id, "
+            "external_url, license, rights_holder, is_reference, visibility, "
+            "metadata_json, created_by, legacy_kind, legacy_id) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'public', %s, %s, NULL, NULL)",
+            (
+                work_id,
+                body.kind,
+                body.title,
+                body.source_system,
+                body.external_id,
+                body.external_url,
+                body.license,
+                body.rights_holder,
+                int(body.kind == "reference"),
+                json.dumps(body.metadata, ensure_ascii=False) if body.metadata else None,
+                actor,
+            ),
+        )
+        resource_id = cur.lastrowid
+        await cur.execute("SELECT * FROM resources WHERE id = %s", (resource_id,))
+        row = await cur.fetchone()
+    return _resource(row)
 
 
 @router.get(
