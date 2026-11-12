@@ -46,7 +46,7 @@ class FilePublisher:
     ) -> PublishedFile:
         provider = await self._resolve_provider(provider_id)
         backend = self._registry.backend_for(provider)
-        key = object_key or file.storage_key()
+        key = object_key or file.object_key()
         await backend.store(local_path, key)
 
         if file.size_bytes is None:

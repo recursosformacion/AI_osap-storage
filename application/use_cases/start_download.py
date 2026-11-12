@@ -113,7 +113,7 @@ class StartDownload:
 
             provider = await self._select_provider(file, job.provider_id)
             backend = self._registry.backend_for(provider)
-            object_key = file.storage_key()
+            object_key = file.object_key()
             await backend.store(str(temp_path), object_key)
 
             location = await self._locations.get_by_file_and_provider(file.id, provider.id)

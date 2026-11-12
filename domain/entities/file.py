@@ -27,9 +27,17 @@ class File:
     id: int | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    storage_key: str | None = None
+    resource_id: int | None = None
 
-    def storage_key(self) -> str:
-        """Clave de objeto utilizada dentro de un proveedor, derivada del SHA256."""
-        if not self.sha256:
-            raise ValueError(f"file {self.id or self.name!r} has no sha256; cannot derive storage key")
-        return f"{self.sha256[:2]}/{self.sha256}"
+    def object_key(self) -> str:
+        """Clave física opaca del objeto.
+
+        V6 exige copiarla literalmente desde el backend. El fallback por SHA256
+        solo se mantiene para ficheros antiguos hasta completar la migración.
+        """
+        if self.storage_key:
+            return self.storage_key
+        if self.sha256:
+            return f"{self.sha256[:2]}/{self.sha256}"
+        raise ValueError(f"file {self.id or self.name!r} has no storage key")

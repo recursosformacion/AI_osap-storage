@@ -20,3 +20,24 @@ Rama de desarrollo de `osap-storage`; no se despliega a producción.
 2. Mapeo seco `representations` + `works_resources` → `Resource/File`, con informe de
    conflictos (sin escribir).
 3. Corte V6, API `/api/v6`, índice y validación.
+## Hecho (2026-11-12, continuación)
+
+- File V6: `storage_key` opaco y `resource_id`; `object_key()` deja de derivar la clave
+  cuando existe la copia literal (fallback SHA solo para ficheros legados hasta el corte).
+- Repositorio SQL de File actualizado; pruebas de modelo y flujos de descarga/publicación.
+- Simulación V6 (`scripts/v6_map_dry_run.py`) sobre el snapshot de desarrollo:
+
+| Concepto | Valor |
+| --- | ---: |
+| Resources previstos | 601.627 |
+| desde Representations | 336.018 |
+| de referencia (Works sin material) | 265.609 |
+| Files previstos | 254.035 |
+| Filas sin Representation existente | 0 |
+| Filas sin fichero ni URL | 0 |
+| Ficheros compartidos | 0 |
+| Ficheros sin clave física | 0 |
+
+Los 265.609 Works sin material no son un error: V6 exige al menos un Resource y se propone
+un **Resource de referencia sin File** por cada uno. Es determinista, sin IA. Los recuentos
+son del snapshot de desarrollo; hay que repetir el informe sobre la copia de producción.

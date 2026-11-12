@@ -16,6 +16,8 @@ def _row_to_file(row: dict) -> File:
         status=FileStatus(row["status"]),
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+        storage_key=row.get("storage_key"),
+        resource_id=row.get("resource_id"),
     )
 
 
@@ -26,8 +28,9 @@ class SqlFileRepository(FileRepository):
     async def create(self, file: File) -> File:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "INSERT INTO files (sha256, name, mime_type, size_bytes, status) VALUES (%s, %s, %s, %s, %s)",
-                (file.sha256, file.name, file.mime_type, file.size_bytes, file.status.value),
+                "INSERT INTO files (sha256, name, mime_type, size_bytes, status, storage_key, resource_id) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (file.sha256, file.name, file.mime_type, file.size_bytes, file.status.value, file.storage_key, file.resource_id),
             )
             file.id = cur.lastrowid
             await cur.execute("SELECT * FROM files WHERE id = %s", (file.id,))
@@ -65,8 +68,9 @@ class SqlFileRepository(FileRepository):
     async def save(self, file: File) -> None:
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "UPDATE files SET name = %s, mime_type = %s, size_bytes = %s, status = %s WHERE id = %s",
-                (file.name, file.mime_type, file.size_bytes, file.status.value, file.id),
+                "UPDATE files SET name = %s, mime_type = %s, size_bytes = %s, status = %s, "
+                "storage_key = %s, resource_id = %s WHERE id = %s",
+                (file.name, file.mime_type, file.size_bytes, file.status.value, file.storage_key, file.resource_id, file.id),
             )
 
     async def delete(self, file_id: int) -> None:
