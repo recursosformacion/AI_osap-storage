@@ -127,3 +127,11 @@ Pendiente: `POST/PATCH` de Work/Resource/File con permisos de compositor/creador
   detrás de la autenticación de servicio.
 - Verificado en dev: alta de un `arrangement` bajo la Work 287062 y borrado de prueba.
 - **Pendiente**: comprobar que el actor es compositor de la Work y cubrir PATCH/DELETE.
+## Permisos de escritura (2026-11-12)
+
+- `POST /api/v6/works/{id}/resources` exige `X-Actor-User-Id` (401 sin actor) y guarda
+  `created_by`.
+- `PATCH /api/v6/resources/{id}` solo permite al creador (403 para otro actor); los
+  Resources importados con `created_by` nulo no se editan por esta vía.
+- Verificado en dev: alta 201, edición del creador 200, otro actor 403, sin actor 401.
+- Pendiente: comprobación de compositor para editar Work; PATCH/DELETE de Work y File.

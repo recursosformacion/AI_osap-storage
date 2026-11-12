@@ -25,6 +25,7 @@ from api.schemas_v6 import (
     V6ResourceCreate,
     V6ResourceDetail,
     V6ResourceRead,
+    V6ResourceUpdate,
     V6WorkDetail,
     V6WorkSummary,
 )
@@ -70,6 +71,13 @@ def _resource(row: dict[str, Any]) -> V6ResourceRead:
         visibility=row.get("visibility") or "public",
         metadata=_metadata(row.get("metadata_json")),
     )
+
+
+def _require_actor(actor: str | None) -> str:
+    value = (actor or "").strip()
+    if not value:
+        raise HTTPException(status_code=401, detail="Actor required")
+    return value
 
 
 def _file(row: dict[str, Any]) -> V6FileRead:
@@ -147,6 +155,7 @@ async def create_resource(
     la sesión; en producción la ruta está detrás de la autenticación de servicio.
     La comprobación de que el actor es compositor de la Work queda pendiente.
     """
+    actor = _require_actor(actor)
     async with db.connection() as conn, conn.cursor() as cur:
         await cur.execute("SELECT id FROM works WHERE id = %s", (work_id,))
         if await cur.fetchone() is None:
@@ -171,6 +180,45 @@ async def create_resource(
             ),
         )
         resource_id = cur.lastrowid
+        await cur.execute("SELECT * FROM resources WHERE id = %s", (resource_id,))
+        row = await cur.fetchone()
+    return _resource(row)
+
+
+@router.patch(
+    "/resources/{resource_id}",
+    response_model=V6ResourceRead,
+    summary="Modificar Resource",
+)
+async def update_resource(
+    resource_id: int,
+    body: V6ResourceUpdate,
+    actor: str | None = Header(default=None, alias="X-Actor-User-Id"),
+    db: Database = Depends(get_db),
+) -> V6ResourceRead:
+    """Solo el creador del Resource puede modificarlo.
+
+    Los Resources importados (`created_by` nulo) no se editan por esta ruta; su
+    gestión corresponde al proceso de la fuente.
+    """
+    actor = _require_actor(actor)
+    changes = body.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(status_code=400, detail="No changes")
+    if "metadata" in changes and changes["metadata"] is not None:
+        changes["metadata"] = json.dumps(changes["metadata"], ensure_ascii=False)
+    async with db.connection() as conn, conn.cursor() as cur:
+        await cur.execute("SELECT * FROM resources WHERE id = %s", (resource_id,))
+        row = await cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Resource not found")
+        if str(row.get("created_by") or "") != actor:
+            raise HTTPException(status_code=403, detail="Only the creator can edit this Resource")
+        assignments = ", ".join(f"{column} = %s" for column in changes)
+        await cur.execute(
+            f"UPDATE resources SET {assignments} WHERE id = %s",
+            (*changes.values(), resource_id),
+        )
         await cur.execute("SELECT * FROM resources WHERE id = %s", (resource_id,))
         row = await cur.fetchone()
     return _resource(row)
