@@ -106,3 +106,16 @@ son del snapshot de desarrollo; hay que repetir el informe sobre la copia de pro
 - Endpoints de escritura (`POST/PATCH` Work/Resource/File) con permisos.
 - Reconstrucción del índice sobre Resources con `index-<works.id>` y slug desde
   `works_title` (invariante Google).
+## Feed de índice V6 (2026-11-12)
+
+- `GET /api/v6/index/works?cursor=&limit=`: feed canónico `index-<works.id>` + título
+  (`works_title`), canción, catálogo, compositor y Resources con `file_ids`.
+- No cambia IDs ni títulos: el consumidor debe generar el slug con la misma función
+  (`slugify(works_title)`) y conservar `index-<works.id>`.
+- Verificado: `index-1` / “I shall be no stranger there” con Resource y File.
+- Próximo paso: adaptar el constructor del índice de OSAP a este feed y comparar una
+  muestra del sitemap antes/después (invariante Google).
+
+## Escritura V6
+
+Pendiente: `POST/PATCH` de Work/Resource/File con permisos de compositor/creador.

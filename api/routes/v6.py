@@ -19,6 +19,9 @@ from api.schemas_v6 import (
     V6AccessRead,
     V6AccessRequest,
     V6FileRead,
+    V6IndexPage,
+    V6IndexResource,
+    V6IndexWork,
     V6ResourceDetail,
     V6ResourceRead,
     V6WorkDetail,
@@ -123,6 +126,89 @@ async def list_works(
         await cur.execute(sql, params)
         rows = await cur.fetchall()
     return [_work(row) for row in rows]
+
+
+@router.get(
+    "/index/works",
+    response_model=V6IndexPage,
+    summary="Feed de índice V6 (IDs públicos estables)",
+)
+async def index_works(
+    cursor: int = Query(default=0, ge=0),
+    limit: int = Query(default=200, ge=1, le=500),
+    db: Database = Depends(get_db),
+) -> V6IndexPage:
+    """Feed canónico para reconstruir el índice sin cambiar IDs ni slugs.
+
+    `work_id` es `index-<works.id>`; el título es `works_title`, del que el
+    consumidor deriva el slug con la misma función que la web.
+    """
+    async with db.connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            """
+            SELECT w.id, w.works_title, w.works_song_name, w.works_catalogue,
+                   (SELECT p.persons_name FROM works_person_roles wpr
+                      JOIN persons p ON p.persons_id = wpr.works_person_roles_person_id
+                     WHERE wpr.works_person_roles_work_id = w.id
+                       AND wpr.works_person_roles_role_id = 1
+                     ORDER BY wpr.works_person_roles_order, wpr.works_person_roles_id
+                     LIMIT 1) AS composer
+            FROM works w
+            WHERE EXISTS (SELECT 1 FROM resources r WHERE r.work_id = w.id)
+              AND w.id > %s
+            ORDER BY w.id
+            LIMIT %s
+            """,
+            (cursor, limit),
+        )
+        work_rows = await cur.fetchall()
+        if not work_rows:
+            return V6IndexPage(items=[], next_cursor=None)
+        ids = [row["id"] for row in work_rows]
+        placeholders = ",".join(["%s"] * len(ids))
+        await cur.execute(
+            "SELECT id, work_id, kind, source_system, external_id, external_url "
+            f"FROM resources WHERE work_id IN ({placeholders}) ORDER BY id",
+            ids,
+        )
+        resource_rows = await cur.fetchall()
+        files_by_resource: dict[int, list[int]] = {}
+        if resource_rows:
+            resource_ids = [row["id"] for row in resource_rows]
+            resource_placeholders = ",".join(["%s"] * len(resource_ids))
+            await cur.execute(
+                "SELECT id, resource_id FROM files "
+                f"WHERE resource_id IN ({resource_placeholders}) ORDER BY id",
+                resource_ids,
+            )
+            for row in await cur.fetchall():
+                files_by_resource.setdefault(row["resource_id"], []).append(row["id"])
+
+    resources_by_work: dict[int, list[V6IndexResource]] = {}
+    for row in resource_rows:
+        resources_by_work.setdefault(row["work_id"], []).append(
+            V6IndexResource(
+                id=row["id"],
+                kind=row.get("kind") or "score",
+                source_system=row.get("source_system"),
+                external_id=row.get("external_id"),
+                external_url=row.get("external_url"),
+                file_ids=files_by_resource.get(row["id"], []),
+            )
+        )
+    items = [
+        V6IndexWork(
+            work_id=f"index-{row['id']}",
+            title=row.get("works_title") or "",
+            song_name=row.get("works_song_name"),
+            catalogue=row.get("works_catalogue"),
+            composer=row.get("composer"),
+            resources=resources_by_work.get(row["id"], []),
+        )
+        for row in work_rows
+    ]
+    next_cursor = work_rows[-1]["id"] if len(work_rows) == limit else None
+    return V6IndexPage(items=items, next_cursor=next_cursor)
 
 
 @router.get("/works/{work_id}", response_model=V6WorkDetail, summary="Work y Resources")

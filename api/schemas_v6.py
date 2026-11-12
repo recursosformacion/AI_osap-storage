@@ -41,6 +41,29 @@ class V6ResourceDetail(V6ResourceRead):
     files: list[V6FileRead] = []
 
 
+class V6IndexResource(BaseModel):
+    id: int
+    kind: str
+    source_system: str | None = None
+    external_id: str | None = None
+    external_url: str | None = None
+    file_ids: list[int] = []
+
+
+class V6IndexWork(BaseModel):
+    work_id: str
+    title: str
+    song_name: str | None = None
+    catalogue: str | None = None
+    composer: str | None = None
+    resources: list[V6IndexResource] = []
+
+
+class V6IndexPage(BaseModel):
+    items: list[V6IndexWork] = []
+    next_cursor: int | None = None
+
+
 class V6AccessRequest(BaseModel):
     action: Literal["download", "view"] = "download"
     ttl_seconds: int | None = Field(default=None, ge=60, le=86400)
