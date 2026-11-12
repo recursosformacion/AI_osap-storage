@@ -18,3 +18,5 @@ dist/
 build/
 logs/
 docs/ai/
+
+var/

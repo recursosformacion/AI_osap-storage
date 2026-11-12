@@ -30,7 +30,15 @@ class SqlFileRepository(FileRepository):
             await cur.execute(
                 "INSERT INTO files (sha256, name, mime_type, size_bytes, status, storage_key, resource_id) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (file.sha256, file.name, file.mime_type, file.size_bytes, file.status.value, file.storage_key, file.resource_id),
+                (
+                    file.sha256,
+                    file.name,
+                    file.mime_type,
+                    file.size_bytes,
+                    file.status.value,
+                    file.storage_key,
+                    file.resource_id,
+                ),
             )
             file.id = cur.lastrowid
             await cur.execute("SELECT * FROM files WHERE id = %s", (file.id,))
@@ -70,7 +78,15 @@ class SqlFileRepository(FileRepository):
             await cur.execute(
                 "UPDATE files SET name = %s, mime_type = %s, size_bytes = %s, status = %s, "
                 "storage_key = %s, resource_id = %s WHERE id = %s",
-                (file.name, file.mime_type, file.size_bytes, file.status.value, file.storage_key, file.resource_id, file.id),
+                (
+                    file.name,
+                    file.mime_type,
+                    file.size_bytes,
+                    file.status.value,
+                    file.storage_key,
+                    file.resource_id,
+                    file.id,
+                ),
             )
 
     async def delete(self, file_id: int) -> None:
