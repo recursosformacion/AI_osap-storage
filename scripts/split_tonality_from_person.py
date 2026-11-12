@@ -22,25 +22,13 @@ from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import pymysql  # noqa: E402
 import yaml  # noqa: E402
+from domain.services.musical_key import find_tonalities  # noqa: E402
 
-_MODES = r"(?:Phrygian|Dorian|Lydian|Mixolydian|Aeolian|Ionian|Locrian)"
-_KEY = r"[A-G](?:\s*(?:#|b|♯|♭|sharp|flat))?"
-_QUALITY = (
-    r"(?:major|minor|maj\.?|min\.?|majeure|mineur|dur|moll|mayor|menor|maggiore|minore)"
-)
-_P_HYPHEN = re.compile(
-    rf"\b(?P<key>{_KEY})\s*[-\u2010-\u2015]\s*(?P<qual>{_QUALITY})\b", re.IGNORECASE
-)
-_P_MODE_KEY = re.compile(
-    rf"\b(?P<mode>{_MODES})\s+mode\s+(?P<key>{_KEY})\s*(?P<qual>{_QUALITY})?\b",
-    re.IGNORECASE,
-)
-_P_MODE = re.compile(rf"\b(?P<mode>{_MODES})\s+mode\b", re.IGNORECASE)
-_P_KEY = re.compile(rf"\b(?P<key>{_KEY})\s+(?P<qual>{_QUALITY})\b", re.IGNORECASE)
 _SEP = re.compile(r"^[\s:;,\-–—.]+|[\s:;,\-–—]+$")
 # Palabras de TÍTULO: si aparecen, el registro es un título (o híbrido) y NO se toca aquí.
 _TITLE_WORDS = re.compile(
@@ -54,21 +42,6 @@ _TONALITY_LEFTOVER = re.compile(
     r"mixolydian|aeolian|locrian|\bmode\b)"
     r"|\b[A-H](?:\s*(?:#|b|♯|♭))?\s*(?:major|minor|maj|min)"
 )
-_QUALITY_FIX = {
-    "maj": "major", "maj.": "major", "majeure": "major", "dur": "major", "mayor": "major",
-    "maggiore": "major", "min": "minor", "min.": "minor", "mineur": "minor", "moll": "minor",
-    "menor": "minor", "minore": "minor",
-}
-_KEY_FIX = {"bb": "B♭", "eb": "E♭", "ab": "A♭", "gb": "G♭", "db": "D♭", "b": "B"}
-
-
-def _norm_tonality(mode: str, key: str, qual: str) -> str:
-    key = re.sub(r"\s+", " ", key or "").strip()
-    low = key.lower().replace(" flat", "b").replace(" sharp", "#")
-    key = _KEY_FIX.get(low, low.capitalize() if len(low) == 1 else low)
-    qual = _QUALITY_FIX.get((qual or "").lower().rstrip("."), (qual or "").lower())
-    text = f"{key} {qual}".strip() if qual else key
-    return f"{text} ({mode})" if mode else text
 
 
 def _person_like(text: str) -> bool:
@@ -89,22 +62,7 @@ def _person_like(text: str) -> bool:
 
 
 def _spans(name: str) -> list[tuple[int, int, str]]:
-    spans: list[tuple[int, int, str]] = []
-    for match in _P_MODE_KEY.finditer(name):
-        spans.append((match.start(), match.end(),
-                      _norm_tonality(match.group("mode").title(), match.group("key"),
-                                     match.group("qual") or "")))
-    for pattern in (_P_HYPHEN, _P_KEY):
-        for match in pattern.finditer(name):
-            if any(s <= match.start() < e for s, e, _ in spans):
-                continue
-            spans.append((match.start(), match.end(),
-                          _norm_tonality("", match.group("key"), match.group("qual"))))
-    for match in _P_MODE.finditer(name):
-        if any(s <= match.start() < e for s, e, _ in spans):
-            continue
-        spans.append((match.start(), match.end(), _norm_tonality(match.group("mode").title(), "", "")))
-    return sorted(spans)
+    return [(span.start, span.end, span.key) for span in find_tonalities(name)]
 
 
 def _extract(name: str) -> tuple[str, str]:

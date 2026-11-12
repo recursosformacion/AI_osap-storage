@@ -166,3 +166,66 @@ Estado **PASS** sobre la copia de producción:
 | Files huérfanos excluidos (PNG admin) | 14 |
 
 Script: `scripts/v6_acceptance_check.py` (solo lectura).
+
+## Extractor unificado de metadatos (2026-11-12)
+
+Módulos nuevos, deterministas y sin IA:
+
+- `domain/services/musical_key.py`: localiza y canonicaliza tonalidades en texto libre
+  (`D major`, `B♭ major`, `D minor (Phrygian)`, solfège `ré majeur`, alemán `d-Moll`).
+  Devuelve posiciones para poder retirarlas del título.
+- `application/services/instrument_vocabulary.py`: buscador construido desde las filas de
+  `instruments` (nombre ES/EN, alias, códigos IMSLP). Compara sin acentos, mayúsculas ni
+  puntuación y exige límites de palabra.
+- `application/services/metadata_extractor.py`: reutiliza `parse_import_name`,
+  `canonical_ensemble` y `musical_key` para extraer personas y roles, atribución
+  (`anonymous`/`traditional`), tonalidad, formaciones, instrumentos, opus, catálogo, años
+  y **título limpio frente al crudo**.
+- `scripts/split_tonality_from_person.py` deja de duplicar los patrones de tonalidad y usa
+  `musical_key`.
+- `scripts/v6_metadata_extract.py`: informe seco sobre `works` (solo lectura) con acuerdos,
+  marcas y muestras; opciones `--origin`, `--only-diff`, `--sample random`, `--out`.
+
+### Decisión de persistencia V6
+
+La extracción es una **propuesta derivada**, no una identidad:
+
+- **Work**: `title` (limpio) frente a `song_name` (crudo), `subtitle`, `musical_key`,
+  `attribution_type`, `opus`, `catalogue`, años. Solo se acepta en altas nuevas o en una
+  cola de revisión; no se reescribe `works_title` existente.
+- **Resource**: formaciones, instrumentos, tonalidad de la edición y licencia cuando
+  describan ese material concreto.
+- **Sin tabla nueva todavía**: los datos viven en las entidades Work/Resource. Un backfill
+  masivo exige revisión, tabla de correspondencia `id_anterior → id_nuevo` y 301 por cada
+  URL antigua (invariante Google).
+- Los créditos ambiguos `Título - Nombre` solo se aceptan con señal estructural (coma,
+  inicial, partícula) o si el nombre existe en el catálogo de personas (`known_person`).
+  Los roles explícitos (`arr. X`, `transcribed by X`) no dependen del catálogo.
+
+### Resultados sobre la copia de producción (dev)
+
+| Origen | Filas | Título exacto | Título laxo | Personas | Tonalidad | Formación | Instrumento |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| PDMX (secuencial) | 3.000 | 58,5 % | 75,5 % | 37 | 38 | 24 | 9 |
+| CPDL (secuencial) | 1.000 | 97,5 % | 99,5 % | 0 | 5 | 3 | 0 |
+| IMSLP (aleatorio) | 2.000 | 90,8 % | 91,1 % | 2 | 168 | 40 | 55 |
+
+- En PDMX el título curado difiere a propósito del crudo (recortes editoriales, códigos de
+  origen eliminados); el acuerdo bajo no mide errores del extractor.
+- Tonalidad: en PDMX el catálogo guarda el par relativo (`D major, B minor`); con esa
+  tolerancia el acuerdo es **81,6 %** (31/38).
+- CPDL e IMSLP traen el compositor en un campo aparte: por eso el número de personas
+  detectadas en el título es bajo y no indica pérdida.
+- Se corrigieron falsos positivos reales: `A Minor Bird` (título, no tonalidad),
+  `ABC - Nanebevzetí Panny Marie` (subtítulo, no crédito), `(Sleep, baby, sleep)` (texto
+  temático, no persona), `Ps. 144` / `Nr. 2` (no son códigos de fuente) y
+  `(for the liturgy of St. Basil the Great)` (no es formación).
+
+### Verificación
+
+- Pruebas: 38 nuevas (`tests/domain/test_musical_key.py`,
+  `tests/application/test_instrument_vocabulary.py`,
+  `tests/application/test_metadata_extractor.py`).
+- `ruff` y `mypy` limpios en los módulos y scripts nuevos.
+- Sin escrituras: el informe solo lee `works` e `instruments`/`persons` para el predicado.
+
