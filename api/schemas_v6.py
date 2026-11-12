@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class V6WorkSummary(BaseModel):
@@ -39,6 +39,17 @@ class V6ResourceRead(BaseModel):
 
 class V6ResourceDetail(V6ResourceRead):
     files: list[V6FileRead] = []
+
+
+class V6AccessRequest(BaseModel):
+    action: Literal["download", "view"] = "download"
+    ttl_seconds: int | None = Field(default=None, ge=60, le=86400)
+
+
+class V6AccessRead(BaseModel):
+    url: str
+    action: str
+    expires_at: str | None = None
 
 
 class V6WorkDetail(BaseModel):

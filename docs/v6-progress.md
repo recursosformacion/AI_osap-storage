@@ -93,3 +93,16 @@ son del snapshot de desarrollo; hay que repetir el informe sobre la copia de pro
   sitemap y canónico; después ejecutar `v6_url_stability.py --strict`.
 - El futuro índice V6 debe construir `index-<works.id>` y el slug desde `works_title`;
   cualquier limpieza de títulos exige tabla de correspondencia y 301.
+## Acceso V6 (2026-11-12)
+
+- `POST /api/v6/files/{file_id}/access` con `action` (`download`/`view`) y `ttl_seconds`.
+  No acepta `provider_id` ni `object_key`; el servidor elige proveedor.
+- Respuesta `{url, action, expires_at}`; la URL no contiene claves físicas (usa la URL
+  nativa del proveedor o el endpoint interno de contenido).
+- Verificado en dev: file 624 → 200 con URL de descarga.
+
+## Siguiente
+
+- Endpoints de escritura (`POST/PATCH` Work/Resource/File) con permisos.
+- Reconstrucción del índice sobre Resources con `index-<works.id>` y slug desde
+  `works_title` (invariante Google).

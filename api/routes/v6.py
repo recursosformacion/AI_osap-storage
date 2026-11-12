@@ -9,11 +9,15 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from application.use_cases.get_download_url import GetDownloadUrl
 from fastapi import APIRouter, Depends, HTTPException, Query
+from infrastructure.config import Settings
 from infrastructure.db.connection import Database
 
-from api.dependencies import get_db
+from api.dependencies import GetDownloadUrlDep, get_db, get_settings
 from api.schemas_v6 import (
+    V6AccessRead,
+    V6AccessRequest,
     V6FileRead,
     V6ResourceDetail,
     V6ResourceRead,
@@ -170,6 +174,26 @@ async def get_resource(
     return V6ResourceDetail(
         **resource.model_dump(), files=[_file(item) for item in files]
     )
+
+
+@router.post(
+    "/files/{file_id}/access",
+    response_model=V6AccessRead,
+    summary="Acceso al File",
+)
+async def file_access(
+    file_id: int,
+    body: V6AccessRequest,
+    uc: GetDownloadUrl = Depends(GetDownloadUrlDep),
+    settings: Settings = Depends(get_settings),
+) -> V6AccessRead:
+    """Resuelve el acceso sin aceptar provider_id ni object_key del cliente."""
+    target = await uc.execute(file_id, None)
+    url = target.native_url or (
+        f"{settings.public_base_url.rstrip('/')}"
+        f"/api/v1/files/{file_id}/content?provider_id={target.provider.id}"
+    )
+    return V6AccessRead(url=url, action=body.action)
 
 
 @router.get("/files/{file_id}", response_model=V6FileRead, summary="File público")
