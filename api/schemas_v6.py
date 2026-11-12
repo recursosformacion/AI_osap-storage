@@ -52,6 +52,30 @@ class V6ResourceCreate(BaseModel):
     metadata: dict[str, Any] | None = None
 
 
+class V6WorkUpdate(BaseModel):
+    subtitle: str | None = Field(default=None, max_length=1024)
+    catalogue: str | None = Field(default=None, max_length=255)
+    musical_key: str | None = Field(default=None, max_length=255)
+    description: str | None = None
+    attribution_note: str | None = Field(default=None, max_length=255)
+
+
+class V6ReferenceResource(BaseModel):
+    resource_id: int | None = None
+
+
+class V6ReferenceRead(BaseModel):
+    work_id: int
+    reference_resource_id: int | None = None
+
+
+class V6FileCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=512)
+    mime_type: str | None = Field(default=None, max_length=255)
+    size_bytes: int | None = Field(default=None, ge=0)
+    storage_key: str = Field(min_length=1, max_length=1024)
+
+
 class V6ResourceUpdate(BaseModel):
     kind: str | None = None
     title: str | None = Field(default=None, max_length=255)

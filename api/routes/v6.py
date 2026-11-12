@@ -10,7 +10,7 @@ import json
 from typing import Any
 
 from application.use_cases.get_download_url import GetDownloadUrl
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from infrastructure.config import Settings
 from infrastructure.db.connection import Database
 
@@ -18,16 +18,20 @@ from api.dependencies import GetDownloadUrlDep, get_db, get_settings
 from api.schemas_v6 import (
     V6AccessRead,
     V6AccessRequest,
+    V6FileCreate,
     V6FileRead,
     V6IndexPage,
     V6IndexResource,
     V6IndexWork,
+    V6ReferenceRead,
+    V6ReferenceResource,
     V6ResourceCreate,
     V6ResourceDetail,
     V6ResourceRead,
     V6ResourceUpdate,
     V6WorkDetail,
     V6WorkSummary,
+    V6WorkUpdate,
 )
 
 router = APIRouter(prefix="/api/v6", tags=["v6"])
@@ -78,6 +82,23 @@ def _require_actor(actor: str | None) -> str:
     if not value:
         raise HTTPException(status_code=401, detail="Actor required")
     return value
+
+
+async def _require_composer(
+    cur: Any, work_id: int, actor_persons: str | None
+) -> None:
+    """Exige que una de las identidades Person del actor sea compositora de la Work."""
+    person_ids = {part.strip() for part in (actor_persons or "").split(",") if part.strip()}
+    if not person_ids:
+        raise HTTPException(status_code=403, detail="Composer identity required")
+    await cur.execute(
+        "SELECT works_person_roles_person_id AS person_id FROM works_person_roles "
+        "WHERE works_person_roles_work_id = %s AND works_person_roles_role_id = 1",
+        (work_id,),
+    )
+    composers = {str(row["person_id"]) for row in await cur.fetchall()}
+    if not (person_ids & composers):
+        raise HTTPException(status_code=403, detail="Only the Work composer can edit it")
 
 
 def _file(row: dict[str, Any]) -> V6FileRead:
@@ -307,6 +328,81 @@ async def index_works(
     return V6IndexPage(items=items, next_cursor=next_cursor)
 
 
+@router.patch("/works/{work_id}", response_model=V6WorkSummary, summary="Modificar Work")
+async def update_work(
+    work_id: int,
+    body: V6WorkUpdate,
+    actor_persons: str | None = Header(default=None, alias="X-Actor-Person-Ids"),
+    db: Database = Depends(get_db),
+) -> V6WorkSummary:
+    """Solo el compositor puede editar metadatos de Work.
+
+    `works_title`/`works_song_name` no se exponen aquí: cambiarlos altera el slug
+    público y exige tabla de correspondencia + 301 antes de reindexar.
+    """
+    changes = body.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(status_code=400, detail="No changes")
+    column_by_field = {
+        "subtitle": "works_subtitle",
+        "catalogue": "works_catalogue",
+        "musical_key": "works_musical_key",
+        "description": "works_description",
+        "attribution_note": "works_attribution_note",
+    }
+    async with db.connection() as conn, conn.cursor() as cur:
+        await cur.execute("SELECT id FROM works WHERE id = %s", (work_id,))
+        if await cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="Work not found")
+        await _require_composer(cur, work_id, actor_persons)
+        assignments = ", ".join(column_by_field[field] + " = %s" for field in changes)
+        await cur.execute(
+            f"UPDATE works SET {assignments} WHERE id = %s",
+            (*changes.values(), work_id),
+        )
+        await cur.execute(
+            "SELECT w.id, w.works_title, w.works_song_name, w.works_catalogue, "
+            "w.works_musical_key, "
+            "(SELECT COUNT(*) FROM resources r WHERE r.work_id = w.id) AS resource_count "
+            "FROM works w WHERE w.id = %s",
+            (work_id,),
+        )
+        row = await cur.fetchone()
+    return _work(row)
+
+
+@router.put(
+    "/works/{work_id}/reference-resource",
+    response_model=V6ReferenceRead,
+    summary="Asignar o retirar el Resource de referencia",
+)
+async def set_reference_resource(
+    work_id: int,
+    body: V6ReferenceResource,
+    actor_persons: str | None = Header(default=None, alias="X-Actor-Person-Ids"),
+    db: Database = Depends(get_db),
+) -> V6ReferenceRead:
+    async with db.connection() as conn, conn.cursor() as cur:
+        await cur.execute("SELECT id FROM works WHERE id = %s", (work_id,))
+        if await cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="Work not found")
+        await _require_composer(cur, work_id, actor_persons)
+        if body.resource_id is not None:
+            await cur.execute(
+                "SELECT id FROM resources WHERE id = %s AND work_id = %s",
+                (body.resource_id, work_id),
+            )
+            if await cur.fetchone() is None:
+                raise HTTPException(
+                    status_code=422, detail="Resource does not belong to this Work"
+                )
+        await cur.execute(
+            "UPDATE works SET reference_resource_id = %s WHERE id = %s",
+            (body.resource_id, work_id),
+        )
+    return V6ReferenceRead(work_id=work_id, reference_resource_id=body.resource_id)
+
+
 @router.get("/works/{work_id}", response_model=V6WorkDetail, summary="Work y Resources")
 async def get_work(work_id: int, db: Database = Depends(get_db)) -> V6WorkDetail:
     async with db.connection() as conn, conn.cursor() as cur:
@@ -356,6 +452,72 @@ async def get_resource(
     return V6ResourceDetail(
         **resource.model_dump(), files=[_file(item) for item in files]
     )
+
+
+@router.post(
+    "/resources/{resource_id}/files",
+    response_model=V6FileRead,
+    status_code=201,
+    summary="Registrar File en un Resource",
+)
+async def create_file(
+    resource_id: int,
+    body: V6FileCreate,
+    actor: str | None = Header(default=None, alias="X-Actor-User-Id"),
+    db: Database = Depends(get_db),
+) -> V6FileRead:
+    """Registro de File por el creador del Resource.
+
+    `storage_key` procede del proceso de carga de confianza; no se acepta de un
+    cliente público (la ruta va detrás de la autenticación de servicio).
+    """
+    actor = _require_actor(actor)
+    async with db.connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "SELECT id, created_by FROM resources WHERE id = %s", (resource_id,)
+        )
+        resource = await cur.fetchone()
+        if resource is None:
+            raise HTTPException(status_code=404, detail="Resource not found")
+        if str(resource.get("created_by") or "") != actor:
+            raise HTTPException(status_code=403, detail="Only the creator can add Files")
+        await cur.execute(
+            "INSERT INTO files (sha256, name, mime_type, size_bytes, status, "
+            "storage_key, resource_id) VALUES (NULL, %s, %s, %s, 'registered', %s, %s)",
+            (body.name, body.mime_type, body.size_bytes, body.storage_key, resource_id),
+        )
+        file_id = cur.lastrowid
+        await cur.execute(
+            "SELECT id, name, mime_type, size_bytes, status FROM files WHERE id = %s",
+            (file_id,),
+        )
+        row = await cur.fetchone()
+    return _file(row)
+
+
+@router.delete("/files/{file_id}", status_code=204)
+async def delete_file(
+    file_id: int,
+    actor: str | None = Header(default=None, alias="X-Actor-User-Id"),
+    db: Database = Depends(get_db),
+) -> Response:
+    """Retirada lógica: el File deja de servirse, sin borrar el objeto R2."""
+    actor = _require_actor(actor)
+    async with db.connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "SELECT f.id, r.created_by FROM files f "
+            "LEFT JOIN resources r ON r.id = f.resource_id WHERE f.id = %s",
+            (file_id,),
+        )
+        row = await cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="File not found")
+        if str(row.get("created_by") or "") != actor:
+            raise HTTPException(status_code=403, detail="Only the creator can delete Files")
+        await cur.execute(
+            "UPDATE files SET status = 'deleted' WHERE id = %s", (file_id,)
+        )
+    return Response(status_code=204)
 
 
 @router.post(

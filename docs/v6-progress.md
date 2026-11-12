@@ -135,3 +135,14 @@ Pendiente: `POST/PATCH` de Work/Resource/File con permisos de compositor/creador
   Resources importados con `created_by` nulo no se editan por esta vía.
 - Verificado en dev: alta 201, edición del creador 200, otro actor 403, sin actor 401.
 - Pendiente: comprobación de compositor para editar Work; PATCH/DELETE de Work y File.
+## API V6 de escritura (2026-11-12)
+
+- `PATCH /api/v6/works/{id}`: solo compositor (`X-Actor-Person-Ids`); edita subtítulo,
+  catálogo, tonalidad, descripción y nota. **No** permite título/song_name: cambiarlos
+  altera el slug público y exige correspondencia + 301.
+- `PUT /api/v6/works/{id}/reference-resource`: asigna/retira un Resource del propio Work.
+- `POST /api/v6/resources/{id}/files`: registra File (clave física aportada por el proceso
+  de carga) solo si el actor creó el Resource.
+- `DELETE /api/v6/files/{id}`: retirada lógica (`status=deleted`), sin borrar R2.
+- Verificado en dev: Work patch 200/403, referencia 200, File 201/204.
+- Pendiente: OSAP-API debe resolver usuario→Person para enviar `X-Actor-Person-Ids`.

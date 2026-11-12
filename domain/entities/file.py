@@ -13,6 +13,7 @@ class FileStatus(StrEnum):
     DOWNLOADING = "downloading"
     AVAILABLE = "available"
     FAILED = "failed"
+    DELETED = "deleted"
 
 
 @dataclass
