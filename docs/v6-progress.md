@@ -146,3 +146,23 @@ Pendiente: `POST/PATCH` de Work/Resource/File con permisos de compositor/creador
 - `DELETE /api/v6/files/{id}`: retirada lógica (`status=deleted`), sin borrar R2.
 - Verificado en dev: Work patch 200/403, referencia 200, File 201/204.
 - Pendiente: OSAP-API debe resolver usuario→Person para enviar `X-Actor-Person-Ids`.
+## Aceptación V6 en dev (2026-11-12)
+
+Estado **PASS** sobre la copia de producción:
+
+| Comprobación | Valor |
+| --- | ---: |
+| Works | 576.479 |
+| Resources | 602.283 |
+| Files | 254.049 |
+| Works sin Resource | 0 |
+| Resources sin Work | 0 |
+| Files con Resource inexistente | 0 |
+| Files sin storage_key | 0 |
+| Claves que no coinciden con storage_locations | 0 |
+| SHA duplicado (informativo) | 0 |
+| URL-only Resources | 0 |
+| Resources de referencia | 266.265 |
+| Files huérfanos excluidos (PNG admin) | 14 |
+
+Script: `scripts/v6_acceptance_check.py` (solo lectura).
