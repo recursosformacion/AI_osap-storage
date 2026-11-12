@@ -41,3 +41,25 @@ Rama de desarrollo de `osap-storage`; no se despliega a producción.
 Los 265.609 Works sin material no son un error: V6 exige al menos un Resource y se propone
 un **Resource de referencia sin File** por cada uno. Es determinista, sin IA. Los recuentos
 son del snapshot de desarrollo; hay que repetir el informe sobre la copia de producción.
+## Corte V6 sobre datos reales (2026-11-12)
+
+- Tablas de producción cargadas en la copia de desarrollo (solo lectura en prod):
+  576.479 Works, 81.983 Representations, 471.378 works_resources, 254.049 Files.
+- Simulación: **602.283 Resources** (81.983 desde Representations, 254.035 standalone,
+  266.265 de referencia) y **254.035 Files**; 0 conflictos de representación, fichero
+  compartido o clave física.
+- Mapeo aplicado en dev con `scripts/v6_apply_mapping.py --apply`:
+  - 602.283 Resources creados y marcados con `legacy_kind`/`legacy_id`.
+  - 254.035 Files enlazados a su Resource; 254.049 con `storage_key` copiada de
+    `storage_locations`.
+  - 81.983 Resources de Representation no tienen File (válido).
+  - **14 Files sin Resource**: capturas PNG de administración (`2026-10-*.png`,
+    `maspeqie.png`) sin `works_resources`; no son material de catálogo. Decidir archivar
+    o borrar antes del corte.
+- La tabla `resources` y las columnas V6 de `files` viven solo en dev.
+
+## Siguiente
+
+1. Resolver los 14 PNG huérfanos.
+2. API `/api/v6` y reconstrucción del índice sobre Resources.
+3. Corte y validación final (R2 intacto; sin borrar Representation hasta verificar).
