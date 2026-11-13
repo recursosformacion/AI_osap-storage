@@ -255,7 +255,10 @@ def main() -> int:
                 changed = True
             rc = apply_works(env, target)
             if rc != 0:
-                log("aplicación de obras falló; pausa")
+                failed = target.with_name(target.stem + ".failed.json")
+                with contextlib.suppress(OSError):
+                    target.replace(failed)
+                log(f"aplicación de obras falló; lote movido a {failed.name}; pausa")
                 time.sleep(max(60.0, args.pause_hours * 3600))
                 continue
             works_n += 1

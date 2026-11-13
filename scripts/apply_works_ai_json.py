@@ -67,6 +67,52 @@ def _clean(value: object) -> object:
     return value
 
 
+_YEAR_ONLY = re.compile(r"^\s*(\d{3,4})\s*$")
+_YEAR_RANGE = re.compile(r"^\s*(\d{3,4})\s*[-\u2013\u2014]\s*(\d{3,4})\s*$")
+
+
+def _year_int(value: object) -> int | None:
+    """Año válido para las columnas SMALLINT; descarta textos dudosos."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        candidate = value
+    elif isinstance(value, float) and value.is_integer():
+        candidate = int(value)
+    else:
+        match = _YEAR_ONLY.match(str(value or ""))
+        if not match:
+            return None
+        candidate = int(match.group(1))
+    return candidate if 1000 <= candidate <= 2100 else None
+
+
+def normalize_year_fields(row: dict[str, Any]) -> dict[str, Any]:
+    """Convierte rangos del modelo (`1727-1807`) en year_from/year_to.
+
+    `works_year` es un entero: escribir un rango provoca
+    `Data truncated for column 'works_year'`.
+    """
+    data = dict(row)
+    year = data.get("year")
+    year_from = _year_int(data.get("year_from"))
+    year_to = _year_int(data.get("year_to"))
+    if isinstance(year, str):
+        match = _YEAR_RANGE.match(year)
+        if match:
+            year_from = year_from or int(match.group(1))
+            year_to = year_to or int(match.group(2))
+            year = None
+        else:
+            year = _year_int(year)
+    else:
+        year = _year_int(year)
+    data["year"] = year
+    data["year_from"] = year_from
+    data["year_to"] = year_to
+    return data
+
+
 def _values(value: object) -> list[str]:
     if isinstance(value, list):
         return [str(v).strip() for v in value if str(v).strip()]
@@ -153,6 +199,7 @@ def main() -> int:
                             }
                         )
                         continue
+                    row = normalize_year_fields(row)
                     changes: dict[str, Any] = {}
                     for key, column in SCALAR.items():
                         value = _clean(row.get(key))
