@@ -71,6 +71,25 @@ _YEAR_ONLY = re.compile(r"^\s*(\d{3,4})\s*$")
 _YEAR_RANGE = re.compile(r"^\s*(\d{3,4})\s*[-\u2013\u2014]\s*(\d{3,4})\s*$")
 
 
+def _complexity(value: object) -> int | None:
+    """Normaliza la complejidad del modelo a la escala entera de la BD."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)) and float(value).is_integer():
+        number = int(value)
+        return number if 0 <= number <= 5 else None
+    text = str(value or "").strip().lower()
+    if text in {"baja", "bajo", "fácil", "facil", "easy", "low"}:
+        return 1
+    if text in {"media", "medio", "moderada", "moderado", "medium"}:
+        return 2
+    if text in {"alta", "alto", "difícil", "dificil", "hard", "high"}:
+        return 3
+    if text in {"muy alta", "muy alto", "very high"}:
+        return 4
+    return None
+
+
 def _year_int(value: object) -> int | None:
     """Año válido para las columnas SMALLINT; descarta textos dudosos."""
     if isinstance(value, bool):
@@ -203,6 +222,8 @@ def main() -> int:
                     changes: dict[str, Any] = {}
                     for key, column in SCALAR.items():
                         value = _clean(row.get(key))
+                        if key == "complexity":
+                            value = _complexity(value)
                         if value in (None, "", []):
                             continue
                         if str(current.get(column) or "") == str(value):
@@ -273,4 +294,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
