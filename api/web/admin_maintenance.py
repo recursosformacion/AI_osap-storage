@@ -54,14 +54,7 @@ _PAGE = """<!doctype html>
   <h1>osap-storage · Mantenimiento</h1>
   <p class="sub">Compositores, obras y CRUD de tablas. Protegido: requiere un <b>service token</b> con scope <code>storage:admin</code>.</p>
 
-  <div class="card" id="tokenCard">
-    <label>Service token (Bearer)</label>
-    <div class="row">
-      <input class="grow" type="text" id="token" placeholder="pega el service token (o usa ?token=...)" />
-      <button id="btnApply">Aplicar</button>
-    </div>
-    <div id="msg"></div>
-  </div>
+  <div id="msg"></div>
 
   <div class="tabs">
     <button class="tab active" data-tab="composers">Compositores</button>
@@ -156,14 +149,14 @@ _PAGE = """<!doctype html>
 const $ = (id) => document.getElementById(id);
 let state = { composers: { offset:0, limit:50 }, works: { offset:0, limit:50 }, tables: { offset:0, limit:50 } };
 
-function token() { return $("token").value.trim(); }
-function auth() { return { "Authorization": "Bearer " + token(), "Content-Type": "application/json" }; }
+function token() { return true; }
+function auth() { return { "Content-Type": "application/json" }; }
 function msg(t, err) { const el = $("msg"); el.textContent = t; el.className = err ? "err" : ""; }
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
 }
 function api(url, opts) {
-  return fetch(url, opts).then(async (r) => {
+  return fetch(url, { credentials: "same-origin", ...opts }).then(async (r) => {
     if (r.status === 401 || r.status === 403) throw new Error("Token ausente/inválido o sin scope storage:admin");
     if (!r.ok) { let d = {}; try { d = await r.json(); } catch(e){} throw new Error((d.detail) || ("HTTP " + r.status)); }
     return r.json();
@@ -574,15 +567,8 @@ window.createRow = () => {
 
 // ---------- Init ----------
 function init() {
-  const q = new URLSearchParams(location.search).get("token");
-  if (q) {
-    // El token ya llega por URL: no se muestra la caja ni hay que pulsar Aplicar.
-    $("token").value = q;
-    $("tokenCard").classList.add("hidden");
-    loadComposers();
-    loadTables();
-  }
-  $("btnApply").onclick = () => { loadComposers(); loadTables(); };
+  loadComposers();
+  loadTables();
   $("cSearch").onclick = () => { state.composers.offset = 0; loadComposers(); };
   $("cQ").onkeydown = (e) => { if (e.key === "Enter") { state.composers.offset = 0; loadComposers(); } };
   $("cPrev").onclick = () => { if (state.composers.offset >= state.composers.limit) { state.composers.offset -= state.composers.limit; loadComposers(); } };
@@ -599,8 +585,7 @@ function init() {
   $("tPrev").onclick = () => { if (state.tables.offset >= state.tables.limit) { state.tables.offset -= state.tables.limit; viewRows(); } };
   $("tNext").onclick = () => { state.tables.offset += state.tables.limit; viewRows(); };
   $("tLimit").onchange = () => { state.tables.limit = parseInt($("tLimit").value, 10); state.tables.offset = 0; viewRows(); };
-  $("token").onkeydown = (e) => { if (e.key === "Enter") { loadComposers(); loadTables(); } };
-  // Deep link: /admin?token=...&tab=works abre directamente esa pestaña.
+  // Deep link: /admin?tab=works abre directamente esa pestaña.
   const tabParam = new URLSearchParams(location.search).get("tab");
   if (tabParam === "composers" || tabParam === "works" || tabParam === "tables") activateTab(tabParam);
 }
