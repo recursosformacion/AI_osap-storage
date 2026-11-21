@@ -287,14 +287,15 @@ osap-storage sirve una **pantalla web completa de mantenimiento** en `GET /admin
 genérico). Es storage quien realiza todas las funciones; osap-api solo necesita un enlace
 **"Gestión storage"** que apunte a esa pantalla:
 
-```
-https://storage.openmusicrepository.com/admin?token=<service-token-storage:admin>
-```
+osap-api solicita el handoff mediante `POST /api/v1/admin/storage-web` y abre una ventana
+a `https://storage.openmusicrepository.com/admin/session` mediante un formulario POST
+`application/x-www-form-urlencoded` con `token` y `next` en el cuerpo.
 
-La página (shell) se sirve sin token (no contiene datos), pero las operaciones las realiza su JS
-llamando a `/api/admin/*` con el service token como `Bearer` (protegido con `storage:admin`).
-Esto mantiene storage ajeno a usuarios: solo autentica el **servicio** (osap-api) que le pasa el
-token.
+Storage valida el service token `storage:admin`, emite una cookie host-only `HttpOnly`,
+`Secure`, `SameSite=Lax`, con caducidad limitada por el `exp` del JWT, y redirige al destino
+local solicitado. La cookie autentica tanto el shell `/admin` como las APIs `/api/admin/*`.
+Las mutaciones autenticadas por cookie exigen `Origin` same-origin. No se aceptan tokens
+en query strings, HTML ni `sessionStorage`.
 
 ### `GET /api/v1/composers/{composer_id}` (público)
 
