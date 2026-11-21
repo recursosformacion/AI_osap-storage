@@ -16,6 +16,7 @@ auth:
   issuer: https://auth.openmusicrepository.com
   audience: osap-api
   jwks_url: https://auth.openmusicrepository.com/auth-api/auth/.well-known/jwks.json
+  admin_handoff_origins: https://app.openmusicrepository.com
 
 db:
   host: 127.0.0.1
