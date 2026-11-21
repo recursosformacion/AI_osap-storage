@@ -11,8 +11,6 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from infrastructure.config import Settings
 
-_ADMIN_SESSION_COOKIE = "osap_storage_admin"
-
 from api.dependencies import (
     GetStatisticsDep,
     GetWorkDep,
@@ -26,6 +24,8 @@ from api.web import admin_composers_crud as admin_composers_crud_view
 from api.web import admin_maintenance as admin_view
 from api.web import admin_works_crud as admin_works_crud_view
 from api.web import api_doc, landing, search, statistics, works
+
+_ADMIN_SESSION_COOKIE = "osap_storage_admin"
 
 router = APIRouter(tags=["pages"])
 
