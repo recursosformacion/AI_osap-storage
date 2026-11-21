@@ -170,7 +170,7 @@ def test_admin_query_token_is_rejected():
     priv, pub = _make_keys()
     client = TestClient(_make_app(priv, pub), base_url="https://testserver")
     token = _sign(priv, scopes="storage:admin")
-    assert client.get("/admin", params={"token": token}).status_code == 401
+    assert client.get("/admin", params={"token": token}).status_code == 400
 
 
 def test_admin_cookie_mutation_rejects_cross_origin():
