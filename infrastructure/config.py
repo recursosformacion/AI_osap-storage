@@ -155,6 +155,7 @@ def _load_yaml_config(path: Path) -> dict[str, Any]:
         "public_key": "auth_public_key",
         "kid": "auth_kid",
         "clock_skew_seconds": "auth_clock_skew_seconds",
+        "admin_handoff_origins": "admin_handoff_origins",
     }.items():
         if key in auth:
             cfg[field] = auth[key]
@@ -241,6 +242,8 @@ class Settings(BaseSettings):
     auth_public_key: str = ""
     auth_kid: str = ""
     auth_clock_skew_seconds: int = 60
+    # Orígenes autorizados para handoff POST cross-origin; vacío = fail closed.
+    admin_handoff_origins: str = ""
 
     # osap-api (especialista en resolución de entidades externas). Storage llama a su
     # POST /api/v1/composers/resolve y procesa la respuesta.
