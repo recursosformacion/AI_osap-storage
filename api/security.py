@@ -26,6 +26,8 @@ EXEMPT_PATHS = {"/api/v1/health", "/metrics", "/api/v1/public/statistics", "/sta
 # Assets estáticos del admin (JS/CSS): no contienen datos, no requieren token.
 _ADMIN_ASSET_PREFIX = "/admin/assets/"
 _ADMIN_SHELL_PREFIX = "/admin"
+_ADMIN_SESSION_PATH = "/admin/session"
+_ADMIN_SESSION_COOKIE = "osap_storage_admin"
 
 
 def is_exempt_path(path: str) -> bool:
