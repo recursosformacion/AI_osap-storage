@@ -192,40 +192,41 @@ class ServiceAuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable):
         path = request.url.path
-        # robots.txt: se sirve sin auth indicando que el host no debe indexarse.
         if path == "/robots.txt":
-            return PlainTextResponse(
-                "User-agent: *\nDisallow: /\n",
-                headers={"X-Robots-Tag": "noindex"},
-            )
-        # Exento de auth: health, metrics y los assets estáticos del admin.
-        # OJO: `/api/download/{id}` NO se exime: exige service token `storage:read` para que
-        # una llamada externa no pueda saltarse la cuota de OMR de osap-api. La descarga
-        # legítima la hace osap-api (que añade su token) tras comprobar la cuota.
+            return PlainTextResponse("User-agent: *\\nDisallow: /\\n", headers={"X-Robots-Tag": "noindex"})
         if is_exempt_path(path):
+            return await call_next(request)
+
+        # El endpoint de handoff valida el token de servicio y establece la cookie.
+        if path == _ADMIN_SESSION_PATH and request.method == "POST":
             return await call_next(request)
 
         auth_header = request.headers.get("Authorization", "")
         bearer = auth_header[7:].strip() if auth_header.startswith("Bearer ") else ""
+        cookie_token = request.cookies.get(_ADMIN_SESSION_COOKIE, "").strip()
+        token = bearer or cookie_token
 
-        # Shells de gestión: no se navegan con cabecera, así que el token puede venir en
-        # `?token=`. Sin token válido (storage:admin) no se sirve la pantalla.
+        # Las cookies son credenciales ambient: las mutaciones exigen Origin same-origin.
+        if cookie_token and not bearer and request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            origin = request.headers.get("origin", "").rstrip("/")
+            expected = f"{request.url.scheme}://{request.url.netloc}".rstrip("/")
+            if not origin or origin != expected:
+                return JSONResponse(status_code=403, content={"detail": "origen no permitido"})
+
         if path == _ADMIN_SHELL_PREFIX or path.startswith(_ADMIN_SHELL_PREFIX + "/"):
-            token = bearer or request.query_params.get("token", "").strip()
             if not token:
-                return JSONResponse(status_code=401, content={"detail": "se requiere service token"})
+                return JSONResponse(status_code=401, content={"detail": "se requiere sesión admin"})
             try:
                 await self._validator.validate(token, SCOPE_ADMIN)
             except ServiceAuthError as exc:
                 return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
             return await call_next(request)
 
-        if not bearer:
+        if not token:
             return JSONResponse(status_code=401, content={"detail": "se requiere service token"})
-
         required = _required_scope(path, request.method)
         try:
-            await self._validator.validate(bearer, required)
+            await self._validator.validate(token, required)
         except ServiceAuthError as exc:
             return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
         return await call_next(request)
