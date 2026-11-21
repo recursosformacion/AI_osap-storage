@@ -486,7 +486,6 @@ function tableUrl() {
   return `/api/admin/tables/${encodeURIComponent(currentTable)}?limit=${s.limit}&offset=${s.offset}`;
 }
 async function loadTables() {
-  if (!token()) return msg("Introduce el service token.", true);
   try {
     const data = await api("/api/admin/tables", { headers: auth() });
     const sel = $("tableSelect");
@@ -498,7 +497,6 @@ async function loadTables() {
   } catch (e) { msg(e.message, true); }
 }
 async function viewRows() {
-  if (!token()) return msg("Introduce el service token.", true);
   const t = $("tableSelect").value;
   if (!t) return msg("Elige una tabla.", true);
   currentTable = t;
