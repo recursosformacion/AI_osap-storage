@@ -20,7 +20,7 @@ SCOPE_ADMIN = "storage:admin"
 
 # Rutas exentas de autenticación (salud y métricas). Los shells de gestión (`/admin`,
 # `/admin/maestros`, `/admin/obras`) NO se eximen: exigen un service token con
-# `storage:admin`, que la pantalla recibe por `?token=` (o Bearer) desde osap-api.
+# `storage:admin`, que la pantalla recibe mediante POST y cookie HttpOnly.
 EXEMPT_PATHS = {"/api/v1/health", "/metrics", "/api/v1/public/statistics", "/statistics"}
 
 # Assets estáticos del admin (JS/CSS): no contienen datos, no requieren token.
@@ -199,6 +199,9 @@ class ServiceAuthMiddleware(BaseHTTPMiddleware):
         if is_exempt_path(path):
             return await call_next(request)
 
+        # No admitir credenciales en query strings, ni siquiera con una cookie válida.
+        if (path == _ADMIN_SHELL_PREFIX or path.startswith(_ADMIN_SHELL_PREFIX + "/")) and "token" in request.query_params:
+            return JSONResponse(status_code=400, content={"detail": "no se admiten tokens en la URL"})
         # El endpoint de handoff valida el token de servicio y establece la cookie.
         if path == _ADMIN_SESSION_PATH and request.method == "POST":
             return await call_next(request)
