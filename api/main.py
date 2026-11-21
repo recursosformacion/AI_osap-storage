@@ -99,17 +99,16 @@ def create_app() -> FastAPI:
     if settings.auth_enabled:
         from api.security import ServiceAuthMiddleware, ServiceTokenValidator
 
-        app.add_middleware(
-            ServiceAuthMiddleware,
-            validator=ServiceTokenValidator(
-                issuer=settings.auth_issuer,
-                audience=settings.auth_audience,
-                jwks_url=settings.auth_jwks_url,
-                public_key=settings.auth_public_key,
-                kid=settings.auth_kid,
-                clock_skew_seconds=settings.auth_clock_skew_seconds,
-            ),
+        service_token_validator = ServiceTokenValidator(
+            issuer=settings.auth_issuer,
+            audience=settings.auth_audience,
+            jwks_url=settings.auth_jwks_url,
+            public_key=settings.auth_public_key,
+            kid=settings.auth_kid,
+            clock_skew_seconds=settings.auth_clock_skew_seconds,
         )
+        app.state.service_token_validator = service_token_validator
+        app.add_middleware(ServiceAuthMiddleware, validator=service_token_validator)
     app.include_router(pages.router)
     app.include_router(search.router)
     app.include_router(cpdl.router)
