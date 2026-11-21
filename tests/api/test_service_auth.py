@@ -55,6 +55,10 @@ def _make_app(priv: str, pub: str) -> FastAPI:
     async def merge():
         return {"ok": True}
 
+    @app.get("/admin")
+    async def admin_shell():
+        return {"ok": True}
+
     @app.get("/api/v1/health")
     async def health():
         return {"ok": True}
@@ -148,3 +152,34 @@ def test_wrong_audience_401():
     client = TestClient(_make_app(priv, pub))
     token = _sign(priv, scopes="storage:read", aud="otro-servicio")
     assert client.get("/api/search", headers={"Authorization": f"Bearer {token}"}).status_code == 401
+
+
+def test_admin_cookie_authenticates_shell_and_admin_api():
+    priv, pub = _make_keys()
+    client = TestClient(_make_app(priv, pub), base_url="https://testserver")
+    token = _sign(priv, scopes="storage:admin")
+    client.cookies.set("osap_storage_admin", token, secure=True)
+    assert client.get("/admin").status_code == 200
+    assert client.post(
+        "/api/admin/composers/1/merge",
+        headers={"Origin": "https://testserver"},
+    ).status_code == 200
+
+
+def test_admin_query_token_is_rejected():
+    priv, pub = _make_keys()
+    client = TestClient(_make_app(priv, pub), base_url="https://testserver")
+    token = _sign(priv, scopes="storage:admin")
+    assert client.get("/admin", params={"token": token}).status_code == 401
+
+
+def test_admin_cookie_mutation_rejects_cross_origin():
+    priv, pub = _make_keys()
+    client = TestClient(_make_app(priv, pub), base_url="https://testserver")
+    token = _sign(priv, scopes="storage:admin")
+    client.cookies.set("osap_storage_admin", token, secure=True)
+    response = client.post(
+        "/api/admin/composers/1/merge",
+        headers={"Origin": "https://attacker.example"},
+    )
+    assert response.status_code == 403
