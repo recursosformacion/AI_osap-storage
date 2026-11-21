@@ -172,8 +172,8 @@ async def create_admin_session(request: Request, settings: Settings = Depends(ge
     summary="Gestión de storage (mantenimiento de datos)",
     description="Pantalla web completa de mantenimiento de osap-storage: pestañas "
     "Compositores, Obras y Tablas (CRUD genérico). osap-api la invoca con un enlace "
-    "'Mantenimiento'. Requiere un service token storage:admin (se pasa por ?token=... "
-    "o se pega en la pantalla).",
+    "'Mantenimiento'. Requiere sesión administrativa iniciada mediante POST."
+    "y cookie HttpOnly.",
 )
 async def admin_page() -> HTMLResponse:
     return HTMLResponse(admin_view.admin_maintenance_page())
@@ -210,7 +210,7 @@ async def admin_maestros_page() -> HTMLResponse:
     summary="Mantenimiento de obras (CRUD convencional)",
     description="Página standalone con el listado de obras a 30/página y detalle "
     "Ver/Editar (metadatos + tags/genres/instruments/parts). Requiere service token "
-    "storage:admin por ?token=...; el API /api/admin/works sí exige el Bearer.",
+    "sesión administrativa HttpOnly.",
 )
 async def admin_obras_page() -> HTMLResponse:
     return HTMLResponse(admin_works_crud_view.admin_works_crud_page())
