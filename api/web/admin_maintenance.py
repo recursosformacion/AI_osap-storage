@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 # Pantalla web de mantenimiento de osap-storage: pestañas Compositores | Obras | Tablas.
-# La sirve storage en /admin; osap-api la invoca con ?token=<service-token storage:admin>.
-# La página habla con /api/admin/* (protegido con storage:admin) usando el token como Bearer.
+# La sirve storage en /admin tras un handoff POST con cookie HttpOnly.
+# La página habla con /api/admin/* mediante la cookie de sesión HttpOnly.
 
 _PAGE = """<!doctype html>
 <html lang="es">
@@ -205,7 +205,6 @@ function renderComposers(data) {
   $("cPage").textContent = `página ${Math.floor(state.composers.offset / state.composers.limit) + 1} · total ${data.total}`;
 }
 async function loadComposers() {
-  if (!token()) return msg("Introduce el service token.", true);
   try {
     const data = await api(cUrl(), { headers: auth() });
     renderComposers(data);
