@@ -52,7 +52,7 @@ _PAGE = """<!doctype html>
 <body>
 <div class="wrap">
   <h1>osap-storage · Mantenimiento</h1>
-  <p class="sub">Compositores, obras y CRUD de tablas. Protegido: requiere un <b>service token</b> con scope <code>storage:admin</code>.</p>
+  <p class="sub">Compositores, obras y CRUD de tablas. Protegido: requiere una sesión administrativa segura.</p>
 
   <div id="msg"></div>
 
@@ -156,7 +156,7 @@ function esc(s) {
 }
 function api(url, opts) {
   return fetch(url, { credentials: "same-origin", ...opts }).then(async (r) => {
-    if (r.status === 401 || r.status === 403) throw new Error("Token ausente/inválido o sin scope storage:admin");
+    if (r.status === 401 || r.status === 403) throw new Error("Sesión administrativa ausente, caducada o sin permisos");
     if (!r.ok) { let d = {}; try { d = await r.json(); } catch(e){} throw new Error((d.detail) || ("HTTP " + r.status)); }
     return r.json();
   });
