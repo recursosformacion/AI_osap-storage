@@ -56,6 +56,7 @@ const API_ROOT = '/api/admin/tables'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_ROOT}${path}`, {
+    credentials: 'same-origin',
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -133,6 +134,7 @@ const REP_API = '/api/admin/representations'
 
 async function requestUrl<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
+    credentials: 'same-origin',
     ...init,
     headers: { 'Content-Type': 'application/json', ...authHeaders(), ...init?.headers },
   })
