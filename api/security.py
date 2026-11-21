@@ -200,7 +200,11 @@ class ServiceAuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # No admitir credenciales en query strings, ni siquiera con una cookie válida.
-        if (path == _ADMIN_SHELL_PREFIX or path.startswith(_ADMIN_SHELL_PREFIX + "/")) and "token" in request.query_params:
+        if (
+            path == _ADMIN_SHELL_PREFIX
+            or path.startswith(_ADMIN_SHELL_PREFIX + "/")
+            or path.startswith("/api/admin/")
+        ) and "token" in request.query_params:
             return JSONResponse(status_code=400, content={"detail": "no se admiten tokens en la URL"})
         # El endpoint de handoff valida el token de servicio y establece la cookie.
         if path == _ADMIN_SESSION_PATH and request.method == "POST":
