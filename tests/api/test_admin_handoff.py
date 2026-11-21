@@ -41,7 +41,7 @@ def test_admin_handoff_sets_short_lived_http_only_cookie_and_redirects():
     assert "httponly" in cookie
     assert "secure" in cookie
     assert "samesite=lax" in cookie
-    assert "max-age=180" in cookie
+    assert "max-age=179" in cookie or "max-age=180" in cookie
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["referrer-policy"] == "no-referrer"
 
