@@ -177,7 +177,7 @@ def test_admin_cookie_mutation_rejects_cross_origin():
     priv, pub = _make_keys()
     client = TestClient(_make_app(priv, pub), base_url="https://testserver")
     token = _sign(priv, scopes="storage:admin")
-    client.cookies.set("osap_storage_admin", token, secure=True)
+    client.cookies.set("osap_storage_admin", token)
     response = client.post(
         "/api/admin/composers/1/merge",
         headers={"Origin": "https://attacker.example"},
@@ -191,3 +191,12 @@ def test_admin_query_token_rejected_even_with_valid_cookie():
     token = _sign(priv, scopes="storage:admin")
     client.cookies.set("osap_storage_admin", token, secure=True)
     assert client.get("/admin", params={"token": token}).status_code == 400
+
+
+
+def test_admin_api_query_token_is_rejected():
+    priv, pub = _make_keys()
+    client = TestClient(_make_app(priv, pub), base_url="https://testserver")
+    token = _sign(priv, scopes="storage:admin")
+    response = client.post("/api/admin/composers/1/merge", params={"token": token})
+    assert response.status_code == 400
