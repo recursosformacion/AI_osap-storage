@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
 
 from application.use_cases.search_entries import SearchEntries
 from application.use_cases.statistics import GetStatistics
@@ -145,7 +145,14 @@ async def create_admin_session(request: Request, settings: Settings = Depends(ge
     next_path = (fields.get("next") or ["/admin"])[0].strip() or "/admin"
     if not token:
         return JSONResponse(status_code=400, content={"detail": "falta el token de servicio"})
-    if not (next_path == "/admin" or next_path.startswith("/admin/")) or next_path.startswith("//") or "\\" in next_path:
+    parsed_next = urlsplit(next_path)
+    if (
+        parsed_next.scheme
+        or parsed_next.netloc
+        or parsed_next.fragment
+        or not (parsed_next.path == "/admin" or parsed_next.path.startswith("/admin/"))
+        or "\\" in next_path
+    ):
         return JSONResponse(status_code=400, content={"detail": "destino no permitido"})
     try:
         claims = await validator.validate(token, "storage:admin")
