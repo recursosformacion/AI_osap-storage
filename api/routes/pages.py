@@ -125,7 +125,7 @@ async def work_detail(
 async def create_admin_session(request: Request, settings: Settings = Depends(get_settings)):
     """Intercambia un service token por una cookie de sesión del panel."""
     validator = getattr(request.app.state, "service_token_validator", None)
-    if validator is None:
+    if validator is None and settings.auth_enabled:
         return JSONResponse(status_code=503, content={"detail": "autenticación de servicio no disponible"})
     allowed_origins = {item.strip().rstrip("/") for item in settings.admin_handoff_origins.split(",") if item.strip()}
     origin = request.headers.get("origin", "").rstrip("/")
@@ -154,6 +154,11 @@ async def create_admin_session(request: Request, settings: Settings = Depends(ge
         or "\\" in next_path
     ):
         return JSONResponse(status_code=400, content={"detail": "destino no permitido"})
+    if validator is None:
+        response = RedirectResponse(url=next_path, status_code=303)
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
     try:
         claims = await validator.validate(token, "storage:admin")
     except Exception as exc:
