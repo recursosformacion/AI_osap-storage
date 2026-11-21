@@ -7,7 +7,7 @@ de admin existentes:
   GET  /api/admin/composers/{id}
   PUT  /api/admin/composers/{id}      (identidad)
 
-El token de servicio llega por URL (?token=...); si no viene, se muestra la caja
+La página usa la sesión administrativa HttpOnly del navegador
 para pegarlo.
 """
 
@@ -184,7 +184,7 @@ function backToList(){ $("detailView").classList.add("hidden");
 (async function init(){
   await loadEpochs();
   if (cid){ loadDetail(); } else {
-    $("btnApply").onclick = loadList; $("btnSearch").onclick = () => { state.offset = 0; loadList(); };
+$("btnSearch").onclick = () => { state.offset = 0; loadList(); };
     $("q").onkeydown = (e) => { if (e.key === "Enter"){ state.offset = 0; loadList(); } };
     $("prev").onclick = () => { if (state.offset >= state.limit){ state.offset -= state.limit; loadList(); } };
     $("next").onclick = () => { state.offset += state.limit; loadList(); };
