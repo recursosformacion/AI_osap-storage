@@ -158,7 +158,7 @@ def test_admin_cookie_authenticates_shell_and_admin_api():
     priv, pub = _make_keys()
     client = TestClient(_make_app(priv, pub), base_url="https://testserver")
     token = _sign(priv, scopes="storage:admin")
-    client.cookies.set("osap_storage_admin", token, secure=True)
+    client.cookies.set("osap_storage_admin", token)
     assert client.get("/admin").status_code == 200
     assert client.post(
         "/api/admin/composers/1/merge",
