@@ -189,7 +189,7 @@ def test_admin_query_token_rejected_even_with_valid_cookie():
     priv, pub = _make_keys()
     client = TestClient(_make_app(priv, pub), base_url="https://testserver")
     token = _sign(priv, scopes="storage:admin")
-    client.cookies.set("osap_storage_admin", token, secure=True)
+    client.cookies.set("osap_storage_admin", token)
     assert client.get("/admin", params={"token": token}).status_code == 400
 
 
