@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import time
+from urllib.parse import parse_qs
+
 from application.use_cases.search_entries import SearchEntries
 from application.use_cases.statistics import GetStatistics
 from application.use_cases.works import GetWork, SearchWorks
 from domain.ports.repositories import FileRepository
-from fastapi import APIRouter, Depends, Query
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from infrastructure.config import Settings
+
+_ADMIN_SESSION_COOKIE = "osap_storage_admin"
 
 from api.dependencies import (
     GetStatisticsDep,
@@ -116,6 +121,48 @@ async def work_detail(
     return HTMLResponse(works.work_detail_page(detail, settings))
 
 
+@router.post("/admin/session", include_in_schema=False)
+async def create_admin_session(request: Request, settings: Settings = Depends(get_settings)):
+    """Intercambia un service token por una cookie de sesión del panel."""
+    validator = getattr(request.app.state, "service_token_validator", None)
+    if validator is None:
+        return JSONResponse(status_code=503, content={"detail": "autenticación de servicio no disponible"})
+    allowed_origins = {item.strip().rstrip("/") for item in settings.admin_handoff_origins.split(",") if item.strip()}
+    origin = request.headers.get("origin", "").rstrip("/")
+    if not origin or origin not in allowed_origins:
+        return JSONResponse(status_code=403, content={"detail": "origen de handoff no permitido"})
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if content_type != "application/x-www-form-urlencoded":
+        return JSONResponse(status_code=415, content={"detail": "se requiere application/x-www-form-urlencoded"})
+    body = await request.body()
+    if len(body) > 16384:
+        return JSONResponse(status_code=413, content={"detail": "solicitud demasiado grande"})
+    fields = parse_qs(body.decode("utf-8", errors="strict"), keep_blank_values=True)
+    token = (fields.get("token") or [""])[0].strip()
+    next_path = (fields.get("next") or ["/admin"])[0].strip() or "/admin"
+    if not token:
+        return JSONResponse(status_code=400, content={"detail": "falta el token de servicio"})
+    if not next_path.startswith("/admin") or next_path.startswith("//") or "\\" in next_path:
+        return JSONResponse(status_code=400, content={"detail": "destino no permitido"})
+    try:
+        claims = await validator.validate(token, "storage:admin")
+    except Exception as exc:
+        from api.security import ServiceAuthError
+        if isinstance(exc, ServiceAuthError):
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
+        return JSONResponse(status_code=503, content={"detail": "no se pudo validar el token"})
+    expires_at = int(claims.get("exp", 0))
+    max_age = expires_at - int(time.time())
+    if max_age <= 0:
+        return JSONResponse(status_code=401, content={"detail": "token expirado"})
+    response = RedirectResponse(url=next_path, status_code=303)
+    response.set_cookie(
+        key=_ADMIN_SESSION_COOKIE, value=token, max_age=max_age, path="/",
+        httponly=True, secure=True, samesite="lax"
+    )
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
 @router.get(
     "/admin",
     response_class=HTMLResponse,
