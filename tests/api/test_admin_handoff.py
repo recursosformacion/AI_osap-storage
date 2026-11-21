@@ -3,11 +3,10 @@ from __future__ import annotations
 import time
 from types import SimpleNamespace
 
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-
 from api.dependencies import get_settings
 from api.routes.pages import router
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 
 class _Validator:
