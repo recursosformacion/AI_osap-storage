@@ -44,13 +44,6 @@ _PAGE = """<!doctype html>
   <h1>Mantenimiento compositores</h1>
   <p class="sub">Listado del fichero <code>composers</code> · 30 filas por página.</p>
 
-  <div class="card" id="tokenCard">
-    <label>Service token (Bearer)</label>
-    <div class="row">
-      <input class="grow" style="flex:1" id="token" placeholder="pega el service token (o usa ?token=...)" />
-      <button id="btnApply">Aplicar</button>
-    </div>
-  </div>
   <div id="msg" class="muted"></div>
 
   <div id="listView">
@@ -73,14 +66,12 @@ _PAGE = """<!doctype html>
 </div>
 <script>
 const qs = (k) => new URLSearchParams(location.search).get(k);
-const q = qs("token") || "";
 const mode = qs("mode") === "edit" ? "edit" : "view";
 const cid = qs("id") || "";
 const state = { items: [], total: 0, limit: 30, offset: 0 };
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
   (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
-function token(){ const v = q || $("token").value; return v.trim(); }
-function auth(){ return { Authorization: "Bearer " + token() }; }
+function auth(){ return {}; }
 const $ = (i) => document.getElementById(i);
 let EP = [];
 async function loadEpochs(){ try { EP = await api("/api/admin/epochs"); } catch(e){ EP = []; } }
@@ -93,13 +84,9 @@ function eraOptions(cur){
 function msg(m, err){ const el = $("msg"); if(!el) return; el.textContent = m;
   el.style.color = err ? "#f87171" : "#94a3b8"; }
 async function api(url, opts){
-  const r = await fetch(url, Object.assign({ headers: { Accept: "application/json" } }, opts || {}));
+  const r = await fetch(url, Object.assign({ credentials: "same-origin", headers: { Accept: "application/json" } }, opts || {}));
   if (!r.ok){ let t=""; try{ t = (await r.json()).detail || ""; }catch(e){} throw new Error("HTTP "+r.status+" "+t); }
   return r.json();
-}
-function loadToken(){
-  if (q){ $("token").value = q; $("tokenCard").classList.add("hidden"); }
-  else { $("tokenCard").classList.remove("hidden"); }
 }
 function renderDetail(d){
   const identity = [
@@ -168,7 +155,7 @@ function renderRows(){
   for (const c of state.items){
     const cfg = c.works_total > 0 ? esc(c.roles || "") : '<span class="muted">Sin obras</span>';
     const works = c.works_total > 0
-      ? `<a href="/admin/work-persons?token=${encodeURIComponent(token())}&person_id=${encodeURIComponent(c.id)}">${c.works_total}</a>`
+      ? `<a href="/admin/work-persons?person_id=${encodeURIComponent(c.id)}">${c.works_total}</a>`
       : "0";
     h += `<tr><td>${esc(c.id)}</td><td><strong>${esc(c.name)}</strong></td>
       <td>${esc(c.birth_year || "")}</td><td>${esc(c.death_year || "")}</td>
@@ -182,9 +169,8 @@ function renderRows(){
   area.innerHTML = h + "</tbody></table>";
   $("pageInfo").textContent = `página ${Math.floor(state.offset/state.limit)+1} · total ${state.total}`;
 }
-function openMode(m, id){ location = "?token="+encodeURIComponent(token())+"&mode="+m+"&id="+encodeURIComponent(id); }
+function openMode(m, id){ location = "?mode="+m+"&id="+encodeURIComponent(id); }
 async function loadList(){
-  if (!token()) return msg("Introduce el service token.", true);
   const p = new URLSearchParams({ visible: "all", include_all: "1", limit: String(state.limit), offset: String(state.offset) });
   const qv = $("q").value.trim(); if (qv) p.set("q", qv);
   try{
@@ -196,14 +182,13 @@ async function loadList(){
 function backToList(){ $("detailView").classList.add("hidden");
   $("listView").classList.remove("hidden"); loadList(); }
 (async function init(){
-  loadToken();
   await loadEpochs();
   if (cid){ loadDetail(); } else {
     $("btnApply").onclick = loadList; $("btnSearch").onclick = () => { state.offset = 0; loadList(); };
     $("q").onkeydown = (e) => { if (e.key === "Enter"){ state.offset = 0; loadList(); } };
     $("prev").onclick = () => { if (state.offset >= state.limit){ state.offset -= state.limit; loadList(); } };
     $("next").onclick = () => { state.offset += state.limit; loadList(); };
-    if (token()) loadList();
+    loadList();
   }
 })();
 </script></body></html>
