@@ -149,7 +149,6 @@ _PAGE = """<!doctype html>
 const $ = (id) => document.getElementById(id);
 let state = { composers: { offset:0, limit:50 }, works: { offset:0, limit:50 }, tables: { offset:0, limit:50 } };
 
-function token() { return true; }
 function auth() { return { "Content-Type": "application/json" }; }
 function msg(t, err) { const el = $("msg"); el.textContent = t; el.className = err ? "err" : ""; }
 function esc(s) {
@@ -238,7 +237,6 @@ function renderWorks(data) {
   $("wPage").textContent = `página ${Math.floor(state.works.offset / state.works.limit) + 1} · total ${data.total}`;
 }
 async function loadWorks() {
-  if (!token()) return msg("Introduce el service token.", true);
   try {
     const data = await api(wUrl(), { headers: auth() });
     renderWorks(data);
