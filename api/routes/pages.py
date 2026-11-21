@@ -172,8 +172,8 @@ async def create_admin_session(request: Request, settings: Settings = Depends(ge
     "'Mantenimiento'. Requiere un service token storage:admin (se pasa por ?token=... "
     "o se pega en la pantalla).",
 )
-async def admin_page(token: str = Query(default="")) -> HTMLResponse:
-    return HTMLResponse(admin_view.admin_maintenance_page(token=token))
+async def admin_page() -> HTMLResponse:
+    return HTMLResponse(admin_view.admin_maintenance_page())
 
 
 @router.get(
@@ -184,8 +184,8 @@ async def admin_page(token: str = Query(default="")) -> HTMLResponse:
     "Obras, Tablas), distinta del multimantenimiento de la SPA. osap-api la enlaza como "
     "'Mantenimiento'.",
 )
-async def admin_mantenimiento_page(token: str = Query(default="")) -> HTMLResponse:
-    return HTMLResponse(admin_view.admin_maintenance_page(token=token))
+async def admin_mantenimiento_page() -> HTMLResponse:
+    return HTMLResponse(admin_view.admin_maintenance_page())
 
 
 @router.get(
@@ -195,10 +195,10 @@ async def admin_mantenimiento_page(token: str = Query(default="")) -> HTMLRespon
     description="Página standalone (fuera del multimantenimiento) con el listado de "
     "composers a 30/página y detalle Ver/Editar. Si llega ?id=...&mode=view|edit, abre "
     "directamente ese compositor en el modo indicado (lo usa la pantalla de "
-    "correcciones de osap-app). Requiere service token storage:admin por ?token=...",
+    "correcciones de osap-app). Requiere sesión administrativa HttpOnly",
 )
-async def admin_maestros_page(token: str = Query(default="")) -> HTMLResponse:
-    return HTMLResponse(admin_composers_crud_view.admin_composers_crud_page(token=token))
+async def admin_maestros_page() -> HTMLResponse:
+    return HTMLResponse(admin_composers_crud_view.admin_composers_crud_page())
 
 
 @router.get(
@@ -209,5 +209,5 @@ async def admin_maestros_page(token: str = Query(default="")) -> HTMLResponse:
     "Ver/Editar (metadatos + tags/genres/instruments/parts). Requiere service token "
     "storage:admin por ?token=...; el API /api/admin/works sí exige el Bearer.",
 )
-async def admin_obras_page(token: str = Query(default="")) -> HTMLResponse:
-    return HTMLResponse(admin_works_crud_view.admin_works_crud_page(token=token))
+async def admin_obras_page() -> HTMLResponse:
+    return HTMLResponse(admin_works_crud_view.admin_works_crud_page())
