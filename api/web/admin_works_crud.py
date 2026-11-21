@@ -7,7 +7,7 @@ usando los endpoints de admin existentes:
   GET  /api/admin/works/{id}
   PUT  /api/admin/works/{id}
 
-El token de servicio llega por URL (?token=...); si no viene, se muestra la caja
+La página usa la sesión administrativa HttpOnly del navegador
 para pegarlo. La página en sí no contiene datos (exenta de auth); el API exige
 storage:admin.
 """
