@@ -79,6 +79,8 @@ auth:
   # public_key: <PEM de osap-auth>   # alternativa/local (sin JWKS)
   # kid: osap-auth-v1
   clock_skew_seconds: 60
+  # Origen de osap-api autorizado para iniciar el panel mediante POST.
+  admin_handoff_origins: https://app.openmusicrepository.com
 
 # osap-api: especialista en resolución de entidades externas. Storage llama a su
 # POST /api/v1/composers/resolve para recuperar la identidad del compositor de una obra.
