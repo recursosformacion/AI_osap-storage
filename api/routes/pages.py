@@ -137,12 +137,15 @@ async def create_admin_session(request: Request, settings: Settings = Depends(ge
     body = await request.body()
     if len(body) > 16384:
         return JSONResponse(status_code=413, content={"detail": "solicitud demasiado grande"})
-    fields = parse_qs(body.decode("utf-8", errors="strict"), keep_blank_values=True)
+    try:
+        fields = parse_qs(body.decode("utf-8"), keep_blank_values=True)
+    except UnicodeDecodeError:
+        return JSONResponse(status_code=400, content={"detail": "cuerpo de formulario inválido"})
     token = (fields.get("token") or [""])[0].strip()
     next_path = (fields.get("next") or ["/admin"])[0].strip() or "/admin"
     if not token:
         return JSONResponse(status_code=400, content={"detail": "falta el token de servicio"})
-    if not next_path.startswith("/admin") or next_path.startswith("//") or "\\" in next_path:
+    if not (next_path == "/admin" or next_path.startswith("/admin/")) or next_path.startswith("//") or "\\" in next_path:
         return JSONResponse(status_code=400, content={"detail": "destino no permitido"})
     try:
         claims = await validator.validate(token, "storage:admin")
