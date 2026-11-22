@@ -65,8 +65,7 @@ SET p.persons_biography_summary      = b.biography_summary,
     p.persons_biography_nationality  = b.biography_nationality,
     p.persons_biography_key_works    = b.biography_key_works,
     p.persons_biography_key_fact     = b.biography_key_fact,
-    p.persons_biography_references   = b.biography_references,
-    p.persons_biography_updated_at   = b.biography_updated_at;
+    p.persons_biography_references   = b.biography_references;
 
 -- 1.3 aliases: catálogo de idiomas + junction
 INSERT INTO `osap-storage`.languages (languages_code)
