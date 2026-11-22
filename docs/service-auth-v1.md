@@ -86,10 +86,12 @@ osap-auth) con el scope adecuado.
 
 | Scope | Concede |
 |-------|---------|
-| `storage:read` | leer Works, compositores y recursos (search/lookup/resource/download) |
+| `storage:read` | GET: leer obras, compositores y recursos |
+| `storage:write` | POST/PUT/PATCH/DELETE no administrativos |
+| `storage:admin` | rutas `/api/admin/*`, incluida la fusión de compositores |
 
-Si en el futuro osap-storage necesita operaciones de escritura, se añaden scopes dedicados
-(`storage:write`) con su propia política. No se amplía un scope de lectura.
+El middleware aplica el principio *protect all by default*: cada ruta no exenta exige el scope
+correspondiente al método y al prefijo. Los tokens de usuario no son válidos para ninguno de ellos.
 
 ---
 
@@ -153,13 +155,13 @@ Implementado en `api/security.py`:
   - `POST/PUT/PATCH/DELETE` → `storage:write`
   - resto (`GET` etc.) → `storage:read`
 
-Configuración (en `config.example.yaml` y `Settings`):
+Configuración (en `config.example.yaml`, `config.production.example.yaml` y `Settings`):
 ```yaml
 auth:
   enabled: false            # activar solo al desplegar la frontera de seguridad
   issuer: https://auth.openmusicrepository.com
   audience: osap-api
-  jwks_url: https://auth.openmusicrepository.com/.well-known/jwks.json
+  jwks_url: https://auth.openmusicrepository.com/auth-api/auth/.well-known/jwks.json
   clock_skew_seconds: 60
 ```
 
