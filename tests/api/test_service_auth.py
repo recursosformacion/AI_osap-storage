@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 ISSUER = "https://auth.example"
-AUDIENCE = "osap-storage"
+AUDIENCE = "osap-api"
 
 
 def _make_keys():
