@@ -3,6 +3,12 @@
 -- Re-ejecutable: vacía el destino y vuelve a copiar.
 -- Nomenclatura destino: normativa V3 (works_id, languages_id, genres_id...).
 -- No ejecuta cambios de esquema.
+--
+-- !!! DESTRUCTIVO: TRUNCATE TABLE vacía 28 tablas del destino `osap-storage`.
+-- No ejecutar contra una BD productiva con datos que deban conservarse.
+-- Antes de usarlo, confirmar origen y destino contra docsNew/migracion-conversion.md:
+-- el encabezado de este script y la sección histórica de conversión usan nombres distintos.
+-- Ejecutar solo en staging confirmado y con backup verificado.
 -- ============================================================================
 SET FOREIGN_KEY_CHECKS = 0;
 SET NAMES utf8mb4;
