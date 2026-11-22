@@ -14,7 +14,7 @@ class Availability:
 
 
 class AvailabilityService:
-    """Reglas de disponibilidad: un fichero está disponible si tiene al menos una copia almacenada."""
+    """Un fichero requiere una copia almacenada y no puede estar fallido ni retirado lógicamente."""
 
     def availability(self, file: File, locations: list[StorageLocation]) -> Availability:
         stored = [loc for loc in locations if loc.status == LocationStatus.STORED]
