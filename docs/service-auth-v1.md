@@ -70,7 +70,7 @@ osap-auth) con el scope adecuado.
 
 1. Firma JWT contra el **JWKS** de osap-auth.
 2. `iss == osap-auth`.
-3. `aud == osap-storage` (o scope específico).
+3. `aud == osap-api`. osap-auth emite por defecto para osap-api; el token lleva además el scope específico de Storage.
 4. `scope` contiene `storage:read`.
 5. `exp` válido (+ tolerancia de *clock skew*).
 
@@ -158,15 +158,12 @@ Configuración (en `config.example.yaml` y `Settings`):
 auth:
   enabled: false            # activar solo al desplegar la frontera de seguridad
   issuer: https://auth.openmusicrepository.com
-  audience: osap-storage
+  audience: osap-api
   jwks_url: https://auth.openmusicrepository.com/.well-known/jwks.json
   clock_skew_seconds: 60
 ```
 
-Valores operativos confirmados del contrato de osap-auth: `issuer=https://auth.openmusicrepository.com`,
-`jwt_kid=osap-auth-v1`, scopes de servicio `storage:read` / `storage:write` / `storage:admin`, y
-`token_use` (`user`/`service`). Pendiente de confirmar antes del despliegue: URL JWKS efectiva y
-`audience` concreta que osap-auth emita para storage.
+Contrato estático contrastado con `osap-auth/api/routes/jwks.py`, `osap-api/src/osap/infrastructure/auth/service_token_provider.py` y `config.production.example.yaml`: `issuer=https://auth.openmusicrepository.com`, audiencia por defecto `osap-api`, scopes `storage:read` / `storage:write` / `storage:admin`, y `token_use=service`. La ruta de JWKS en la aplicación Auth es `/auth/.well-known/jwks.json`; la plantilla de producción la publica bajo `/auth-api/auth/.well-known/jwks.json`. La URL efectiva del proxy y la aceptación real de un token deben comprobarse en pruebas de integración antes del despliegue.
 
 `/api/admin/composers/{target_id}/merge` exige **`storage:admin`** (no basta `storage:read`).
 
