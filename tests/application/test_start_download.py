@@ -157,7 +157,7 @@ async def test_deleted_file_cannot_start_download(tmp_path):
 
     assert await jobs.get_by_id(1) is None
     assert scheduler.scheduled == []
-    assert await files.get_by_id(1).status == FileStatus.DELETED
+    assert (await files.get_by_id(1)).status == FileStatus.DELETED
 
 
 async def test_queued_download_does_not_resurrect_file_deleted_before_worker_runs(tmp_path):
