@@ -1,10 +1,14 @@
 -- ============================================================================
+-- ESTADO: OBSOLETO — conversión histórica V1 -> V3 (septiembre de 2026).
+-- NO EJECUTAR en despliegues actuales ni como migración V6.
+-- V6 tiene su propio procedimiento en docs/v6-reconstruction-api-index-cutover.md
+-- y sus scripts v6_*. Este archivo se conserva solo como evidencia histórica.
 -- Conversión de datos: `osap-storage_v1` (imagen de producción) -> `osap-storage`
 -- Re-ejecutable: vacía el destino y vuelve a copiar.
 -- Nomenclatura destino: normativa V3 (works_id, languages_id, genres_id...).
 -- No ejecuta cambios de esquema.
 --
--- !!! DESTRUCTIVO: TRUNCATE TABLE vacía 29 tablas del destino `osap-storage`.
+-- !!! OBSOLETO Y DESTRUCTIVO: TRUNCATE TABLE vacía 29 tablas del destino `osap-storage`.
 -- No ejecutar contra una BD productiva con datos que deban conservarse.
 -- Antes de usarlo, confirmar origen y destino contra docsNew/migracion-conversion.md:
 -- el encabezado de este script y la sección histórica de conversión usan nombres distintos.
