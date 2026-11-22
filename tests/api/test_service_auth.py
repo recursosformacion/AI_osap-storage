@@ -154,6 +154,14 @@ def test_wrong_audience_401():
     assert client.get("/api/search", headers={"Authorization": f"Bearer {token}"}).status_code == 401
 
 
+def test_legacy_storage_audience_is_rejected():
+    """La audiencia correcta es osap-api; osap-storage no es la audiencia emitida por defecto."""
+    priv, pub = _make_keys()
+    client = TestClient(_make_app(priv, pub))
+    token = _sign(priv, scopes="storage:read", aud="osap-storage")
+    assert client.get("/api/search", headers={"Authorization": f"Bearer {token}"}).status_code == 401
+
+
 def test_admin_cookie_authenticates_shell_and_admin_api():
     priv, pub = _make_keys()
     client = TestClient(_make_app(priv, pub), base_url="https://testserver")
