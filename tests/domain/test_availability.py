@@ -47,3 +47,13 @@ def test_only_stored_locations_count_as_stored():
     )
     result = AvailabilityService().availability(_file(), [failed_location])
     assert not result.available
+
+
+
+def test_deleted_file_is_not_available_even_with_stored_location():
+    result = AvailabilityService().availability(
+        _file(FileStatus.DELETED), [_stored_location()]
+    )
+    assert not result.available
+    # The physical copy remains recorded; logical deletion must not expose it.
+    assert len(result.stored_locations) == 1
