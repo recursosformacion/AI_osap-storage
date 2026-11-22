@@ -89,7 +89,10 @@ class ServiceTokenValidator:
             for key in keys:
                 if key.get("kid") == kid:
                     return jwt.algorithms.RSAAlgorithm.from_jwk(key)
-        if keys:
+            # A supplied but unknown kid must never silently fall back to another key.
+            return None
+        # Without a kid, accept only an unambiguous single-key JWKS.
+        if len(keys) == 1:
             return jwt.algorithms.RSAAlgorithm.from_jwk(keys[0])
         return None
 
