@@ -18,5 +18,5 @@ class AvailabilityService:
 
     def availability(self, file: File, locations: list[StorageLocation]) -> Availability:
         stored = [loc for loc in locations if loc.status == LocationStatus.STORED]
-        available = file.status != FileStatus.FAILED and bool(stored)
+        available = file.status not in (FileStatus.FAILED, FileStatus.DELETED) and bool(stored)
         return Availability(file=file, stored_locations=stored, available=available)
