@@ -8,7 +8,7 @@ from domain.entities.download_job import DownloadJobStatus
 from domain.entities.file import File, FileStatus
 from domain.entities.storage_location import LocationStatus
 from domain.entities.storage_provider import ProviderType, StorageProvider
-from domain.exceptions import EntityNotFound, UnsupportedProvider
+from domain.exceptions import EntityNotFound, FileNotAvailable, UnsupportedProvider
 from domain.services.integrity import IntegrityService
 from infrastructure.hashing.hashlib_hasher import HashlibHasher
 from infrastructure.providers.registry import StorageBackendRegistry
@@ -143,3 +143,41 @@ async def test_no_enabled_provider_raises(tmp_path):
         await use_case.execute(
             StartDownloadCommand(file_id=1, source_url="https://example.com/f")
         )
+
+
+
+async def test_deleted_file_cannot_start_download(tmp_path):
+    use_case, files, jobs, locations, providers, scheduler = build_use_case(tmp_path)
+    await files.create(File(sha256=SHA, name="prueba.txt", status=FileStatus.DELETED))
+
+    with pytest.raises(FileNotAvailable):
+        await use_case.execute(
+            StartDownloadCommand(file_id=1, source_url="https://example.com/f")
+        )
+
+    assert await jobs.get_by_id(1) is None
+    assert scheduler.scheduled == []
+    assert await files.get_by_id(1).status == FileStatus.DELETED
+
+
+async def test_queued_download_does_not_resurrect_file_deleted_before_worker_runs(tmp_path):
+    use_case, files, jobs, locations, providers, scheduler = build_use_case(tmp_path)
+    await files.create(File(sha256=SHA, name="prueba.txt"))
+    await providers.create(
+        StorageProvider(name="mem", provider_type=ProviderType.LOCAL_DISK, config={})
+    )
+
+    job = await use_case.execute(
+        StartDownloadCommand(file_id=1, source_url="https://example.com/f")
+    )
+    file = await files.get_by_id(1)
+    file.status = FileStatus.DELETED
+    await files.save(file)
+
+    await scheduler.scheduled[0]
+
+    final_job = await jobs.get_by_id(job.id)
+    assert final_job.status == DownloadJobStatus.FAILED
+    assert final_job.error_message == "file has been logically deleted"
+    assert (await files.get_by_id(1)).status == FileStatus.DELETED
+    assert await locations.list_by_file(1) == []
