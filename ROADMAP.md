@@ -16,7 +16,7 @@ Roadmap global de referencia: `_docs/roadmap.md` (raíz del proyecto).
 | Middleware protect-all-by-default (`auth.enabled=true` en prod) | 🟡 Pendiente de desplegar |
 | Scopes `storage:read` / `storage:write` / `storage:admin` | 🟡 Implementado |
 | Reglas: GET→read; POST/PUT/PATCH/DELETE→write; `/api/admin/*`→admin; merge→admin | 🟡 Implementado |
-| Excepciones `/api/v1/health` y `/metrics` | ✅ Confirmadas en middleware y tests |
+| Excepciones exactas `/api/v1/health`, `/metrics` y estadísticas públicas | ✅ Confirmadas en middleware y tests |
 | Contrato estático: audiencia `osap-api`, issuer y ruta JWKS de producción documentados | ✅ Contraste de código y plantillas; proxy real pendiente |
 | Probar: llamadas autorizadas, rechazo sin token, scopes insuficientes | 🟡 Pendiente |
 
