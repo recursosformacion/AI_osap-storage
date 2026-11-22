@@ -83,6 +83,12 @@ def test_health_and_metrics_exempt():
     assert client.get("/metrics").status_code == 200
 
 
+def test_health_prefix_does_not_exempt_other_routes():
+    priv, pub = _make_keys()
+    client = TestClient(_make_app(priv, pub))
+    assert client.get("/api/v1/healthz").status_code == 401
+
+
 def test_download_requires_service_token():
     """`/api/download/{id}` ya NO está exento: sin token no se puede saltar la cuota."""
     priv, pub = _make_keys()
