@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import json
 from datetime import UTC, datetime, timedelta
 
 import jwt
@@ -208,3 +210,25 @@ def test_admin_api_query_token_is_rejected():
     token = _sign(priv, scopes="storage:admin")
     response = client.post("/api/admin/composers/1/merge", params={"token": token})
     assert response.status_code == 400
+
+
+
+def test_jwks_does_not_fallback_for_unknown_or_ambiguous_kid():
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    jwk = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(private_key.public_key()))
+    jwk["kid"] = "known-key"
+    second_jwk = dict(jwk)
+    second_jwk["kid"] = "second-key"
+    validator = ServiceTokenValidator(
+        issuer=ISSUER,
+        audience=AUDIENCE,
+        jwks_url="https://auth.example/.well-known/jwks.json",
+    )
+
+    async def load_jwks():
+        return {"keys": [jwk, second_jwk]}
+
+    validator._load_jwks = load_jwks  # type: ignore[method-assign]
+    assert asyncio.run(validator._get_verification_key("known-key")) is not None
+    assert asyncio.run(validator._get_verification_key("unknown-key")) is None
+    assert asyncio.run(validator._get_verification_key(None)) is None
