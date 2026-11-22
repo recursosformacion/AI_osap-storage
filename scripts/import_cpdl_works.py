@@ -176,7 +176,7 @@ def _lang(settings_lang: str) -> tuple[str, str] | None:
     return None
 
 
-async def _ingest(paths: list[Path], db_name: str, dry_run: bool) -> None:
+async def _ingest(paths: list[Path], db_name: str, dry_run: bool, replace: bool = False) -> None:
     base = Settings()  # type: ignore[call-arg]
     settings = base.model_copy(update={"db_name": db_name})
     db = Database(settings)
@@ -186,13 +186,21 @@ async def _ingest(paths: list[Path], db_name: str, dry_run: bool) -> None:
     lang_ids: dict[str, int] = {}
     ensemble_ids: dict[str, int] = {}
     works = 0
+    updated = 0
     skipped = 0
 
-    if not dry_run:
+    if not dry_run and replace:
         async with db.connection() as conn, conn.cursor() as cur:
             await cur.execute("DELETE FROM works WHERE works_origin = 'CPDL'")
 
     async with db.connection() as conn, conn.cursor() as cur:
+        existing_ids: dict[str, int] = {}
+        if not dry_run:
+            await cur.execute(
+                "SELECT id, works_origin_id FROM works WHERE works_origin='CPDL'"
+            )
+            for row in await cur.fetchall():
+                existing_ids[str(row["works_origin_id"])] = int(row["id"])
         for path in paths:
             for _event, elem in ElementTree.iterparse(path, events=("end",)):
                 if elem.tag != NS + "page":
@@ -215,24 +223,51 @@ async def _ingest(paths: list[Path], db_name: str, dry_run: bool) -> None:
                     works += 1
                     continue
 
-                await cur.execute(
-                    """
-                    INSERT INTO works
-                        (works_origin, works_origin_id, works_title, works_catalogue,
-                         works_license, works_instrumentation, works_source_url)
-                    VALUES ('CPDL', %s, %s, %s, %s, %s, %s)
-                    """,
-                    (
-                        str(page_id),
-                        rec["title"],
-                        rec["catalogue_hint"],
-                        rec["license"],
-                        json.dumps(rec["instrumentation"], ensure_ascii=False),
-                        f"https://www.cpdl.org/wiki/index.php?curid={page_id}",
-                    ),
-                )
-                work_id = cur.lastrowid
-                works += 1
+                source_url = f"https://www.cpdl.org/wiki/index.php?curid={page_id}"
+                instrumentation = json.dumps(rec["instrumentation"], ensure_ascii=False)
+                existing_id = existing_ids.get(str(page_id))
+                if existing_id is not None:
+                    work_id = existing_id
+                    await cur.execute(
+                        "UPDATE works SET works_title=%s, works_catalogue=%s, works_license=%s, "
+                        "works_instrumentation=%s, works_source_url=%s WHERE id=%s",
+                        (
+                            rec["title"],
+                            rec["catalogue_hint"],
+                            rec["license"],
+                            instrumentation,
+                            source_url,
+                            work_id,
+                        ),
+                    )
+                    updated += 1
+                    if (works + updated) % 2000 == 0:
+                        await conn.commit()
+                        print(f"  ... {works + updated} works (ins={works} upd={updated})", flush=True)
+                    # Actualización: solo campos escalares de `works` (no se refrescan las
+                    # tablas hijas para no hacer 10+ consultas por obra). Para recarga
+                    # completa de hijos, usar --replace.
+                    continue
+                else:
+                    await cur.execute(
+                        """
+                        INSERT INTO works
+                            (works_origin, works_origin_id, works_title, works_catalogue,
+                             works_license, works_instrumentation, works_source_url)
+                        VALUES ('CPDL', %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            str(page_id),
+                            rec["title"],
+                            rec["catalogue_hint"],
+                            rec["license"],
+                            instrumentation,
+                            source_url,
+                        ),
+                    )
+                    work_id = cur.lastrowid
+                    existing_ids[str(page_id)] = int(work_id)
+                    works += 1
 
                 for term in voicing_terms(json.dumps(rec["voicing"], ensure_ascii=False)):
                     info = canonical_ensemble(term)
@@ -287,14 +322,14 @@ async def _ingest(paths: list[Path], db_name: str, dry_run: bool) -> None:
                         (work_id, lang_ids[code]),
                     )
 
-                if works % 2000 == 0:
+                if (works + updated) % 2000 == 0:
                     await conn.commit()
-                    print(f"  ... {works} works", flush=True)
+                    print(f"  ... {works + updated} works (ins={works} upd={updated})", flush=True)
 
         if not dry_run:
             await conn.commit()
     await db.close()
-    print(f"works CPDL: {works} | páginas descartadas (no parecen obra): {skipped}")
+    print(f"works CPDL: {works} insertadas | {updated} actualizadas | descartadas: {skipped}")
 
 
 def main() -> None:
@@ -303,13 +338,18 @@ def main() -> None:
     ap.add_argument("--dir", type=Path, default=None)
     ap.add_argument("--db", default="osap-storage")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument(
+        "--replace",
+        action="store_true",
+        help="Borra TODAS las obras CPDL antes de importar (recarga total destructiva).",
+    )
     args = ap.parse_args()
     paths = list(args.files)
     if args.dir is not None:
         paths += sorted(args.dir.glob("*.xml"))
     if not paths:
         raise SystemExit("indica --files o --dir")
-    asyncio.run(_ingest(paths, args.db, args.dry_run))
+    asyncio.run(_ingest(paths, args.db, args.dry_run, args.replace))
 
 
 if __name__ == "__main__":
