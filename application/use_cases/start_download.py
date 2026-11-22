@@ -10,6 +10,7 @@ from domain.entities.storage_location import LocationStatus, StorageLocation
 from domain.entities.storage_provider import StorageProvider
 from domain.exceptions import (
     EntityNotFound,
+    FileNotAvailable,
     IntegrityVerificationError,
     InvalidFileData,
     UnsupportedProvider,
@@ -62,6 +63,8 @@ class StartDownload:
         file = await self._files.get_by_id(command.file_id)
         if file is None:
             raise EntityNotFound("file", command.file_id)
+        if file.status == FileStatus.DELETED:
+            raise FileNotAvailable(f"file {command.file_id} has been logically deleted")
         if not command.source_url:
             raise InvalidFileData("source_url is required")
 
@@ -95,6 +98,13 @@ class StartDownload:
         try:
             if file is None:
                 raise EntityNotFound("file", job.file_id)
+            # A file may be deleted after the job was queued. Never let a queued
+            # download silently resurrect a logically deleted record.
+            if file.status == FileStatus.DELETED:
+                job.status = DownloadJobStatus.FAILED
+                job.error_message = "file has been logically deleted"
+                await self._jobs.save(job)
+                return
             job.status = DownloadJobStatus.RUNNING
             file.status = FileStatus.DOWNLOADING
             await self._jobs.save(job)
