@@ -1,4 +1,6 @@
-# Tabla de conversión — `osap-storage` → `osap-storage_new`
+# [OBSOLETO] Tabla histórica de conversión — `osap-storage` → `osap-storage_new`
+
+> **ESTADO: OBSOLETO. NO EJECUTAR NI USAR PARA DESPLIEGUES ACTUALES O V6.** Este documento describe la reconstrucción histórica V1→V3 de septiembre de 2026. El SQL asociado (`scripts/migrate_to_new.sql`) vacía 29 tablas del destino mediante `TRUNCATE` y vuelve a copiar datos desde `osap-storage_v1`. Se conserva solo como registro histórico. La conversión V6 es independiente y está documentada en `docs/v6-reconstruction-api-index-cutover.md` y `docs/v6-data-migration-mapping.md`.
 
 > Documento de trabajo. Fuente de datos: **dev** (`127.0.0.1`, BBDD `osap-storage` y `osap-storage_new`), consultado en solo-lectura. Los números son de dev; **hay que reconfirmarlos en producción antes de migrar** (ver §6).
 > La migración se hará por **fork de la aplicación**. `osap-storage_new` **sustituye** a la antigua (no se cuenta con la vieja), y se subirá junto a los programas.
