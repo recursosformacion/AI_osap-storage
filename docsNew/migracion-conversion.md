@@ -71,7 +71,7 @@ Roles relevantes ya sembrados: **1 = Compositor/a**, **10 = Intérprete / Solist
 
 ### 2.4 Personas — columnas y tablas
 - **`persons`** (añadir):
-  `persons_biography_summary TEXT`, `persons_biography_era VARCHAR(64)`, `persons_biography_nationality VARCHAR(64)`, `persons_biography_key_works LONGTEXT`, `persons_biography_key_fact VARCHAR(255)`, `persons_biography_references LONGTEXT`, `persons_biography_updated_at VARCHAR(64)`.
+  `persons_biography_summary TEXT`, `persons_biography_era VARCHAR(64)`, `persons_biography_nationality VARCHAR(64)`, `persons_biography_key_works LONGTEXT`, `persons_biography_key_fact VARCHAR(255)`, `persons_biography_references LONGTEXT`.
 - **`persons_identifiers`** (decisión 2/10): `id`, `persons_id` FK, `persons_identifiers_type VARCHAR(24)`, `persons_identifiers_value VARCHAR(255)`, `persons_identifiers_source VARCHAR(32)`, `persons_identifiers_is_identity_anchor TINYINT(1)`, `persons_identifiers_strength VARCHAR(16)`, `persons_identifiers_channels LONGTEXT`, `created_at`.
   Origen: `composer_identifiers` (5.102 / 663 personas, 12 tipos) **+** `musicbrainz_id` (tipo `musicbrainz`) **+** `cluster_id` (tipo `cluster`).
 - **`persons_authority`** (decisión 9): `authority_id` PK, `persons_id CHAR(36) NULL` (enlace a resolver), `persons_authority_wikidata_id`, `..._viaf_id`, `..._imslp_id`, `..._canonical_name`, `..._birth_date`, `..._death_date`.
@@ -476,3 +476,10 @@ Se añadió el instrumento genérico **Percussion** (cat. 3).
 
 Atribución (compositor de 153.579 obras) sigue en el módulo de identidad/datos.
 
+
+
+## 10. Revisión de compatibilidad de la conversión — 22/11/2026
+
+- `persons_biography_updated_at` ya no forma parte del esquema final: la migración 021 la elimina porque `persons_updated_at` cubre las modificaciones de biografía. `scripts/migrate_to_new.sql` ya no intenta escribir esa columna.
+- **Bloqueo antes de volver a ejecutar la conversión:** el encabezado actual de `scripts/migrate_to_new.sql` declara origen `osap-storage_v1` y destino `osap-storage`, mientras esta sección histórica describe origen `osap-storage` y destino `osap-storage_new`. No se deben asumir equivalentes ni ejecutar el script hasta confirmar el nombre real de la BD destino.
+- El script ejecuta `TRUNCATE TABLE` sobre 28 tablas del destino antes de copiar datos. Es una operación destructiva y no forma parte del runner normal de migraciones. Solo debe ejecutarse sobre la BD de staging expresamente confirmada, con backup y comprobación previa del origen/destino; nunca sobre una BD de producción que contenga datos que deban conservarse.
