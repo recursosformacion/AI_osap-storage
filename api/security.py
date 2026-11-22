@@ -37,11 +37,7 @@ def is_exempt_path(path: str) -> bool:
     (`/api/v1/public/statistics`, `/statistics`) queda abierta, mientras que el endpoint
     interno `/api/v1/statistics` y el resto del host siguen protegidos (protect-all).
     """
-    return (
-        path in EXEMPT_PATHS
-        or path.startswith("/api/v1/health")
-        or path.startswith(_ADMIN_ASSET_PREFIX)
-    )
+    return path in EXEMPT_PATHS or path.startswith(_ADMIN_ASSET_PREFIX)
 
 
 class ServiceTokenValidator:
