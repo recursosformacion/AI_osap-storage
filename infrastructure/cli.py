@@ -81,9 +81,7 @@ async def _cmd_recover_composer_identities(args: argparse.Namespace, container: 
 
     from infrastructure.services.osap_api_client import OsapApiClient
 
-    osap_api = OsapApiClient(
-        container.settings.osap_api_base_url, container.settings.osap_api_service_token
-    )
+    osap_api = OsapApiClient(container.settings.osap_api_base_url)
     svc = ComposerRecoveryService(container.composer_repo, container.work_repo, osap_api)
     detected = await svc.detect_suspicious()
     stats = await svc.recover_batch(limit=args.limit)
