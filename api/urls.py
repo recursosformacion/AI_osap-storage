@@ -5,12 +5,16 @@ from infrastructure.config import Settings
 
 
 def build_resource_url(
-    relative_path: str,
+    relative_path: str | None,
     file_id: int | None,
     settings: Settings,
 ) -> tuple[str | None, bool]:
-    """Devuelve (url, available) para un recurso (representación)."""
-    if settings.r2_serve_directly and settings.r2_public_url:
+    """Devuelve (url, available) para un recurso (representación).
+
+    Una representación puede no tener fichero local ni ruta relativa (por
+    ejemplo, una obra externa); en ese caso no debe romper el listado.
+    """
+    if settings.r2_serve_directly and settings.r2_public_url and relative_path:
         parts = [settings.r2_public_url.rstrip("/")]
         prefix = settings.r2_path_prefix.strip("/")
         if prefix:
