@@ -187,9 +187,10 @@ class ServiceAuthMiddleware(BaseHTTPMiddleware):
     scope según método/ruta (read/write/admin). Ningún endpoint futuro queda desprotegido.
     """
 
-    def __init__(self, app, validator: ServiceTokenValidator) -> None:
+    def __init__(self, app, validator: ServiceTokenValidator, admin_sessions=None) -> None:
         super().__init__(app)
         self._validator = validator
+        self._admin_sessions = admin_sessions
 
     async def dispatch(self, request: Request, call_next: Callable):
         path = request.url.path
@@ -214,6 +215,13 @@ class ServiceAuthMiddleware(BaseHTTPMiddleware):
         cookie_token = request.cookies.get(_ADMIN_SESSION_COOKIE, "").strip()
         token = bearer or cookie_token
 
+        # La cookie puede ser una sesión local del panel (vida larga) o, durante el
+        # despliegue, el antiguo service token M2M (vida corta). El bearer NUNCA se
+        # interpreta como sesión local.
+        session_claims = None
+        if cookie_token and not bearer and self._admin_sessions is not None:
+            session_claims = self._admin_sessions.validate(cookie_token)
+
         # Las cookies son credenciales ambient: las mutaciones exigen Origin same-origin.
         if cookie_token and not bearer and request.method in {"POST", "PUT", "PATCH", "DELETE"}:
             origin = request.headers.get("origin", "").rstrip("/")
@@ -221,9 +229,22 @@ class ServiceAuthMiddleware(BaseHTTPMiddleware):
             if not origin or origin != expected:
                 return JSONResponse(status_code=403, content={"detail": "origen no permitido"})
 
+        # Una cookie con forma de sesión local pero caducada/falseada no debe caer al
+        # validador RS256: damos un error explícito en lugar de "token inválido".
+        if (
+            cookie_token
+            and not bearer
+            and self._admin_sessions is not None
+            and session_claims is None
+            and self._admin_sessions.is_session_token(cookie_token)
+        ):
+            return JSONResponse(status_code=401, content={"detail": "sesión admin expirada"})
+
         if path == _ADMIN_SHELL_PREFIX or path.startswith(_ADMIN_SHELL_PREFIX + "/"):
             if not token:
                 return JSONResponse(status_code=401, content={"detail": "se requiere sesión admin"})
+            if session_claims is not None:
+                return await call_next(request)
             try:
                 await self._validator.validate(token, SCOPE_ADMIN)
             except ServiceAuthError as exc:
@@ -232,6 +253,8 @@ class ServiceAuthMiddleware(BaseHTTPMiddleware):
 
         if not token:
             return JSONResponse(status_code=401, content={"detail": "se requiere service token"})
+        if session_claims is not None:
+            return await call_next(request)
         required = _required_scope(path, request.method)
         try:
             await self._validator.validate(token, required)

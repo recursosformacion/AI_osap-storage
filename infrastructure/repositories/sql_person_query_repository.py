@@ -64,6 +64,7 @@ class SqlPersonQueryRepository:
                 "SELECT p.persons_id AS id, p.persons_name AS name, "
                 "p.persons_sortname AS sort_name, p.persons_birth_year AS birth_year, "
                 "p.persons_death_year AS death_year, p.persons_visible AS visible, "
+                "p.persons_updated_at AS updated_at, "
                 "p.persons_review_status AS review_status, "
                 "p.persons_biography_summary AS biography_summary, "
                 "p.persons_biography_era AS biography_era, "

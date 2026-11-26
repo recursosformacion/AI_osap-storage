@@ -166,13 +166,20 @@ async def create_admin_session(request: Request, settings: Settings = Depends(ge
         if isinstance(exc, ServiceAuthError):
             return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
         return JSONResponse(status_code=503, content={"detail": "no se pudo validar el token"})
-    expires_at = int(claims.get("exp", 0))
-    max_age = expires_at - int(time.time())
-    if max_age <= 0:
-        return JSONResponse(status_code=401, content={"detail": "token expirado"})
+    # El service token solo acredita el handoff. La cookie de navegación es una sesión
+    # local con su propia vigencia para que el panel no muera con el token M2M.
+    signer = getattr(request.app.state, "admin_session_signer", None)
+    if signer is not None:
+        cookie_value, max_age = signer.issue(client_id=str(claims.get("client_id") or ""))
+    else:
+        expires_at = int(claims.get("exp", 0))
+        max_age = expires_at - int(time.time())
+        if max_age <= 0:
+            return JSONResponse(status_code=401, content={"detail": "token expirado"})
+        cookie_value = token
     response = RedirectResponse(url=next_path, status_code=303)
     response.set_cookie(
-        key=_ADMIN_SESSION_COOKIE, value=token, max_age=max_age, path="/",
+        key=_ADMIN_SESSION_COOKIE, value=cookie_value, max_age=max_age, path="/",
         httponly=True, secure=True, samesite="lax"
     )
     response.headers["Cache-Control"] = "no-store"

@@ -816,6 +816,7 @@ class PersonSummaryRead(Model):
     biography_summary: str | None = None
     biography_era: str | None = None
     biography_nationality: str | None = None
+    updated_at: datetime | None = None
 
 
 class PersonListRead(Model):

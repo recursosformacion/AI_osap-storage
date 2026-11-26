@@ -20,7 +20,10 @@ _VALID: dict[str, object] = {
     "app": {"env": "production"},
     "db": {"host": "db", "name": "osap_storage", "user": "osap", "password": "secret"},
     "repository": {"provider": "local"},
-    "auth": {"enabled": True},
+    "auth": {
+        "enabled": True,
+        "admin_handoff_origins": "https://app.openmusicrepository.com",
+    },
 }
 
 
@@ -41,7 +44,14 @@ def test_configuracion_valida_en_produccion_arranca(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     "path",
-    ["db.host", "db.name", "db.user", "db.password", "repository.provider"],
+    [
+        "db.host",
+        "db.name",
+        "db.user",
+        "db.password",
+        "repository.provider",
+        "auth.admin_handoff_origins",
+    ],
 )
 def test_cada_clave_obligatoria_ausente_no_arranca(tmp_path: Path, path: str) -> None:
     data = {k: dict(v) if isinstance(v, dict) else v for k, v in _VALID.items()}

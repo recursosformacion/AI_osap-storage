@@ -35,6 +35,23 @@ _ANON = {
     "anon", "anon.", "anonymous", "trad", "trad.", "traditional", "attrib.", "attributed",
     "attrib", "unknown", "author unknown", "urheber unbekannt", "urheber unbek.",
 }
+_LETTER_RE = re.compile(r"[^\W\d_]", re.UNICODE)
+
+
+def is_resolvable_name(raw: str) -> bool:
+    """False para cadenas que no identifican a una persona.
+
+    Evita crear personas con nombre vacío o formado solo por signos ("?", "- -",
+    "..."), que generaban filas invisibles en el mantenimiento y duplicados en cada
+    ejecución. Los anónimos/tradicionales se gestionan con el compositor desconocido.
+    """
+    text = (raw or "").strip()
+    if not text:
+        return False
+    low = text.lower().replace("'", "").replace("\u2019", "")
+    if low in _ANON or low.startswith("urheber unbekannt"):
+        return False
+    return bool(_LETTER_RE.search(text))
 
 
 def norm(text: str) -> str:
@@ -110,12 +127,21 @@ async def run(db_name: str, dry_run: bool) -> None:
     # Resolución (cache por clave)
     resolved: list[tuple[int, str]] = []
     cache: dict[str, str] = {}
-    stats = {"personas_existentes": 0, "autoridad": 0, "autoridad_nueva": 0, "nuevas": 0}
+    stats = {
+        "personas_existentes": 0, "autoridad": 0, "autoridad_nueva": 0,
+        "nuevas": 0, "ignoradas": 0,
+    }
+    ignored: set[str] = set()
     auth_to_link: list[tuple[str, str]] = []
 
     for r in rows:
         wid = int(r["works_id"])
         raw = str(r["works_person_import_name"]).strip()
+        if not is_resolvable_name(raw):
+            stats["ignoradas"] += 1
+            if len(ignored) < 20:
+                ignored.add(raw[:80])
+            continue
         key = norm(clean_name(raw)) or norm(raw)
         pid = cache.get(key)
         if pid is None:
@@ -125,7 +151,7 @@ async def run(db_name: str, dry_run: bool) -> None:
             else:
                 akey = composer_key(raw)
                 auth = auth_key.get(akey)
-                if auth is not None:
+                if auth is not None and is_resolvable_name(auth[0]):
                     cname, linked = auth
                     if linked:
                         pid = linked
@@ -149,7 +175,10 @@ async def run(db_name: str, dry_run: bool) -> None:
             cache[key] = pid
         resolved.append((wid, pid))
 
-    print({"works composer": len(resolved), "personas nuevas": len(created), **stats})
+    print({
+        "works composer": len(resolved), "personas nuevas": len(created),
+        "muestra ignoradas": sorted(ignored), **stats,
+    })
 
     if dry_run:
         await tgt.close()

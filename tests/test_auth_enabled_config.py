@@ -30,7 +30,14 @@ def _no_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_production_con_auth_true_arranca(tmp_path: Path) -> None:
-    data = {**_BASE, "app": {"env": "production"}, "auth": {"enabled": True}}
+    data = {
+        **_BASE,
+        "app": {"env": "production"},
+        "auth": {
+            "enabled": True,
+            "admin_handoff_origins": "https://app.openmusicrepository.com",
+        },
+    }
     validate_startup_config(_write(tmp_path, data))
 
 

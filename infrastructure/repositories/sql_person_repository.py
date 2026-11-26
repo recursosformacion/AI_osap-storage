@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from uuid import uuid4
 
@@ -23,6 +24,52 @@ from domain.ports.composer_repository import ComposerRepository
 from domain.services.composer_names import normalize_composer_name
 
 from infrastructure.db.connection import Database
+
+
+def _parse_references(raw: object) -> list[dict[str, str]]:
+    """Normaliza `persons_biography_references` a una lista de fuentes.
+
+    En producción conviven tres formatos: JSON de lista (nuevo), lista Python ya
+    deserializada y texto plano separado por `;`/saltos de línea (legado). Antes el
+    `json.loads` fallaba con el texto legado y se perdían las referencias.
+    """
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [item if isinstance(item, dict) else {"source": str(item)} for item in raw]
+    if not isinstance(raw, str):
+        return []
+    text = raw.strip()
+    if not text:
+        return []
+    try:
+        parsed = json.loads(text)
+    except (TypeError, ValueError):
+        parsed = None
+    if isinstance(parsed, list):
+        return [item if isinstance(item, dict) else {"source": str(item)} for item in parsed]
+    return [{"source": part.strip()} for part in re.split(r"[;\n]+", text) if part.strip()]
+
+
+def _composer_scope_sql(include_all: bool) -> str:
+    """Filtro de personas del mantenimiento de compositores.
+
+    Por defecto: solo personas con obra en rol compositor (role_id=1).
+    `include_all=True` añade personas sin ninguna obra (candidatas a compositor),
+    pero excluye a quien solo tiene obras en otros roles (intérpretes, etc.).
+    """
+    composer = (
+        "EXISTS (SELECT 1 FROM works_person_roles r "
+        "WHERE r.works_person_roles_person_id = c.persons_id "
+        "AND r.works_person_roles_role_id = 1)"
+    )
+    if not include_all:
+        return composer
+    return (
+        f"({composer} OR NOT EXISTS (SELECT 1 FROM works_person_roles r "
+        "WHERE r.works_person_roles_person_id = c.persons_id))"
+    )
+
 
 # Columnas del esquema nuevo aliasadas a los nombres que esperan los mappers
 # (la entidad Composer se mantiene; la tabla es `persons`).
@@ -375,14 +422,7 @@ class SqlPersonRepository(ComposerRepository):
         self, *, limit: int, offset: int, q: str | None = None, review: str | None = None,
         visible: str = "visible", include_all: bool = False,
     ) -> list[ComposerSummary]:
-        where: list[str] = []
-        if not include_all:
-            # Por defecto solo personas con obra en rol compositor (comportamiento previo).
-            where.append(
-                "EXISTS (SELECT 1 FROM works_person_roles r "
-                "WHERE r.works_person_roles_person_id = c.persons_id "
-                "AND r.works_person_roles_role_id = 1)"
-            )
+        where: list[str] = [_composer_scope_sql(include_all)]
         params: list = []
         if visible == "visible":
             where.append("c.persons_visible = 1")
@@ -427,7 +467,8 @@ class SqlPersonRepository(ComposerRepository):
                 "c.persons_biography_nationality AS biography_nationality "
                 "FROM persons c "
                 f"WHERE {where_sql} "
-                "ORDER BY c.persons_name LIMIT %s OFFSET %s",
+                "ORDER BY (c.persons_name = '') ASC, c.persons_name, c.persons_id "
+                "LIMIT %s OFFSET %s",
                 [*params, limit, offset],
             )
             return [
@@ -455,13 +496,7 @@ class SqlPersonRepository(ComposerRepository):
 
     async def count(self, q: str | None = None, review: str | None = None,
                     visible: str = "visible", include_all: bool = False) -> int:
-        where: list[str] = []
-        if not include_all:
-            where.append(
-                "EXISTS (SELECT 1 FROM works_person_roles r "
-                "WHERE r.works_person_roles_person_id = c.persons_id "
-                "AND r.works_person_roles_role_id = 1)"
-            )
+        where: list[str] = [_composer_scope_sql(include_all)]
         params: list = []
         if visible == "visible":
             where.append("c.persons_visible = 1")
@@ -937,14 +972,7 @@ class SqlPersonRepository(ComposerRepository):
                     key_works = []
             elif key_works is None:
                 key_works = []
-            references = row.get("biography_references")
-            if isinstance(references, str):
-                try:
-                    references = json.loads(references)
-                except Exception:
-                    references = []
-            elif references is None:
-                references = []
+            references = _parse_references(row.get("biography_references"))
             await cur.execute(
                 "SELECT person_aliases_alias AS alias FROM persons_aliases "
                 "WHERE person_id = %s ORDER BY id",

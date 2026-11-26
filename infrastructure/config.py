@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 _REQUIRED_KEYS: dict[str, tuple[str, ...]] = {
     "db": ("host", "name", "user", "password"),
     "repository": ("provider",),
+    "auth": ("admin_handoff_origins",),
 }
 
 
@@ -156,6 +157,8 @@ def _load_yaml_config(path: Path) -> dict[str, Any]:
         "kid": "auth_kid",
         "clock_skew_seconds": "auth_clock_skew_seconds",
         "admin_handoff_origins": "admin_handoff_origins",
+        "admin_session_secret": "auth_admin_session_secret",
+        "admin_session_ttl_seconds": "auth_admin_session_ttl_seconds",
     }.items():
         if key in auth:
             cfg[field] = auth[key]
@@ -242,6 +245,12 @@ class Settings(BaseSettings):
     auth_clock_skew_seconds: int = 60
     # Orígenes autorizados para handoff POST cross-origin; vacío = fail closed.
     admin_handoff_origins: str = ""
+    # Sesión propia del panel admin: el service token M2M solo se usa en el handoff
+    # (vida corta, 5 min). La cookie de navegación se firma aquí para no atar la sesión
+    # del admin a la caducidad del token de servicio. Si `admin_session_secret` está
+    # vacío se genera/persiste una clave local en `var/admin_session.key`.
+    auth_admin_session_secret: str = ""
+    auth_admin_session_ttl_seconds: int = 28800
 
     # osap-api (especialista en resolución de entidades externas). Storage llama a su
     # POST /api/v1/composers/resolve y procesa la respuesta.

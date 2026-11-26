@@ -97,6 +97,7 @@ def create_app() -> FastAPI:
     errors.register_exception_handlers(app)
     app.add_middleware(MetricsMiddleware)
     if settings.auth_enabled:
+        from api.admin_session import AdminSessionSigner
         from api.security import ServiceAuthMiddleware, ServiceTokenValidator
 
         service_token_validator = ServiceTokenValidator(
@@ -107,8 +108,14 @@ def create_app() -> FastAPI:
             kid=settings.auth_kid,
             clock_skew_seconds=settings.auth_clock_skew_seconds,
         )
+        admin_session_signer = AdminSessionSigner.from_settings(settings)
         app.state.service_token_validator = service_token_validator
-        app.add_middleware(ServiceAuthMiddleware, validator=service_token_validator)
+        app.state.admin_session_signer = admin_session_signer
+        app.add_middleware(
+            ServiceAuthMiddleware,
+            validator=service_token_validator,
+            admin_sessions=admin_session_signer,
+        )
     app.include_router(pages.router)
     app.include_router(search.router)
     app.include_router(cpdl.router)

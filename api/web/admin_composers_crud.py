@@ -50,6 +50,11 @@ _PAGE = """<!doctype html>
     <div class="card"><div class="row" style="justify-content:space-between">
       <div class="row">
         <label>Buscar <input id="q" placeholder="nombre o alias" /></label>
+        <label>Visibilidad <select id="vis">
+          <option value="visible" selected>Visibles</option>
+          <option value="hidden">Ocultas</option>
+          <option value="all">Todas</option>
+        </select></label>
         <button id="btnSearch">Buscar</button>
       </div>
       <div class="muted"><span id="pageInfo"></span></div>
@@ -157,7 +162,10 @@ function renderRows(){
     const works = c.works_total > 0
       ? `<a href="/admin/work-persons?person_id=${encodeURIComponent(c.id)}">${c.works_total}</a>`
       : "0";
-    h += `<tr><td>${esc(c.id)}</td><td><strong>${esc(c.name)}</strong></td>
+    const name = String(c.name || "").trim()
+      ? `<strong>${esc(c.name)}</strong>`
+      : '<span class="muted">(sin nombre)</span>';
+    h += `<tr><td>${esc(c.id)}</td><td>${name}</td>
       <td>${esc(c.birth_year || "")}</td><td>${esc(c.death_year || "")}</td>
       <td>${works}</td><td>${cfg}</td>
       <td>${c.visible ? "sí" : "no"}</td>
@@ -171,7 +179,10 @@ function renderRows(){
 }
 function openMode(m, id){ location = "?mode="+m+"&id="+encodeURIComponent(id); }
 async function loadList(){
-  const p = new URLSearchParams({ visible: "all", include_all: "1", limit: String(state.limit), offset: String(state.offset) });
+  const p = new URLSearchParams({
+    visible: $("vis").value, include_all: "1",
+    limit: String(state.limit), offset: String(state.offset),
+  });
   const qv = $("q").value.trim(); if (qv) p.set("q", qv);
   try{
     const d = await api("/api/admin/composers?"+p, { headers: auth() });
@@ -184,7 +195,8 @@ function backToList(){ $("detailView").classList.add("hidden");
 (async function init(){
   await loadEpochs();
   if (cid){ loadDetail(); } else {
-$("btnSearch").onclick = () => { state.offset = 0; loadList(); };
+    $("vis").onchange = () => { state.offset = 0; loadList(); };
+    $("btnSearch").onclick = () => { state.offset = 0; loadList(); };
     $("q").onkeydown = (e) => { if (e.key === "Enter"){ state.offset = 0; loadList(); } };
     $("prev").onclick = () => { if (state.offset >= state.limit){ state.offset -= state.limit; loadList(); } };
     $("next").onclick = () => { state.offset += state.limit; loadList(); };
