@@ -36,6 +36,11 @@ _ANON = {
     "attrib", "unknown", "author unknown", "urheber unbekannt", "urheber unbek.",
 }
 _LETTER_RE = re.compile(r"[^\W\d_]", re.UNICODE)
+# Título entrecomillado pegado al nombre: "'A Reel'Abraham MacIntosh" → "Abraham MacIntosh".
+# Exigimos que no haya espacio tras la comilla para no romper apodos ("'Blue' Fisher").
+_QUOTED_TITLE_PREFIX = re.compile(
+    r"^\s*['\"“”‘’]([^'\"“”‘’]{1,80})['\"“”‘’](?=[^\W\d_])", re.UNICODE
+)
 
 
 def is_resolvable_name(raw: str) -> bool:
@@ -62,6 +67,7 @@ def norm(text: str) -> str:
 
 def clean_name(raw: str) -> str:
     t = (raw or "").strip()
+    t = _QUOTED_TITLE_PREFIX.sub("", t)
     t = re.sub(r"\([^)]*\)", "", t)
     t = re.sub(r"\s+\d{3,4}\s*$", "", t)
     return re.sub(r"\s+", " ", t).strip()

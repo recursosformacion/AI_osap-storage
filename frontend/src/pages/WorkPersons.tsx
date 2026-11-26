@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 
 import { authHeaders } from '../auth'
 
@@ -81,6 +81,8 @@ function SortHeader({
 }
 
 export default function WorkPersons() {
+  const [searchParams] = useSearchParams()
+  const personId = searchParams.get('person_id') ?? ''
   const [rows, setRows] = useState<Row[]>([])
   const [total, setTotal] = useState(0)
   const [roleOptions, setRoleOptions] = useState<{ value: string; label: string }[]>([])
@@ -105,9 +107,10 @@ export default function WorkPersons() {
         sort,
         direction,
       })
+      if (personId) params.set('person_id', personId)
       if (appliedQ) params.set('q', appliedQ)
       if (role.trim()) params.set('role', role.trim())
-      if (missing) params.set('missing', 'true')
+      if (missing && !personId) params.set('missing', 'true')
       const data = await getJson<{ items: Row[]; total: number }>(`${API}?${params}`)
       setRows(data.items)
       setTotal(data.total)
@@ -116,7 +119,7 @@ export default function WorkPersons() {
     } finally {
       setLoading(false)
     }
-  }, [appliedQ, role, missing, offset, sort, direction])
+  }, [personId, appliedQ, role, missing, offset, sort, direction])
 
   useEffect(() => {
     void load()
@@ -155,6 +158,18 @@ export default function WorkPersons() {
         Relación canónica <code>works_person_roles</code>: obra, persona y rol (concepto).
       </p>
 
+      {personId ? (
+        <div className="card">
+          <strong>Filtrado por persona:</strong>{' '}
+          <Link className="text-osap-accent hover:underline" to={`/t/persons/${encodeURIComponent(personId)}`}>
+            {rows[0]?.person_name ?? personId}
+          </Link>{' '}
+          <Link className="text-osap-accent hover:underline" to="/work-persons">
+            Quitar filtro
+          </Link>
+        </div>
+      ) : null}
+
       <form
         className="card"
         onSubmit={(e) => {
@@ -184,17 +199,19 @@ export default function WorkPersons() {
               </option>
             ))}
           </select>
-          <label style={{ margin: 0 }}>
-            <input
-              type="checkbox"
-              checked={missing}
-              onChange={(e) => {
-                setOffset(0)
-                setMissing(e.target.checked)
-              }}
-            />{' '}
-            Solo obras sin persona
-          </label>
+          {!personId ? (
+            <label style={{ margin: 0 }}>
+              <input
+                type="checkbox"
+                checked={missing}
+                onChange={(e) => {
+                  setOffset(0)
+                  setMissing(e.target.checked)
+                }}
+              />{' '}
+              Solo obras sin persona
+            </label>
+          ) : null}
           <button type="submit">Buscar</button>
         </div>
       </form>

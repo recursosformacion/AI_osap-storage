@@ -1,7 +1,7 @@
-"""Página de administración: Mantenimiento compositores (CRUD convencional standalone).
+"""Página de administración: Mantenimiento de personas (CRUD convencional standalone).
 
-NO es parte del multimantenimiento. Muestra el listado del fichero `composers`
-(30/página, paginación) y un detalle Ver/Editar por compositor usando los endpoints
+NO es parte del multimantenimiento. Muestra el listado del fichero `persons`
+(30/página, paginación) y un detalle Ver/Editar por persona usando los endpoints
 de admin existentes:
   GET /api/admin/composers?visible=all&limit&offset
   GET  /api/admin/composers/{id}
@@ -16,7 +16,7 @@ from __future__ import annotations
 _PAGE = """<!doctype html>
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mantenimiento compositores</title>
+<title>Mantenimiento de personas</title>
 <style>
   :root{ --border:#334155; --muted:#94a3b8; --bg:#0f172a; --card:#1e293b; --accent:#38bdf8; }
   *{box-sizing:border-box} body{margin:0;background:var(--bg);color:#e2e8f0;
@@ -41,8 +41,8 @@ _PAGE = """<!doctype html>
   .hidden{display:none} .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   @media(max-width:760px){.grid{grid-template-columns:1fr}}
 </style></head><body><div class="wrap">
-  <h1>Mantenimiento compositores</h1>
-  <p class="sub">Listado del fichero <code>composers</code> · 30 filas por página.</p>
+  <h1>Mantenimiento de personas</h1>
+  <p class="sub">Personas del catálogo (compositores, intérpretes, arreglistas…) · 30 filas por página.</p>
 
   <div id="msg" class="muted"></div>
 
@@ -155,7 +155,7 @@ async function saveId(){
 }
 function renderRows(){
   const area = $("area");
-  if (!state.items.length){ area.innerHTML = '<div class="muted">Sin compositores.</div>'; return; }
+  if (!state.items.length){ area.innerHTML = '<div class="muted">Sin personas.</div>'; return; }
   let h = "<table><thead><tr><th>ID</th><th>Name</th><th>Nac.</th><th>Muerte</th><th>Obras</th><th>Configuración</th><th>Visible</th><th></th></tr></thead><tbody>";
   for (const c of state.items){
     const cfg = c.works_total > 0 ? esc(c.roles || "") : '<span class="muted">Sin obras</span>';
@@ -209,3 +209,4 @@ function backToList(){ $("detailView").classList.add("hidden");
 
 def admin_composers_crud_page(token: str = "") -> str:
     return _PAGE
+
